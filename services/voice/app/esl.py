@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import shlex
+import uuid as uuid_lib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from urllib.parse import unquote
@@ -184,6 +185,44 @@ class EslClient:
 
     async def playback(self, uuid: str, url: str) -> str:
         return await self.bgapi(f"uuid_broadcast {shlex.quote(uuid)} {shlex.quote(url)} aleg")
+
+    async def eavesdrop(
+        self,
+        *,
+        gateway: str,
+        target_e164: str,
+        from_e164: str,
+        source_uuid: str,
+        supervisor_uuid: str,
+        action: str,
+    ) -> str:
+        """Dial a supervisor and attach them to ``source_uuid`` with eavesdrop.
+
+        ``listen`` joins passively. ``barge`` queues the documented FreeSWITCH
+        eavesdrop DTMF command ``3`` before starting eavesdrop, which upgrades
+        the supervisor leg into a three-way participant.
+        """
+        if action not in {"listen", "barge"}:
+            raise ValueError(f"unsupported eavesdrop action: {action}")
+        uuid_lib.UUID(supervisor_uuid)
+        uuid_lib.UUID(source_uuid)
+        chan_vars = _build_chan_vars(
+            {
+                "origination_uuid": supervisor_uuid,
+                "origination_caller_id_number": from_e164,
+                "livocall_supervisor_action": action,
+                "livocall_supervisor_source_uuid": source_uuid,
+            }
+        )
+        endpoint = f"sofia/gateway/{gateway}/{target_e164}"
+        if action == "barge":
+            app = f"'queue_dtmf:w3@500,eavesdrop:{source_uuid}' inline"
+        else:
+            app = f"&eavesdrop({source_uuid})"
+        cmd = f"originate {{{chan_vars}}}{endpoint} {app}"
+        log.info("esl.eavesdrop", target=target_e164, source_uuid=source_uuid, action=action)
+        await self.bgapi(cmd)
+        return supervisor_uuid
 
     async def events(self) -> AsyncIterator[EslEvent]:
         """Yield events from the connection forever. Caller must subscribe first."""

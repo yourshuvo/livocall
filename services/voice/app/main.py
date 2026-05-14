@@ -115,8 +115,9 @@ class TransferRequest(BaseModel):
 
 
 class ControlRequest(BaseModel):
-    action: str = Field(pattern=r"^(listen|whisper|barge)$")
+    action: str = Field(pattern=r"^(listen|barge)$")
     supervisor_id: str = Field(min_length=1)
+    target_e164: str = Field(pattern=r"^\+\d{8,15}$")
 
 
 class IvrActionRequest(BaseModel):
@@ -176,17 +177,21 @@ async def transfer(call_id: str, req: TransferRequest) -> dict[str, bool]:
 
 
 @app.post("/calls/{call_id}/control", dependencies=[Depends(require_voice_token)])
-async def control(call_id: str, req: ControlRequest) -> dict[str, bool]:
-    log.warning(
-        "control.unsupported",
-        call_id=call_id,
-        action=req.action,
-        supervisor_id=req.supervisor_id,
-    )
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="supervisor listen/whisper/barge is not implemented in the voice service",
-    )
+async def control(call_id: str, req: ControlRequest) -> dict[str, Any]:
+    try:
+        return await originator.control_call(
+            call_id,
+            action=req.action,
+            supervisor_id=req.supervisor_id,
+            target_e164=req.target_e164,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.exception("control.error", call_id=call_id, action=req.action)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
 
 
 @app.post("/calls/{call_id}/ivr-action", dependencies=[Depends(require_voice_token)])

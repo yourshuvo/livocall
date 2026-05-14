@@ -16,8 +16,8 @@ from bson import ObjectId
 
 from app.db import get_db
 from app.esl import EslClient, EslConfig
-from app.settings import settings
 from app.runtime_overrides import runtime_overrides
+from app.settings import settings
 from app.warm_sessions import warm_sessions
 from app.web_client import post_voice_event
 from app.ws_auth import sign as ws_sign
@@ -290,6 +290,68 @@ async def create_inbound_call(
         }.get(str(org.get("recordingConsent") or "optional"), "on"),
         "consentPromptUrl": str(org.get("btrcConsentPromptUrl") or ""),
     }
+
+
+async def _find_call_by_id_or_uuid(call_or_uuid: str) -> dict[str, Any] | None:
+    db = get_db()
+    if ObjectId.is_valid(call_or_uuid):
+        doc = await db["calls"].find_one({"_id": ObjectId(call_or_uuid)})
+        if doc:
+            return doc
+    return await db["calls"].find_one({"fsUuid": call_or_uuid})
+
+
+async def control_call(
+    call_or_uuid: str,
+    *,
+    action: str,
+    supervisor_id: str,
+    target_e164: str,
+) -> dict[str, Any]:
+    """Attach a supervisor phone leg to a live call.
+
+    The dashboard stores the audit event; this function performs only the
+    telephony action and returns the generated supervisor channel UUID.
+    """
+    if action not in {"listen", "barge"}:
+        raise ValueError(f"unsupported supervisor action: {action}")
+    doc = await _find_call_by_id_or_uuid(call_or_uuid)
+    if not doc:
+        raise ValueError(f"call {call_or_uuid} not found")
+    fs_uuid = str(doc.get("fsUuid") or "")
+    if not fs_uuid:
+        raise ValueError(f"call {call_or_uuid} has no FreeSWITCH UUID")
+
+    supervisor_uuid = str(uuid_lib.uuid4())
+    if settings.voice_fake_driver:
+        log.info(
+            "control.fake_driver",
+            call_id=str(doc.get("_id") or call_or_uuid),
+            uuid=fs_uuid,
+            action=action,
+            supervisor_id=supervisor_id,
+            target=target_e164,
+            supervisor_uuid=supervisor_uuid,
+        )
+        return {"ok": True, "action": action, "supervisorLegUuid": supervisor_uuid}
+
+    org_id = str(doc["orgId"])
+    agent_id = str(doc.get("agentId") or "")
+    gateway, cli = await resolve_outbound_gateway(org_id, agent_id, None)
+    client = EslClient(_esl_config())
+    try:
+        await client.connect()
+        await client.eavesdrop(
+            gateway=gateway,
+            target_e164=target_e164,
+            from_e164=cli,
+            source_uuid=fs_uuid,
+            supervisor_uuid=supervisor_uuid,
+            action=action,
+        )
+        return {"ok": True, "action": action, "supervisorLegUuid": supervisor_uuid}
+    finally:
+        await client.close()
 
 
 async def hangup_call(call_or_uuid: str) -> bool:

@@ -4,7 +4,9 @@ braces, so the values must be quoted before they hit FreeSWITCH."""
 
 from __future__ import annotations
 
-from app.esl import _build_chan_vars, _quote_chan_var
+import pytest
+
+from app.esl import EslClient, EslConfig, _build_chan_vars, _quote_chan_var
 from app.originator import audio_fork_args
 
 
@@ -55,3 +57,64 @@ def test_audio_fork_args_include_low_latency_buffers() -> None:
 def test_audio_fork_args_use_8k_for_pcmu_bridge() -> None:
     args = audio_fork_args("ws://voice:8084/ws/audio-pcmu?call_id=abc")
     assert args == "ws://voice:8084/ws/audio-pcmu?call_id=abc mono 8000 buffer 20 jitterbuffer 20"
+
+
+@pytest.mark.asyncio
+async def test_eavesdrop_listen_originates_passive_supervisor_leg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[str] = []
+    client = EslClient(EslConfig(host="127.0.0.1", port=8021, password="ClueCon"))
+
+    async def _fake_bgapi(command: str) -> str:
+        commands.append(command)
+        return "+OK"
+
+    monkeypatch.setattr(client, "bgapi", _fake_bgapi)
+    supervisor_uuid = "11111111-2222-3333-4444-555555555555"
+    source_uuid = "66666666-7777-8888-9999-000000000000"
+
+    result = await client.eavesdrop(
+        gateway="sip_custom",
+        target_e164="+8801712345678",
+        from_e164="+8809610000000",
+        source_uuid=source_uuid,
+        supervisor_uuid=supervisor_uuid,
+        action="listen",
+    )
+
+    assert result == supervisor_uuid
+    assert commands == [
+        (
+            "originate {origination_uuid='11111111-2222-3333-4444-555555555555',"
+            "origination_caller_id_number='+8809610000000',"
+            "livocall_supervisor_action='listen',"
+            "livocall_supervisor_source_uuid='66666666-7777-8888-9999-000000000000'}"
+            "sofia/gateway/sip_custom/+8801712345678 "
+            "&eavesdrop(66666666-7777-8888-9999-000000000000)"
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_eavesdrop_barge_queues_three_way_dtmf(monkeypatch: pytest.MonkeyPatch) -> None:
+    commands: list[str] = []
+    client = EslClient(EslConfig(host="127.0.0.1", port=8021, password="ClueCon"))
+
+    async def _fake_bgapi(command: str) -> str:
+        commands.append(command)
+        return "+OK"
+
+    monkeypatch.setattr(client, "bgapi", _fake_bgapi)
+    source_uuid = "66666666-7777-8888-9999-000000000000"
+
+    await client.eavesdrop(
+        gateway="sip_custom",
+        target_e164="+8801712345678",
+        from_e164="+8809610000000",
+        source_uuid=source_uuid,
+        supervisor_uuid="11111111-2222-3333-4444-555555555555",
+        action="barge",
+    )
+
+    assert "'queue_dtmf:w3@500,eavesdrop:66666666-7777-8888-9999-000000000000' inline" in commands[0]

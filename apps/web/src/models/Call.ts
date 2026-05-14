@@ -28,6 +28,8 @@ const supervisorEventSchema = new Schema(
     at: { type: Date, default: Date.now },
     ok: { type: Boolean, default: false },
     streamUrl: { type: String, default: '' },
+    targetE164: { type: String, default: '' },
+    supervisorLegUuid: { type: String, default: '' },
     error: { type: String, default: '' },
   },
   { _id: false },

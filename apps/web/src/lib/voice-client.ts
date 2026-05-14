@@ -15,11 +15,16 @@ interface OriginateResult {
 
 interface ControlResult {
   ok: boolean
+  action?: 'listen' | 'barge'
   streamUrl?: string
+  supervisorLegUuid?: string
 }
 
 function voiceBaseUrl() {
-  return (process.env.VOICE_SERVICE_URL || process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || '').replace(/\/+$/, '')
+  return (process.env.VOICE_SERVICE_URL || process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || '').replace(
+    /\/+$/,
+    '',
+  )
 }
 
 async function voiceRequest<T>(path: string, body: Record<string, unknown>): Promise<T> {
@@ -63,10 +68,11 @@ export const voiceClient = {
       metadata: stringMetadata(input.metadata) ?? {},
     })
   },
-  control(callId: string, action: 'listen' | 'whisper' | 'barge', supervisorId: string) {
+  control(callId: string, action: 'listen' | 'barge', supervisorId: string, targetE164: string) {
     return voiceRequest<ControlResult>(`/calls/${encodeURIComponent(callId)}/control`, {
       action,
       supervisor_id: supervisorId,
+      target_e164: targetE164,
     })
   },
   hangup(callId: string) {
