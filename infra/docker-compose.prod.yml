@@ -1,0 +1,77 @@
+# Production reference topology for LivoCall on a single VM / small cluster.
+# This is deliberately thin — real deployments should split the voice engine
+# onto its own host (next to FreeSWITCH) and move MongoDB + Redis to managed
+# services. Treat this as a starting point.
+
+version: '3.9'
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    command: ['mongod', '--bind_ip_all']
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+
+  freeswitch:
+    image: signalwire/freeswitch:1.10-release
+    restart: unless-stopped
+    network_mode: host   # required for SIP NAT traversal + RTP
+    volumes:
+      - ./freeswitch:/etc/freeswitch:ro
+      - fs-recordings:/var/lib/freeswitch/recordings
+    environment:
+      - SOUND_RATES=8000:16000
+      - SOUND_TYPES=music:en-us-callie
+
+  voice:
+    image: ghcr.io/livocall/voice:latest
+    restart: unless-stopped
+    depends_on: [mongo, redis]
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
+      REDIS_URL: redis://redis:6379/0
+      WEB_BASE_URL: http://web:3000
+      WEB_SHARED_SECRET: ${WEB_SHARED_SECRET}
+      VOICE_WS_SHARED_SECRET: ${VOICE_WS_SHARED_SECRET}
+      FS_HOST: host.docker.internal
+      FS_ESL_PORT: '8021'
+      FS_ESL_PASSWORD: ${FS_ESL_PASSWORD}
+      RECORDINGS_LOCAL_DIR: /recordings
+      S3_RECORDINGS_BUCKET: ${S3_RECORDINGS_BUCKET:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      ENABLE_CAMPAIGN_DIALER: 'true'
+      ENABLE_KB_INGESTOR: 'true'
+      ENABLE_WEBHOOK_SCHEDULER: 'true'
+    volumes:
+      - fs-recordings:/recordings:ro
+    ports:
+      - '8080:8080'
+
+  web:
+    image: ghcr.io/livocall/web:latest
+    restart: unless-stopped
+    depends_on: [mongo]
+    environment:
+      MONGODB_URL: mongodb://mongo:27017/livocall
+      VOICE_SERVICE_URL: http://voice:8080
+      VOICE_SHARED_SECRET: ${VOICE_SHARED_SECRET}
+      WEB_SHARED_SECRET: ${WEB_SHARED_SECRET}
+      SESSION_PASSWORD: ${SESSION_PASSWORD}
+      MAGIC_LINK_SECRET: ${MAGIC_LINK_SECRET}
+      NODE_ENV: production
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    ports:
+      - '3000:3000'
+
+volumes:
+  mongo-data:
+  redis-data:
+  fs-recordings:

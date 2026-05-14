@@ -1,0 +1,22 @@
+import { SignIn } from '@clerk/nextjs'
+
+export const metadata = { title: 'Sign in - LivoCall' }
+
+function safeRedirect(searchParams?: { redirect_url?: string | string[] }) {
+  const value = Array.isArray(searchParams?.redirect_url)
+    ? searchParams?.redirect_url[0]
+    : searchParams?.redirect_url
+  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/overview'
+}
+
+export default function LoginPage({ searchParams }: { searchParams?: { redirect_url?: string | string[] } }) {
+  const redirectUrl = safeRedirect(searchParams)
+  return (
+    <SignIn
+      path="/login"
+      routing="path"
+      forceRedirectUrl={redirectUrl}
+      signUpUrl="/signup"
+    />
+  )
+}

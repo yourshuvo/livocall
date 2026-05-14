@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: livocall-mongo
+    restart: unless-stopped
+    ports: ["27017:27017"]
+    volumes: ["livocall-mongo:/data/db"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: livocall-redis
+    restart: unless-stopped
+    ports: ["6379:6379"]
+
+  freeswitch:
+    image: signalwire/freeswitch:1.10.11-release
+    container_name: livocall-fs
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ../freeswitch/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
+      - ../freeswitch/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro
+      - ../freeswitch/dialplan:/etc/freeswitch/dialplan:ro
+      - livocall-fs-state:/var/lib/freeswitch
+
+  voice:
+    build:
+      context: ../../services/voice
+    container_name: livocall-voice
+    depends_on: [mongo, redis]
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/livocall
+      - REDIS_URL=redis://redis:6379/0
+      - FS_HOST=host.docker.internal
+    ports: ["8084:8084"]
+
+  web:
+    build:
+      context: ../../apps/web
+    container_name: livocall-web
+    depends_on: [mongo]
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/livocall
+      - SESSION_SECRET=local-dev-please-change-this-32-chars
+      - VOICE_SERVICE_URL=http://voice:8084
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+    ports: ["3000:3000"]
+
+volumes:
+  livocall-mongo:
+  livocall-fs-state:

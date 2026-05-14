@@ -1,0 +1,13 @@
+<configuration name="acl.conf" description="Network Lists">
+  <network-lists>
+    <!--
+      `livocall_trunks` — IP allow-list applied to the external profile's
+      inbound signalling. Add the SIP signalling IPs advertised by each
+      provider the user connects. In Kubernetes, render this from the same
+      provider rows that generate gateway XML.
+    -->
+    <list name="livocall_trunks" default="deny">
+      <!-- Example: <node type="allow" cidr="203.0.113.10/32"/> -->
+    </list>
+  </network-lists>
+</configuration>

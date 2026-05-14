@@ -1,0 +1,36 @@
+# deps
+node_modules
+.pnpm-store
+
+# next
+.next
+out
+build
+dist
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# python
+__pycache__
+*.pyc
+.venv
+venv
+.uv-cache
+.ruff_cache
+.mypy_cache
+.pytest_cache
+
+# misc
+.DS_Store
+*.log
+.idea
+.vscode
+coverage
+.turbo
+
+# build artifacts that shouldn't be committed
+apps/web/tsconfig.tsbuildinfo

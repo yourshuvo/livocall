@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-display: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-bangla: "Nirmala UI", "Hind Siliguri", "Bangla MN", "Vrinda", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  --bg: 255 255 255;
+  --bg-subtle: 247 247 247;
+  --bg-muted: 238 238 238;
+  --fg: 20 20 20;
+  --fg-muted: 92 92 92;
+  --fg-subtle: 122 122 122;
+  --fg-faint: 155 155 155;
+  --line: 226 226 226;
+  --accent: 34 197 94;
+  --ink: 0 0 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+  font-feature-settings: 'rlig' 1, 'calt' 1;
+}
+
+::selection {
+  background: rgb(var(--fg));
+  color: rgb(var(--bg));
+}

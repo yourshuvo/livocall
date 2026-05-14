@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    mongodb_uri: str = Field(default="mongodb://localhost:27017/livocall")
+    redis_url: str = Field(default="redis://localhost:6379/0")
+
+    # FreeSWITCH ESL
+    fs_host: str = Field(default="127.0.0.1")
+    fs_esl_port: int = Field(default=8021)
+    fs_esl_password: str = Field(default="ClueCon")
+    fs_default_gateway: str = Field(default="sip_custom")  # sofia/gateway/<this>/<dest>
+
+    # Web app callback (event ingest + webhook tick)
+    web_base_url: str = Field(default="http://localhost:3000")
+    web_shared_secret: str = Field(default="")  # must match VOICE_SHARED_SECRET on the web side
+
+    # Service-to-service auth: callers (the web app) must present this token
+    voice_service_token: str = Field(default="")
+    inbound_route_token: str = Field(default="")
+
+    # AI providers (left blank for scaffold)
+    gemini_api_key: str = Field(default="")
+    deepgram_api_key: str = Field(default="")
+    cartesia_api_key: str = Field(default="")
+    xai_api_key: str = Field(default="")
+
+    # Telephony
+    default_outbound_caller_id: str = Field(default="+8809610000000")
+
+    # Audio
+    sample_rate_in: int = Field(default=16000)
+    sample_rate_out: int = Field(default=24000)
+    fs_preferred_codec: str = Field(default="PCMU")
+    fs_codec_ms: int = Field(default=20)
+    audio_fork_buffer_ms: int = Field(default=20)
+    audio_fork_jitter_buffer_ms: int = Field(default=20)
+    first_turn_prompt_enabled: bool = Field(default=True)
+    gemini_preconnect_enabled: bool = Field(default=True)
+    gemini_preconnect_ttl_seconds: float = Field(default=75.0)
+    low_latency_pcmu_bridge_enabled: bool = Field(default=True)
+    low_latency_pcmu_bridge_strict: bool = Field(default=True)
+
+    # Gemini Live
+    gemini_live_model: str = Field(default="models/gemini-3.1-flash-live-preview")
+    gemini_live_voice: str = Field(default="Puck")
+    gemini_live_language: str = Field(default="bn-BD")
+    gemini_live_temperature: float = Field(default=0.25)
+    gemini_live_max_tokens: int = Field(default=512)
+    gemini_live_vad_silence_ms: int = Field(default=250)
+    gemini_live_vad_prefix_padding_ms: int = Field(default=100)
+    gemini_live_context_compression_enabled: bool = Field(default=True)
+
+    # Grok Voice Agent
+    grok_voice_model: str = Field(default="grok-voice-think-fast-1.0")
+    grok_voice_voice: str = Field(default="rohan")
+    grok_voice_language: str = Field(default="bn")
+    grok_voice_audio_format: str = Field(default="audio/pcm")
+    grok_voice_audio_rate: int = Field(default=16000)
+    grok_voice_vad_threshold: float = Field(default=0.85)
+    grok_voice_vad_silence_ms: int = Field(default=500)
+    grok_voice_vad_prefix_padding_ms: int = Field(default=500)
+
+    # Tier 2 fallback
+    pipeline_llm_model: str = Field(default="gemini-3.1-flash")
+    deepgram_model: str = Field(default="nova-3")
+    deepgram_language: str = Field(default="multi")
+    cartesia_voice_id: str = Field(default="")
+
+    # Public ws URL FreeSWITCH should fork audio to. e.g. ws://voice.internal:8084/ws/audio
+    voice_ws_public_url: str = Field(default="ws://127.0.0.1:8084/ws/audio")
+
+    # Shared secret used to HMAC the `auth` query-string on /ws/audio. When set,
+    # originator signs each call's WS URL and ws_audio rejects connections with
+    # missing/mismatched signatures. Leave blank to disable (only safe on a
+    # closed network or during local dev).
+    voice_ws_shared_secret: str = Field(default="")
+    voice_ws_auth_ttl_seconds: int = Field(default=3600)
+
+    # Pricing — paisa per minute, charged at the end of the call. See ARCHITECTURE.md §7.
+    rate_paisa_per_min_gemini_live: int = Field(default=700)
+    rate_paisa_per_min_grok_voice: int = Field(default=700)
+    rate_paisa_per_min_pipeline: int = Field(default=600)
+    rate_paisa_per_min_dtmf: int = Field(default=200)
+
+    # If True, /calls/originate will fall back to a fake-driver path (no real
+    # ESL or AI calls). Useful for local dev and CI.
+    voice_fake_driver: bool = Field(default=False)
+
+    # Background workers
+    enable_campaign_dialer: bool = Field(default=False)
+    enable_kb_ingestor: bool = Field(default=False)
+    enable_webhook_scheduler: bool = Field(default=False)
+    campaign_poll_interval_seconds: float = Field(default=5.0)
+    kb_poll_interval_seconds: float = Field(default=30.0)
+
+    # Post-call persistence
+    recordings_local_dir: str = Field(default="/tmp/livocall-recordings")
+    s3_recordings_bucket: str = Field(default="")
+    s3_region: str = Field(default="")
+    s3_endpoint_url: str = Field(default="")
+    aws_access_key_id: str = Field(default="")
+    aws_secret_access_key: str = Field(default="")
+    summarizer_enabled: bool = Field(default=True)
+
+
+settings = Settings()
+
+
+def rate_paisa_per_min(tier: str) -> int:
+    if tier == "gemini_live":
+        return settings.rate_paisa_per_min_gemini_live
+    if tier == "grok_voice":
+        return settings.rate_paisa_per_min_grok_voice
+    if tier == "pipeline":
+        return settings.rate_paisa_per_min_pipeline
+    if tier == "dtmf":
+        return settings.rate_paisa_per_min_dtmf
+    raise ValueError(f"unknown tier: {tier}")

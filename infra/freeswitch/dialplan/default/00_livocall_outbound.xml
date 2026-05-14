@@ -1,0 +1,55 @@
+<include>
+  <!-- Outbound: pick a gateway per channel-var `livocall_provider`. -->
+  <context name="default">
+    <extension name="livocall_outbound">
+      <condition field="${livocall_outbound}" expression="^1$">
+        <condition field="${livocall_provider}" expression="^[A-Za-z0-9_-]+$" break="on-true">
+          <action application="bridge" data="sofia/gateway/${livocall_provider}/${destination_number}"/>
+        </condition>
+      </condition>
+    </extension>
+
+    <!--
+      livocall_park: target of `&park()` from bgapi originate. After the trunk
+      answers the leg we:
+
+        1. (optional) play the org's BTRC disclosure file
+        2. (optional) play a recording-consent prompt and/or skip recording
+           based on ${livocall_record} ∈ {off, on, prompt}
+        3. fork audio to the voice service WS so a Pipecat tier can drive the
+           conversation.
+
+      All three vars are set by the originator based on Org.btrcDisclosureAudioUrl
+      and Org.recordingConsent. Defaults: no disclosure, record-on-answer.
+    -->
+    <extension name="livocall_park">
+      <condition field="${livocall_park}" expression="^1$">
+        <action application="answer"/>
+        <action application="set" data="absolute_codec_string=PCMU@20i"/>
+        <action application="set" data="rtp_disable_transcoding=true"/>
+        <action application="set" data="record_sample_rate=16000"/>
+
+        <!-- BTRC disclosure (Bengali regulator requirement): play pre-recorded file if configured. -->
+        <condition field="${livocall_disclosure_url}" expression=".+" break="on-false">
+          <action application="playback" data="${livocall_disclosure_url}"/>
+        </condition>
+
+        <!-- Recording consent — 'prompt' plays the consent line + waits for DTMF 1 (accept) / 2 (decline). -->
+        <condition field="${livocall_record}" expression="^prompt$" break="on-false">
+          <action application="read" data="1 1 ${livocall_consent_prompt} consent_digit 5000 #"/>
+          <condition field="${consent_digit}" expression="^1$" break="on-true">
+            <action application="set" data="execute_on_answer=record_session ${recordings_dir}/${uuid}.wav"/>
+          </condition>
+        </condition>
+
+        <!-- Recording consent — 'on' records unconditionally, 'off' skips. -->
+        <condition field="${livocall_record}" expression="^on$" break="on-false">
+          <action application="set" data="execute_on_answer=record_session ${recordings_dir}/${uuid}.wav"/>
+        </condition>
+
+        <action application="audio_fork" data="${livocall_ws_url}"/>
+        <action application="park"/>
+      </condition>
+    </extension>
+  </context>
+</include>
