@@ -6,18 +6,18 @@ livocall fires webhooks for important call lifecycle and account events. They us
 
 Dashboard → **Settings → Webhooks → + New webhook**:
 
-* **URL** – HTTPS endpoint that receives `POST` requests with a JSON body.
-* **Events** – one or more event types from the catalog below.
-* **Secret** – generated once on creation. Copy it into your verification code; livocall **does not show it again**.
+- **URL** – HTTPS endpoint that receives `POST` requests with a JSON body.
+- **Events** – one or more event types from the catalog below.
+- **Secret** – generated once on creation. Copy it into your verification code; livocall **does not show it again**.
 
 You can have multiple webhooks per org subscribed to overlapping events.
 
 ## HTTP details
 
-* Method: `POST`
-* `Content-Type: application/json`
-* `User-Agent: livocall-webhook/1`
-* Header `livocall-signature: t=<unix-seconds>,v1=<hex-sha256>`
+- Method: `POST`
+- `Content-Type: application/json`
+- `User-Agent: livocall-webhook/1`
+- Header `livocall-signature: t=<unix-seconds>,v1=<hex-sha256>`
 
 Request body:
 
@@ -73,11 +73,11 @@ def verify_livocall(secret: str, raw_body: bytes, header: str, tolerance_sec: in
 
 ## Delivery & retries
 
-* Webhooks are queued asynchronously and delivered by a background tick.
-* Delivery has a 10-second timeout. Any non-2xx response triggers a retry.
-* Backoff: `4 ^ attempts` seconds, capped at 24 hours.
-* Max attempts: **8**. After that the delivery is moved to a dead-letter state and `lastDeliveryStatus` reflects it.
-* Reply with **2xx** within 10 seconds to acknowledge. Anything else (including 3xx) counts as a failure.
+- Webhooks are queued asynchronously and delivered by a background tick.
+- Delivery has a 10-second timeout. Any non-2xx response triggers a retry.
+- Backoff: `4 ^ attempts` seconds, capped at 24 hours.
+- Max attempts: **8**. After that the delivery is moved to a dead-letter state and `lastDeliveryStatus` reflects it.
+- Reply with **2xx** within 10 seconds to acknowledge. Anything else (including 3xx) counts as a failure.
 
 You can re-trigger the delivery cron from a privileged caller via `POST /api/internal/webhook-tick` (requires the `VOICE_SHARED_SECRET` bearer token).
 
@@ -85,15 +85,15 @@ You can re-trigger the delivery cron from a privileged caller via `POST /api/int
 
 All payloads include the envelope above; the table lists the `data` shape.
 
-| Event              | When                                                      | `data` keys                                                                                |
-|--------------------|-----------------------------------------------------------|--------------------------------------------------------------------------------------------|
-| `call.started`     | A call has been originated and FreeSWITCH accepted it.    | `callId`, `agentId`, optionally `fsUuid`                                                  |
-| `call.completed`   | The call ended cleanly.                                   | `callId`, `agentId`, `outcome` (`"completed"`), `durationSec`, `cost.{stt,llm,tts,sip,total}Paisa` |
-| `call.failed`      | The call ended with an error (busy, no_answer, failed).   | Same as `call.completed`, but `outcome` reflects the failure mode.                         |
-| `call.transferred` | The call was transferred to a human / external number.    | `callId`, `target`                                                                         |
-| `agent.updated`    | An agent's configuration was changed via dashboard / API. | `agentId`                                                                                  |
-| `topup.confirmed`  | A successful credit top-up was recorded.                  | `amountPaisa`, `provider`, `balanceAfterPaisa`                                            |
-| `campaign.completed` | An outbound campaign reached `completed` status.        | `campaignId`, `stats.{total,attempted,completed,failed,noAnswer}`                          |
+| Event                | When                                                      | `data` keys                                                                                                                                                             |
+| -------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `call.started`       | A call has been originated and FreeSWITCH accepted it.    | `callId`, `agentId`, optionally `fsUuid`                                                                                                                                |
+| `call.completed`     | The call ended cleanly.                                   | `callId`, `agentId`, `outcome` (`"completed"`), `durationSec`, `cost.{stt,llm,tts,sip,total}Paisa`, `summary`, `sentiment`, `businessOutcome`, `transcript`, `audioUrl` |
+| `call.failed`        | The call ended with an error (busy, no_answer, failed).   | Same as `call.completed`, but `outcome` reflects the failure mode.                                                                                                      |
+| `call.transferred`   | The call was transferred to a human / external number.    | `callId`, `target`                                                                                                                                                      |
+| `agent.updated`      | An agent's configuration was changed via dashboard / API. | `agentId`                                                                                                                                                               |
+| `topup.confirmed`    | A successful credit top-up was recorded.                  | `amountPaisa`, `provider`, `balanceAfterPaisa`                                                                                                                          |
+| `campaign.completed` | An outbound campaign reached `completed` status.          | `campaignId`, `stats.{total,attempted,completed,failed,noAnswer}`                                                                                                       |
 
 ### Example: `call.completed`
 
@@ -114,7 +114,29 @@ All payloads include the envelope above; the table lists the `data` shape.
       "ttsPaisa": 600,
       "sipPaisa": 264,
       "totalPaisa": 1200
-    }
+    },
+    "summary": "Caller asked for a callback tomorrow and confirmed the product fit.",
+    "sentiment": "positive",
+    "businessOutcome": {
+      "key": "callback_requested",
+      "label": "Callback requested",
+      "confidence": 0.86,
+      "conversion": false,
+      "amountPaisa": 0,
+      "callbackAt": "2025-04-28T10:00:00.000Z",
+      "callbackE164": "+8801711000000",
+      "notes": "Caller requested a follow-up before purchasing.",
+      "extractedAt": "2025-04-27T14:01:45.000Z"
+    },
+    "transcript": [
+      { "role": "agent", "text": "Thanks for taking the call.", "at": "2025-04-27T14:00:04.000Z" },
+      {
+        "role": "user",
+        "text": "Please call me tomorrow morning.",
+        "at": "2025-04-27T14:00:11.000Z"
+      }
+    ],
+    "audioUrl": "https://recordings.example/calls/65a1.mp3"
   }
 }
 ```

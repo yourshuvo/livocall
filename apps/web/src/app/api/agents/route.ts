@@ -8,6 +8,7 @@ import { KnowledgeBase } from '@/models/KnowledgeBase'
 import { recordAudit } from '@/lib/audit'
 import { hasRole } from '@/lib/rbac'
 import { agentLanguageCodes } from '@/types/agent'
+import { OutcomeConfigSchema } from '@/lib/business-outcomes'
 
 const ObjectIdString = z.string().regex(/^[a-fA-F0-9]{24}$/)
 
@@ -77,6 +78,7 @@ const Body = z.object({
   knowledgeBaseIds: z.array(ObjectIdString).max(20).optional().default([]),
   postCallWebhook: z.string().max(500).optional().default(''),
   runtimeSettings: RuntimeSettings,
+  outcomeConfig: OutcomeConfigSchema.optional(),
 })
 
 export async function POST(req: Request) {

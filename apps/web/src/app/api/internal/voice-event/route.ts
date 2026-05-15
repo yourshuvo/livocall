@@ -10,12 +10,16 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { Types } from 'mongoose'
 import { connectMongo } from '@/lib/db'
-import { Call } from '@/models/Call'
+import { Call, type CallDoc } from '@/models/Call'
 import { Agent } from '@/models/Agent'
 import { apiError, withErrors } from '@/lib/errors'
 import { postLedger } from '@/lib/billing'
 import { emitDirectWebhook, emitWebhook } from '@/lib/webhooks'
 import { enforceTranscriptCompliance } from '@/lib/compliance'
+import { analyzeBusinessOutcome } from '@/lib/business-outcome-analyzer'
+import { campaignOutcomeStatus } from '@/lib/business-outcomes'
+import { CampaignAttempt } from '@/models/CampaignAttempt'
+import { Campaign } from '@/models/Campaign'
 
 const SHARED_SECRET = process.env.VOICE_SHARED_SECRET || ''
 
@@ -59,6 +63,7 @@ const CompletedBody = z.object({
   audioUrl: z.string().url().optional(),
   summary: z.string().max(2000).optional(),
   sentiment: z.string().max(64).optional(),
+  businessOutcome: z.unknown().optional(),
   hangupCause: z.string().max(120).optional(),
 })
 
@@ -105,9 +110,10 @@ export const POST = withErrors(async (req: Request) => {
       { new: true, upsert: true, setDefaultsOnInsert: true },
     )
     if (!call) return apiError('not_found')
-    emitWebhook(data.orgId, 'call.started', { callId: String(call._id), agentId: data.agentId }).catch(
-      () => {},
-    )
+    emitWebhook(data.orgId, 'call.started', {
+      callId: String(call._id),
+      agentId: data.agentId,
+    }).catch(() => {})
     return NextResponse.json({ id: String(call._id) })
   }
 
@@ -142,6 +148,14 @@ export const POST = withErrors(async (req: Request) => {
     call.metadata = compliantCall.metadata
   }
   const agent = await Agent.findOne({ _id: call.agentId, orgId: call.orgId }).lean()
+  if (data.outcome === 'completed') {
+    const analyzed = await analyzeBusinessOutcome(compliantCall || call, agent)
+    if (analyzed) {
+      call.businessOutcome = toStoredBusinessOutcome(analyzed)
+      await call.save()
+      await updateCampaignAttemptWithBusinessOutcome(call)
+    }
+  }
 
   if (data.cost && data.cost.totalPaisa > 0) {
     await postLedger({
@@ -154,26 +168,83 @@ export const POST = withErrors(async (req: Request) => {
   }
 
   const event = data.outcome === 'completed' ? 'call.completed' : 'call.failed'
-  emitWebhook(String(call.orgId), event, {
+  const webhookPayload = {
     callId: String(call._id),
     agentId: String(call.agentId),
     outcome: data.outcome,
     durationSec: data.durationSec,
     cost: data.cost,
-  }).catch(() => {})
+    summary: call.summary,
+    sentiment: call.sentiment,
+    businessOutcome: call.businessOutcome ?? null,
+    transcript: call.transcript,
+    audioUrl: call.audioUrl,
+  }
+  emitWebhook(String(call.orgId), event, webhookPayload).catch(() => {})
   if (agent?.postCallWebhook) {
-    emitDirectWebhook(String(call.orgId), event, agent.postCallWebhook, {
-      callId: String(call._id),
-      agentId: String(call.agentId),
-      outcome: data.outcome,
-      durationSec: data.durationSec,
-      cost: data.cost,
-      summary: call.summary,
-      sentiment: call.sentiment,
-      transcript: call.transcript,
-      audioUrl: call.audioUrl,
-    }).catch(() => {})
+    emitDirectWebhook(String(call.orgId), event, agent.postCallWebhook, webhookPayload).catch(
+      () => {},
+    )
   }
 
   return NextResponse.json({ ok: true })
 })
+
+function toStoredBusinessOutcome(outcome: Awaited<ReturnType<typeof analyzeBusinessOutcome>>) {
+  if (!outcome) return undefined
+  return {
+    ...outcome,
+    amountPaisa: outcome.amountPaisa || 0,
+    callbackAt: outcome.callbackAt ? new Date(outcome.callbackAt) : undefined,
+    callbackE164: outcome.callbackE164 || '',
+    notes: outcome.notes || '',
+    extractedAt: outcome.extractedAt || new Date(),
+  }
+}
+
+async function updateCampaignAttemptWithBusinessOutcome(call: CallDoc) {
+  const metadata = call.metadata && typeof call.metadata === 'object' ? call.metadata : {}
+  const attemptId = String(metadata.attemptId || metadata.attempt_id || '')
+  const campaignId = String(metadata.campaignId || metadata.campaign_id || '')
+  const contactId = String(metadata.contactId || metadata.contact_id || '')
+  const filter =
+    attemptId && Types.ObjectId.isValid(attemptId)
+      ? { _id: attemptId }
+      : campaignId &&
+          contactId &&
+          Types.ObjectId.isValid(campaignId) &&
+          Types.ObjectId.isValid(contactId)
+        ? { campaignId, contactId }
+        : null
+  if (!filter) return
+  const attempt = await CampaignAttempt.findOne(filter)
+  if (!attempt) return
+  const campaign = await Campaign.findById(attempt.campaignId).lean()
+  const maxAttempts = Number(campaign?.maxAttempts ?? 2)
+  const next = campaignOutcomeStatus({
+    telephonyOutcome: String(call.outcome),
+    businessOutcome: call.businessOutcome,
+    attempts: Number(attempt.attempts || 0),
+    maxAttempts,
+  })
+  attempt.status = next.status
+  attempt.lastOutcome = next.lastOutcome
+  attempt.lastReason = call.businessOutcome?.notes || call.hangupCause || next.lastOutcome
+  if (next.status === 'queued') {
+    attempt.set('completedAt', undefined)
+  } else {
+    attempt.completedAt = new Date()
+  }
+  if (next.nextRetryAt) {
+    attempt.nextRetryAt = next.nextRetryAt
+  } else {
+    attempt.set('nextRetryAt', undefined)
+  }
+  attempt.attemptLog.push({
+    at: new Date(),
+    outcome: next.lastOutcome,
+    reason: attempt.lastReason,
+    callId: call._id,
+  })
+  await attempt.save()
+}

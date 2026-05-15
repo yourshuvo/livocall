@@ -7,6 +7,7 @@ import { authV1, isResponse } from '@/lib/auth/v1'
 import { withErrors } from '@/lib/errors'
 import { agentToJson } from '@/lib/serialize'
 import { agentLanguageCodes } from '@/types/agent'
+import { OutcomeConfigSchema } from '@/lib/business-outcomes'
 
 const RuntimeSettings = z
   .object({
@@ -52,6 +53,7 @@ const Body = z.object({
     .optional(),
   postCallWebhook: z.string().max(500).optional().default(''),
   runtimeSettings: RuntimeSettings,
+  outcomeConfig: OutcomeConfigSchema.optional(),
 })
 
 export const GET = withErrors(async (req: Request) => {

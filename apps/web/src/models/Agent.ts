@@ -24,6 +24,72 @@ const runtimeSettingsSchema = new Schema(
   { _id: false },
 )
 
+const outcomeLabelSchema = new Schema(
+  {
+    key: { type: String, required: true },
+    label: { type: String, required: true },
+    description: { type: String, default: '' },
+    conversion: { type: Boolean, default: false },
+  },
+  { _id: false },
+)
+
+const DEFAULT_OUTCOME_LABELS = [
+  {
+    key: 'interested',
+    label: 'Interested',
+    description: 'Caller showed buying intent or asked for next steps.',
+    conversion: true,
+  },
+  {
+    key: 'not_interested',
+    label: 'Not interested',
+    description: 'Caller declined the offer or asked not to proceed.',
+    conversion: false,
+  },
+  {
+    key: 'callback_requested',
+    label: 'Callback requested',
+    description: 'Caller asked to be contacted later.',
+    conversion: false,
+  },
+  {
+    key: 'purchased',
+    label: 'Purchased',
+    description: 'Caller confirmed an order, payment, booking, or purchase.',
+    conversion: true,
+  },
+  {
+    key: 'complaint',
+    label: 'Complaint',
+    description: 'Caller raised a complaint, escalation, refund, or service issue.',
+    conversion: false,
+  },
+  {
+    key: 'wrong_number',
+    label: 'Wrong number',
+    description: 'Caller said this is the wrong person or number.',
+    conversion: false,
+  },
+  {
+    key: 'unknown',
+    label: 'Unknown',
+    description: 'Outcome cannot be confidently determined.',
+    conversion: false,
+  },
+]
+
+const outcomeConfigSchema = new Schema(
+  {
+    enabled: { type: Boolean, default: true },
+    labels: {
+      type: [outcomeLabelSchema],
+      default: () => DEFAULT_OUTCOME_LABELS.map((label) => ({ ...label })),
+    },
+  },
+  { _id: false },
+)
+
 const agentSchema = new Schema(
   {
     orgId: { type: Schema.Types.ObjectId, ref: 'Org', required: true, index: true },
@@ -78,7 +144,11 @@ const agentSchema = new Schema(
         {
           name: { type: String, required: true },
           description: { type: String, default: '' },
-          method: { type: String, enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], default: 'POST' },
+          method: {
+            type: String,
+            enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+            default: 'POST',
+          },
           url: { type: String, required: true },
           headers: { type: Schema.Types.Mixed, default: {} },
           authHeader: { type: String, default: '' },
@@ -96,6 +166,7 @@ const agentSchema = new Schema(
     knowledgeBaseIds: [{ type: Schema.Types.ObjectId, ref: 'KnowledgeBase' }],
     postCallWebhook: { type: String, default: '' },
     runtimeSettings: { type: runtimeSettingsSchema, default: () => ({}) },
+    outcomeConfig: { type: outcomeConfigSchema, default: () => ({}) },
     status: { type: String, enum: ['draft', 'live'], default: 'draft' },
   },
   { timestamps: true },
@@ -110,5 +181,4 @@ export type AgentDoc = InferSchemaType<typeof agentSchema> & {
 export type AgentLean = Omit<AgentDoc, '_id'> & { _id: mongoose.Types.ObjectId }
 
 export const Agent: Model<AgentDoc> =
-  (mongoose.models.Agent as Model<AgentDoc>) ||
-  mongoose.model<AgentDoc>('Agent', agentSchema)
+  (mongoose.models.Agent as Model<AgentDoc>) || mongoose.model<AgentDoc>('Agent', agentSchema)

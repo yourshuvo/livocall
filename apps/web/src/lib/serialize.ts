@@ -43,7 +43,13 @@ export function agentToJson(a: AgentLean) {
           terminator: a.dtmf.terminator ?? '#',
           noInputPromptUrl: a.dtmf.noInputPromptUrl ?? '',
         }
-      : { menu: [], maxAttempts: 3, interDigitTimeoutMs: 2500, terminator: '#', noInputPromptUrl: '' },
+      : {
+          menu: [],
+          maxAttempts: 3,
+          interDigitTimeoutMs: 2500,
+          terminator: '#',
+          noInputPromptUrl: '',
+        },
     tools: (a.tools || []).map((t) => ({
       name: String(t.name ?? ''),
       description: String(t.description ?? ''),
@@ -62,6 +68,7 @@ export function agentToJson(a: AgentLean) {
     knowledgeBaseIds: (a.knowledgeBaseIds || []).map(id),
     postCallWebhook: a.postCallWebhook,
     runtimeSettings: a.runtimeSettings ?? {},
+    outcomeConfig: a.outcomeConfig ?? null,
     status: a.status,
     createdAt: iso(a.createdAt),
     updatedAt: iso(a.updatedAt),
@@ -88,6 +95,19 @@ export function callToJson(c: CallLean) {
     })),
     cost: c.cost,
     outcome: c.outcome,
+    businessOutcome: c.businessOutcome
+      ? {
+          key: c.businessOutcome.key ?? '',
+          label: c.businessOutcome.label ?? '',
+          confidence: c.businessOutcome.confidence ?? 0,
+          conversion: Boolean(c.businessOutcome.conversion),
+          amountPaisa: c.businessOutcome.amountPaisa ?? 0,
+          callbackAt: iso(c.businessOutcome.callbackAt),
+          callbackE164: c.businessOutcome.callbackE164 ?? null,
+          notes: c.businessOutcome.notes ?? '',
+          extractedAt: iso(c.businessOutcome.extractedAt),
+        }
+      : null,
     sentiment: c.sentiment ?? null,
     summary: c.summary ?? null,
     dtmfPath: c.dtmfPath ?? null,

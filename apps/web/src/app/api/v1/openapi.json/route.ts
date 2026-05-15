@@ -20,9 +20,7 @@ const spec = {
       'the dashboard. Automate calls, agents, campaigns, contacts, SIP numbers, KB, DNC and webhooks. ' +
       'Rate limit: 60 req/min + 5 req/s burst per key.',
   },
-  servers: [
-    { url: 'https://{host}', variables: { host: { default: 'app.bd.voice' } } },
-  ],
+  servers: [{ url: 'https://{host}', variables: { host: { default: 'app.bd.voice' } } }],
   components: {
     securitySchemes: {
       bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'API Key' },
@@ -50,7 +48,27 @@ const spec = {
           tier: { type: 'string', enum: ['gemini_live', 'grok_voice', 'pipeline', 'dtmf'] },
           language: { type: 'string' },
           voice: { type: 'string' },
+          outcomeConfig: { $ref: '#/components/schemas/OutcomeConfig' },
           status: { type: 'string', enum: ['draft', 'live'] },
+        },
+      },
+      OutcomeConfig: {
+        type: 'object',
+        properties: {
+          enabled: { type: 'boolean' },
+          labels: {
+            type: 'array',
+            maxItems: 12,
+            items: {
+              type: 'object',
+              properties: {
+                key: { type: 'string' },
+                label: { type: 'string' },
+                description: { type: 'string' },
+                conversion: { type: 'boolean' },
+              },
+            },
+          },
         },
       },
       AgentCreate: {
@@ -70,6 +88,22 @@ const spec = {
               guardrails: { type: 'string' },
             },
           },
+          outcomeConfig: { $ref: '#/components/schemas/OutcomeConfig' },
+        },
+      },
+      BusinessOutcome: {
+        type: 'object',
+        nullable: true,
+        properties: {
+          key: { type: 'string' },
+          label: { type: 'string' },
+          confidence: { type: 'number', minimum: 0, maximum: 1 },
+          conversion: { type: 'boolean' },
+          amountPaisa: { type: 'integer' },
+          callbackAt: { type: 'string', format: 'date-time', nullable: true },
+          callbackE164: { type: 'string', nullable: true },
+          notes: { type: 'string' },
+          extractedAt: { type: 'string', format: 'date-time' },
         },
       },
       Call: {
@@ -85,6 +119,7 @@ const spec = {
           outcome: { type: 'string', nullable: true },
           summary: { type: 'string', nullable: true },
           sentiment: { type: 'string', nullable: true },
+          businessOutcome: { $ref: '#/components/schemas/BusinessOutcome' },
           audioUrl: { type: 'string', nullable: true },
         },
       },
@@ -279,11 +314,17 @@ const spec = {
     },
     '/api/v1/knowledge': {
       get: { summary: 'List knowledge bases', responses: { '200': { description: 'OK' } } },
-      post: { summary: 'Create a knowledge base', responses: { '201': { description: 'Created' } } },
+      post: {
+        summary: 'Create a knowledge base',
+        responses: { '201': { description: 'Created' } },
+      },
     },
     '/api/v1/dnc': {
       get: { summary: 'List DNC entries for the org', responses: { '200': { description: 'OK' } } },
-      post: { summary: 'Add a number to the DNC list', responses: { '201': { description: 'Created' } } },
+      post: {
+        summary: 'Add a number to the DNC list',
+        responses: { '201': { description: 'Created' } },
+      },
     },
     '/api/v1/usage': {
       get: {

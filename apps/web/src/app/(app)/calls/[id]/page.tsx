@@ -48,6 +48,7 @@ export default async function CallDetailPage({ params }: { params: { id: string 
     string,
     unknown
   >
+  const businessOutcome = call.businessOutcome
 
   return (
     <>
@@ -105,6 +106,11 @@ export default async function CallDetailPage({ params }: { params: { id: string 
             {call.sentiment && (
               <Badge variant="outline" className="capitalize">
                 {call.sentiment}
+              </Badge>
+            )}
+            {businessOutcome?.key && (
+              <Badge variant={businessOutcome.conversion ? 'live' : 'outline'}>
+                {businessOutcome.label || businessOutcome.key}
               </Badge>
             )}
             <span className="text-fg-faint font-mono text-[10.5px] uppercase tracking-[0.12em]">
@@ -170,6 +176,49 @@ export default async function CallDetailPage({ params }: { params: { id: string 
           </Card>
 
           <div className="space-y-6">
+            {businessOutcome?.key && (
+              <Card>
+                <div className="border-line border-b p-5">
+                  <CardTitle>Business outcome</CardTitle>
+                </div>
+                <CardBody className="text-fg-muted space-y-2 text-[12.5px]">
+                  <KV label="Label" value={businessOutcome.label || businessOutcome.key} />
+                  <KV label="Key" value={businessOutcome.key} mono />
+                  <KV
+                    label="Confidence"
+                    value={`${Math.round(Number(businessOutcome.confidence ?? 0) * 100)}%`}
+                  />
+                  <KV label="Conversion" value={businessOutcome.conversion ? 'yes' : 'no'} />
+                  {businessOutcome.amountPaisa != null && (
+                    <KV label="Amount" value={fmtBdt(Number(businessOutcome.amountPaisa || 0))} />
+                  )}
+                  {businessOutcome.callbackAt && (
+                    <KV label="Callback" value={fmtDate(businessOutcome.callbackAt)} />
+                  )}
+                  {businessOutcome.callbackE164 && (
+                    <KV
+                      label="Callback phone"
+                      value={fmtPhoneE164(businessOutcome.callbackE164)}
+                      mono
+                    />
+                  )}
+                  {businessOutcome.notes && (
+                    <div className="border-line mt-2 border-t pt-2">
+                      <p className="text-fg-faint font-mono text-[10.5px] uppercase tracking-[0.12em]">
+                        Notes
+                      </p>
+                      <p className="text-fg mt-1 text-[13px] leading-relaxed">
+                        {businessOutcome.notes}
+                      </p>
+                    </div>
+                  )}
+                  {businessOutcome.extractedAt && (
+                    <KV label="Extracted" value={fmtDate(businessOutcome.extractedAt)} />
+                  )}
+                </CardBody>
+              </Card>
+            )}
+
             <Card>
               <div className="border-line border-b p-5">
                 <CardTitle>Cost</CardTitle>

@@ -35,6 +35,21 @@ const supervisorEventSchema = new Schema(
   { _id: false },
 )
 
+const businessOutcomeSchema = new Schema(
+  {
+    key: { type: String, default: '' },
+    label: { type: String, default: '' },
+    confidence: { type: Number, default: 0 },
+    conversion: { type: Boolean, default: false },
+    amountPaisa: { type: Number, default: 0 },
+    callbackAt: { type: Date },
+    callbackE164: { type: String, default: '' },
+    notes: { type: String, default: '' },
+    extractedAt: { type: Date },
+  },
+  { _id: false },
+)
+
 const callSchema = new Schema(
   {
     orgId: { type: Schema.Types.ObjectId, ref: 'Org', required: true, index: true },
@@ -64,6 +79,7 @@ const callSchema = new Schema(
       enum: ['completed', 'no_answer', 'busy', 'failed', 'voicemail', 'in_progress'],
       default: 'in_progress',
     },
+    businessOutcome: { type: businessOutcomeSchema },
     sentiment: { type: String },
     summary: { type: String },
     dtmfPath: { type: String },

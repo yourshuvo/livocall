@@ -5,11 +5,7 @@ import { connectMongo } from '@/lib/db'
 import { Agent } from '@/models/Agent'
 import { AgentVersion } from '@/models/AgentVersion'
 import { KnowledgeBase } from '@/models/KnowledgeBase'
-import {
-  isResponse,
-  objectIdOr400,
-  requireDashboardSession,
-} from '@/lib/api-helpers'
+import { isResponse, objectIdOr400, requireDashboardSession } from '@/lib/api-helpers'
 import { apiError, withErrors } from '@/lib/errors'
 import { requireRole } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
@@ -17,6 +13,7 @@ import { agentToJson } from '@/lib/serialize'
 import { emitWebhook } from '@/lib/webhooks'
 import { Secret } from '@/models/Secret'
 import { agentLanguageCodes } from '@/types/agent'
+import { OutcomeConfigSchema } from '@/lib/business-outcomes'
 
 const ObjectIdString = z.string().regex(/^[a-fA-F0-9]{24}$/)
 
@@ -106,6 +103,7 @@ const Patch = z.object({
   status: z.enum(['draft', 'live']).optional(),
   knowledgeBaseIds: z.array(ObjectIdString).max(20).optional(),
   runtimeSettings: RuntimeSettings.optional(),
+  outcomeConfig: OutcomeConfigSchema.optional(),
 })
 
 export const GET = withErrors(async (_req: Request, ctx: { params: { id: string } }) => {
@@ -129,10 +127,17 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: { id: string
   const body = Patch.parse(await req.json().catch(() => ({})))
   await connectMongo()
   if (body.tools) {
-    const secretIds = body.tools.map((tool) => tool.secretId).filter((id): id is string => Boolean(id))
+    const secretIds = body.tools
+      .map((tool) => tool.secretId)
+      .filter((id): id is string => Boolean(id))
     if (secretIds.length) {
-      const count = await Secret.countDocuments({ _id: { $in: secretIds }, orgId: s.orgId, revokedAt: { $exists: false } })
-      if (count !== secretIds.length) return apiError('invalid_input', 'one or more tool secrets are unavailable')
+      const count = await Secret.countDocuments({
+        _id: { $in: secretIds },
+        orgId: s.orgId,
+        revokedAt: { $exists: false },
+      })
+      if (count !== secretIds.length)
+        return apiError('invalid_input', 'one or more tool secrets are unavailable')
     }
     body.tools = body.tools.map((tool) => {
       const secretId = tool.secretId || undefined
@@ -146,8 +151,12 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: { id: string
   }
   if (body.knowledgeBaseIds?.length) {
     const knowledgeBaseIds = [...new Set(body.knowledgeBaseIds)]
-    const count = await KnowledgeBase.countDocuments({ _id: { $in: knowledgeBaseIds }, orgId: s.orgId })
-    if (count !== knowledgeBaseIds.length) return apiError('invalid_input', 'one or more knowledge bases are unavailable')
+    const count = await KnowledgeBase.countDocuments({
+      _id: { $in: knowledgeBaseIds },
+      orgId: s.orgId,
+    })
+    if (count !== knowledgeBaseIds.length)
+      return apiError('invalid_input', 'one or more knowledge bases are unavailable')
     body.knowledgeBaseIds = knowledgeBaseIds
   }
   const existing = await Agent.findOne({ _id: oid, orgId: s.orgId }).lean()

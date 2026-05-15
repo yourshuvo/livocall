@@ -72,6 +72,18 @@ interface RuntimeSettings {
   handoffRules?: string
 }
 
+interface OutcomeLabel {
+  key: string
+  label: string
+  description: string
+  conversion: boolean
+}
+
+interface OutcomeConfig {
+  enabled: boolean
+  labels: OutcomeLabel[]
+}
+
 interface AgentDto {
   id: string
   name: string
@@ -86,6 +98,7 @@ interface AgentDto {
   knowledgeBaseIds: string[]
   postCallWebhook: string
   runtimeSettings: RuntimeSettings
+  outcomeConfig?: OutcomeConfig | null
   status: 'draft' | 'live'
 }
 
@@ -193,33 +206,147 @@ interface VoiceOption {
 
 const VOICE_CATALOG: Record<string, VoiceOption[]> = {
   cartesia: [
-    { id: 'cimo', label: 'Cimo', provider: 'cartesia', accent: 'BD · female', styles: ['conversational', 'news', 'storyteller'] },
-    { id: 'anika', label: 'Anika', provider: 'cartesia', accent: 'BD · female', styles: ['conversational', 'news'] },
-    { id: 'rahim', label: 'Rahim', provider: 'cartesia', accent: 'BD · male', styles: ['conversational', 'news'] },
-    { id: 'maya-us', label: 'Maya', provider: 'cartesia', accent: 'US · female', styles: ['conversational', 'support'] },
-    { id: 'theo-us', label: 'Theo', provider: 'cartesia', accent: 'US · male', styles: ['conversational', 'calm'] },
+    {
+      id: 'cimo',
+      label: 'Cimo',
+      provider: 'cartesia',
+      accent: 'BD · female',
+      styles: ['conversational', 'news', 'storyteller'],
+    },
+    {
+      id: 'anika',
+      label: 'Anika',
+      provider: 'cartesia',
+      accent: 'BD · female',
+      styles: ['conversational', 'news'],
+    },
+    {
+      id: 'rahim',
+      label: 'Rahim',
+      provider: 'cartesia',
+      accent: 'BD · male',
+      styles: ['conversational', 'news'],
+    },
+    {
+      id: 'maya-us',
+      label: 'Maya',
+      provider: 'cartesia',
+      accent: 'US · female',
+      styles: ['conversational', 'support'],
+    },
+    {
+      id: 'theo-us',
+      label: 'Theo',
+      provider: 'cartesia',
+      accent: 'US · male',
+      styles: ['conversational', 'calm'],
+    },
   ],
   eleven: [
-    { id: 'eleven-rachel', label: 'Rachel', provider: 'eleven', accent: 'US · female', styles: ['default', 'news', 'whisper'] },
-    { id: 'eleven-mark', label: 'Mark', provider: 'eleven', accent: 'US · male', styles: ['default', 'news'] },
-    { id: 'eleven-bella', label: 'Bella', provider: 'eleven', accent: 'US · female', styles: ['default', 'narration'] },
+    {
+      id: 'eleven-rachel',
+      label: 'Rachel',
+      provider: 'eleven',
+      accent: 'US · female',
+      styles: ['default', 'news', 'whisper'],
+    },
+    {
+      id: 'eleven-mark',
+      label: 'Mark',
+      provider: 'eleven',
+      accent: 'US · male',
+      styles: ['default', 'news'],
+    },
+    {
+      id: 'eleven-bella',
+      label: 'Bella',
+      provider: 'eleven',
+      accent: 'US · female',
+      styles: ['default', 'narration'],
+    },
   ],
   'gemini-live': [
-    { id: 'aoede', label: 'Aoede', provider: 'gemini-live', accent: 'Bangla + English', styles: ['bilingual'] },
-    { id: 'puck', label: 'Puck', provider: 'gemini-live', accent: 'Neutral', styles: ['conversational'] },
-    { id: 'charon', label: 'Charon', provider: 'gemini-live', accent: 'Bangla + English', styles: ['bilingual'] },
-    { id: 'kore', label: 'Kore', provider: 'gemini-live', accent: 'English · neutral', styles: ['calm'] },
-    { id: 'fenrir', label: 'Fenrir', provider: 'gemini-live', accent: 'English · male', styles: ['conversational'] },
+    {
+      id: 'aoede',
+      label: 'Aoede',
+      provider: 'gemini-live',
+      accent: 'Bangla + English',
+      styles: ['bilingual'],
+    },
+    {
+      id: 'puck',
+      label: 'Puck',
+      provider: 'gemini-live',
+      accent: 'Neutral',
+      styles: ['conversational'],
+    },
+    {
+      id: 'charon',
+      label: 'Charon',
+      provider: 'gemini-live',
+      accent: 'Bangla + English',
+      styles: ['bilingual'],
+    },
+    {
+      id: 'kore',
+      label: 'Kore',
+      provider: 'gemini-live',
+      accent: 'English · neutral',
+      styles: ['calm'],
+    },
+    {
+      id: 'fenrir',
+      label: 'Fenrir',
+      provider: 'gemini-live',
+      accent: 'English · male',
+      styles: ['conversational'],
+    },
   ],
   xai: [
-    { id: 'rohan', label: 'Rohan', provider: 'xai', accent: 'Male · young · Bengali', styles: ['friendly', 'energetic', 'support', 'professional'] },
-    { id: 'pooja', label: 'Pooja', provider: 'xai', accent: 'Female · Bengali', styles: ['warm', 'friendly', 'conversational', 'support'] },
-    { id: 'anika', label: 'Anika', provider: 'xai', accent: 'Female · young · Bengali', styles: ['bright', 'helpful', 'energetic', 'conversational'] },
-    { id: 'tanvir', label: 'Tanvir', provider: 'xai', accent: 'Male · Bengali', styles: ['calm', 'professional', 'confident', 'instructional'] },
+    {
+      id: 'rohan',
+      label: 'Rohan',
+      provider: 'xai',
+      accent: 'Male · young · Bengali',
+      styles: ['friendly', 'energetic', 'support', 'professional'],
+    },
+    {
+      id: 'pooja',
+      label: 'Pooja',
+      provider: 'xai',
+      accent: 'Female · Bengali',
+      styles: ['warm', 'friendly', 'conversational', 'support'],
+    },
+    {
+      id: 'anika',
+      label: 'Anika',
+      provider: 'xai',
+      accent: 'Female · young · Bengali',
+      styles: ['bright', 'helpful', 'energetic', 'conversational'],
+    },
+    {
+      id: 'tanvir',
+      label: 'Tanvir',
+      provider: 'xai',
+      accent: 'Male · Bengali',
+      styles: ['calm', 'professional', 'confident', 'instructional'],
+    },
   ],
   'gemini-tts': [
-    { id: 'news-bn', label: 'News-anchor', provider: 'gemini-tts', accent: 'BD · female', styles: ['news'] },
-    { id: 'operator-bn', label: 'Operator', provider: 'gemini-tts', accent: 'BD · male', styles: ['ivr'] },
+    {
+      id: 'news-bn',
+      label: 'News-anchor',
+      provider: 'gemini-tts',
+      accent: 'BD · female',
+      styles: ['news'],
+    },
+    {
+      id: 'operator-bn',
+      label: 'Operator',
+      provider: 'gemini-tts',
+      accent: 'BD · male',
+      styles: ['ivr'],
+    },
   ],
 }
 
@@ -270,6 +397,79 @@ const VOCAB_MODES = [
   { k: 'medical', label: 'Medical', sub: '(Optimized for healthcare terms)' },
 ] as const
 
+const DEFAULT_OUTCOME_LABELS: OutcomeLabel[] = [
+  {
+    key: 'interested',
+    label: 'Interested',
+    description: 'Caller showed buying intent or asked for next steps.',
+    conversion: true,
+  },
+  {
+    key: 'not_interested',
+    label: 'Not interested',
+    description: 'Caller declined the offer or asked not to proceed.',
+    conversion: false,
+  },
+  {
+    key: 'callback_requested',
+    label: 'Callback requested',
+    description: 'Caller asked to be contacted later.',
+    conversion: false,
+  },
+  {
+    key: 'purchased',
+    label: 'Purchased',
+    description: 'Caller confirmed an order, payment, booking, or purchase.',
+    conversion: true,
+  },
+  {
+    key: 'complaint',
+    label: 'Complaint',
+    description: 'Caller raised a complaint, escalation, refund, or service issue.',
+    conversion: false,
+  },
+  {
+    key: 'wrong_number',
+    label: 'Wrong number',
+    description: 'Caller said this is the wrong person or number.',
+    conversion: false,
+  },
+  {
+    key: 'unknown',
+    label: 'Unknown',
+    description: 'Outcome cannot be confidently determined.',
+    conversion: false,
+  },
+]
+
+function normalizeOutcomeLabels(labels?: OutcomeLabel[] | null): OutcomeLabel[] {
+  const cleaned = (labels?.length ? labels : DEFAULT_OUTCOME_LABELS)
+    .map((label) => ({
+      key: String(label.key || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, ''),
+      label: String(label.label || '').trim(),
+      description: String(label.description || '').trim(),
+      conversion: Boolean(label.conversion),
+    }))
+    .filter((label) => label.key && label.label)
+    .slice(0, 12)
+  if (!cleaned.some((label) => label.key === 'unknown')) {
+    cleaned.push({ ...DEFAULT_OUTCOME_LABELS[6] })
+  }
+  return cleaned.slice(0, 12)
+}
+
+function normalizeOutcomeConfig(config?: OutcomeConfig | null): OutcomeConfig {
+  return {
+    enabled: config?.enabled !== false,
+    labels: normalizeOutcomeLabels(config?.labels),
+  }
+}
+
 export function AgentEditor({
   initial,
   kbs,
@@ -281,14 +481,16 @@ export function AgentEditor({
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  const normalizedInitialOutcome = useMemo(
+    () => normalizeOutcomeConfig(initial.outcomeConfig),
+    [initial.outcomeConfig],
+  )
 
   // Persisted form state (round-trips through /api/agents/:id)
   const [name, setName] = useState(initial.name)
   const [description, setDescription] = useState(initial.description)
   const [tier, setTier] = useState<Tier>(initial.tier)
-  const [model, setModel] = useState(
-    initial.model || MODEL_OPTIONS[initial.tier]?.[0]?.k || '',
-  )
+  const [model, setModel] = useState(initial.model || MODEL_OPTIONS[initial.tier]?.[0]?.k || '')
   const [language, setLanguage] = useState(initial.language)
   const initialProvider =
     initial.voice?.provider && PROVIDERS_BY_TIER[initial.tier]?.includes(initial.voice.provider)
@@ -299,9 +501,7 @@ export function AgentEditor({
     initial.voice?.voiceId || VOICE_CATALOG[initialProvider]?.[0]?.id || '',
   )
   const [voiceStyle, setVoiceStyle] = useState(
-    initial.voice?.style ||
-      VOICE_CATALOG[initialProvider]?.[0]?.styles?.[0] ||
-      'conversational',
+    initial.voice?.style || VOICE_CATALOG[initialProvider]?.[0]?.styles?.[0] || 'conversational',
   )
   const [systemPrompt, setSystemPrompt] = useState(
     initial.prompt?.system || (initial.tier === 'dtmf' ? '' : DEFAULT_PROMPT),
@@ -337,11 +537,17 @@ export function AgentEditor({
 
   // Cosmetic-only fields (no backing column yet — used to mirror Retell's controls)
   const runtime = initial.runtimeSettings || {}
-  const [welcomeMode, setWelcomeMode] = useState<'ai' | 'caller' | 'silent'>(runtime.welcomeMode || 'ai')
-  const [welcomeKind, setWelcomeKind] = useState<'static' | 'dynamic'>(runtime.welcomeKind || 'dynamic')
+  const [welcomeMode, setWelcomeMode] = useState<'ai' | 'caller' | 'silent'>(
+    runtime.welcomeMode || 'ai',
+  )
+  const [welcomeKind, setWelcomeKind] = useState<'static' | 'dynamic'>(
+    runtime.welcomeKind || 'dynamic',
+  )
   const [pauseBefore, setPauseBefore] = useState(runtime.pauseBeforeSpeakingSec ?? 0)
   const [denoise, setDenoise] = useState<'none' | 'mixed' | 'off'>(runtime.denoiseMode || 'none')
-  const [transMode, setTransMode] = useState<'speed' | 'accuracy' | 'custom'>(runtime.transcriptionMode || 'accuracy')
+  const [transMode, setTransMode] = useState<'speed' | 'accuracy' | 'custom'>(
+    runtime.transcriptionMode || 'accuracy',
+  )
   const [vocab, setVocab] = useState<'general' | 'medical'>(runtime.vocabularyMode || 'general')
   const [boosted, setBoosted] = useState(runtime.boostedKeywords || '')
   const [voicemailDetect, setVoicemailDetect] = useState(Boolean(runtime.voicemailDetection))
@@ -354,6 +560,10 @@ export function AgentEditor({
   const [maxDuration, setMaxDuration] = useState(runtime.maxDurationHours ?? 1)
   const [handoffTarget, setHandoffTarget] = useState(runtime.handoffTarget || '')
   const [handoffRules, setHandoffRules] = useState(runtime.handoffRules || '')
+  const [outcomeEnabled, setOutcomeEnabled] = useState(normalizedInitialOutcome.enabled)
+  const [outcomeLabels, setOutcomeLabels] = useState<OutcomeLabel[]>(
+    normalizedInitialOutcome.labels,
+  )
 
   const [pending, start] = useTransition()
   const [savedAt, setSavedAt] = useState<Date | null>(null)
@@ -375,6 +585,7 @@ export function AgentEditor({
     callSettings: true,
     webhook: false,
     handoff: false,
+    outcomes: false,
     dtmfFlow: true,
   })
   const toggleSec = (k: string) => setOpenSections((s) => ({ ...s, [k]: !s[k] }))
@@ -423,7 +634,14 @@ export function AgentEditor({
     handoffTarget,
     handoffRules,
   }
-  const initialKey = useMemo(() => JSON.stringify(initial), [initial])
+  const outcomeConfig = {
+    enabled: outcomeEnabled,
+    labels: normalizeOutcomeLabels(outcomeLabels),
+  }
+  const initialKey = useMemo(
+    () => JSON.stringify({ ...initial, outcomeConfig: normalizedInitialOutcome }),
+    [initial, normalizedInitialOutcome],
+  )
   const currentKey = JSON.stringify({
     ...initial,
     name,
@@ -438,6 +656,7 @@ export function AgentEditor({
     tools,
     postCallWebhook: webhook,
     runtimeSettings,
+    outcomeConfig,
     status,
   })
   const isDirty = currentKey !== initialKey
@@ -468,6 +687,37 @@ export function AgentEditor({
     }
   }
 
+  function outcomeConfigPayload(): OutcomeConfig {
+    return {
+      enabled: outcomeEnabled,
+      labels: normalizeOutcomeLabels(outcomeLabels),
+    }
+  }
+
+  function updateOutcomeLabel(index: number, patch: Partial<OutcomeLabel>) {
+    setOutcomeLabels((labels) =>
+      labels.map((label, i) => (i === index ? { ...label, ...patch } : label)),
+    )
+  }
+
+  function addOutcomeLabel() {
+    if (outcomeLabels.length >= 12) {
+      toast('Revenue outcomes are limited to 12 labels', 'error')
+      return
+    }
+    setOutcomeLabels((labels) => [
+      ...labels,
+      { key: 'new_outcome', label: 'New outcome', description: '', conversion: false },
+    ])
+  }
+
+  function removeOutcomeLabel(index: number) {
+    setOutcomeLabels((labels) => {
+      const next = labels.filter((_, i) => i !== index)
+      return normalizeOutcomeLabels(next.length ? next : DEFAULT_OUTCOME_LABELS)
+    })
+  }
+
   function save(): Promise<boolean> {
     return new Promise((resolve) => {
       if (!name.trim()) {
@@ -490,6 +740,7 @@ export function AgentEditor({
             knowledgeBaseIds: selectedKbs,
             postCallWebhook: webhook,
             runtimeSettings: runtimeSettingsPayload(),
+            outcomeConfig: outcomeConfigPayload(),
           })
           setSavedAt(new Date())
           router.refresh()
@@ -521,8 +772,10 @@ export function AgentEditor({
         }
       }
       for (const tool of tools) {
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(tool.name)) missing.push(`valid tool name for ${tool.name || 'tool'}`)
-        if (tool.url && !/^https?:\/\//.test(tool.url)) missing.push(`valid URL for tool ${tool.name}`)
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(tool.name))
+          missing.push(`valid tool name for ${tool.name || 'tool'}`)
+        if (tool.url && !/^https?:\/\//.test(tool.url))
+          missing.push(`valid URL for tool ${tool.name}`)
       }
       if (webhook && !/^https?:\/\//.test(webhook)) missing.push('valid webhook URL')
       if (missing.length) {
@@ -550,7 +803,10 @@ export function AgentEditor({
     }
     start(async () => {
       try {
-        await api.post(`/api/agents/${initial.id}/test-call`, { toE164, fromE164: fromE164 || undefined })
+        await api.post(`/api/agents/${initial.id}/test-call`, {
+          toE164,
+          fromE164: fromE164 || undefined,
+        })
         toast('Test call originated — watch the call log', 'success')
         setTestOpen(false)
         setToE164('')
@@ -569,7 +825,10 @@ export function AgentEditor({
     try {
       const result = await api.post<{ ok: boolean; status: number; body: string }>(
         `/api/agents/${initial.id}/tools/test`,
-        { index, arguments: { query: 'dashboard test', notes: 'Manual tool test from agent builder' } },
+        {
+          index,
+          arguments: { query: 'dashboard test', notes: 'Manual tool test from agent builder' },
+        },
       )
       setToolResults((current) => ({
         ...current,
@@ -615,6 +874,7 @@ export function AgentEditor({
     JSON.stringify(tools),
     JSON.stringify(dtmf),
     JSON.stringify(runtimeSettings),
+    JSON.stringify(outcomeConfig),
   ].join('|')
   useEffect(() => {
     if (!dirtyRef.current) return
@@ -629,8 +889,7 @@ export function AgentEditor({
   const languageOptions = languageOptionsForTier(tier)
   const langDef = languageOptions.find((l) => l.k === language) ?? languageOptions[0]
   const availableVoices = VOICE_CATALOG[voiceProvider] ?? []
-  const voiceDef =
-    availableVoices.find((v) => v.id === voiceId) ?? availableVoices[0]
+  const voiceDef = availableVoices.find((v) => v.id === voiceId) ?? availableVoices[0]
   const availableModels = MODEL_OPTIONS[tier]
   const modelDef = availableModels.find((m) => m.k === model) ?? availableModels[0]
   const availableProviders = PROVIDERS_BY_TIER[tier]
@@ -646,10 +905,14 @@ export function AgentEditor({
   const showSpeechSettings = tier !== 'dtmf'
   const promptIssues = [
     !systemPrompt.trim() && 'Add a system prompt.',
-    systemPrompt.split(/\s+/).filter(Boolean).length > 800 && 'Shorten the system prompt for lower latency.',
-    !/transfer|handoff|human|মানুষ|ম্যানেজার/i.test(`${systemPrompt}\n${handoffRules}`) && 'Add escalation or handoff rules.',
-    !/record|recorded|রেকর্ড/i.test(`${firstMessage}\n${guardrails}`) && 'Mention recording disclosure when calls are recorded.',
-    !/otp|pin|password|card|পিন|ওটিপি/i.test(guardrails) && 'Add sensitive-data guardrails for OTP/PIN/card/password.',
+    systemPrompt.split(/\s+/).filter(Boolean).length > 800 &&
+      'Shorten the system prompt for lower latency.',
+    !/transfer|handoff|human|মানুষ|ম্যানেজার/i.test(`${systemPrompt}\n${handoffRules}`) &&
+      'Add escalation or handoff rules.',
+    !/record|recorded|রেকর্ড/i.test(`${firstMessage}\n${guardrails}`) &&
+      'Mention recording disclosure when calls are recorded.',
+    !/otp|pin|password|card|পিন|ওটিপি/i.test(guardrails) &&
+      'Add sensitive-data guardrails for OTP/PIN/card/password.',
   ].filter(Boolean) as string[]
 
   const idShort = `ag_…${initial.id.slice(-4)}`
@@ -661,10 +924,10 @@ export function AgentEditor({
   return (
     <div className="flex h-screen min-w-0 flex-1 flex-col">
       {/* Top header */}
-      <div className="flex items-center gap-2 border-b border-line bg-bg px-3 py-2">
+      <div className="border-line bg-bg flex items-center gap-2 border-b px-3 py-2">
         <Link
           href="/agents"
-          className="grid size-8 shrink-0 place-items-center rounded-[5px] bg-[#fbe5cf] text-fg transition hover:bg-[#f6d3b3]"
+          className="text-fg grid size-8 shrink-0 place-items-center rounded-[5px] bg-[#fbe5cf] transition hover:bg-[#f6d3b3]"
           aria-label="Back to agents"
         >
           <Icon name="dashboard" size="sm" />
@@ -674,23 +937,23 @@ export function AgentEditor({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="min-w-0 flex-1 truncate bg-transparent text-[14px] font-semibold text-fg outline-none placeholder:text-fg-faint focus:ring-0"
+            className="text-fg placeholder:text-fg-faint min-w-0 flex-1 truncate bg-transparent text-[14px] font-semibold outline-none focus:ring-0"
             placeholder="Untitled agent"
             aria-label="Agent name"
           />
-          <span className="hidden whitespace-nowrap text-[12.5px] text-fg-muted md:inline">
+          <span className="text-fg-muted hidden whitespace-nowrap text-[12.5px] md:inline">
             (from template)
           </span>
           <button
             type="button"
-            className="grid size-6 shrink-0 place-items-center rounded text-fg-muted transition hover:bg-bg-muted hover:text-fg"
+            className="text-fg-muted hover:bg-bg-muted hover:text-fg grid size-6 shrink-0 place-items-center rounded transition"
             aria-label="Rename"
           >
             <PencilIcon />
           </button>
         </div>
 
-        <div className="hidden items-center gap-1 rounded-[5px] border border-line bg-bg p-0.5 md:flex">
+        <div className="border-line bg-bg hidden items-center gap-1 rounded-[5px] border p-0.5 md:flex">
           <SegTab active={tab === 'create'} onClick={() => setTab('create')}>
             Create
           </SegTab>
@@ -700,7 +963,7 @@ export function AgentEditor({
         </div>
 
         <div className="ml-1 flex items-center gap-1">
-          <span className="hidden whitespace-nowrap text-[11.5px] text-fg-muted md:inline">
+          <span className="text-fg-muted hidden whitespace-nowrap text-[11.5px] md:inline">
             {pending
               ? 'Saving…'
               : savedAt
@@ -716,7 +979,7 @@ export function AgentEditor({
             type="button"
             onClick={publish}
             disabled={pending}
-            className="ml-1 inline-flex h-8 items-center gap-1 rounded-[5px] bg-fg px-3 text-[12.5px] font-medium text-fg-inverse transition hover:bg-fg-strong disabled:opacity-60"
+            className="bg-fg text-fg-inverse hover:bg-fg-strong ml-1 inline-flex h-8 items-center gap-1 rounded-[5px] px-3 text-[12.5px] font-medium transition disabled:opacity-60"
           >
             {status === 'live' ? 'Move to draft' : 'Publish'}
           </button>
@@ -724,8 +987,8 @@ export function AgentEditor({
       </div>
 
       {/* Meta strip */}
-      <div className="border-b border-line bg-[#fff7eb] px-3 py-1.5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-muted">
+      <div className="border-line border-b bg-[#fff7eb] px-3 py-1.5">
+        <div className="text-fg-muted flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
           <Meta label="Agent ID" value={idShort} />
           <Sep />
           <Meta label="Engine" value={`${engineDef.label} · ${modelShortLabel}`} />
@@ -739,7 +1002,7 @@ export function AgentEditor({
       </div>
 
       {/* Toolbar (engine / model / voice / language) */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-line bg-bg px-3 py-1.5">
+      <div className="border-line bg-bg flex flex-wrap items-center gap-1.5 border-b px-3 py-1.5">
         <ToolSelect
           name="zap"
           label={engineDef.label}
@@ -817,11 +1080,11 @@ export function AgentEditor({
           onChange={setLanguage}
         />
 
-        <span className="ml-auto inline-flex items-center gap-1 text-[12.5px] text-fg-muted">
+        <span className="text-fg-muted ml-auto inline-flex items-center gap-1 text-[12.5px]">
           <button
             type="button"
             onClick={() => setOpenSections((s) => ({ ...s, handoff: true }))}
-            className="inline-flex items-center gap-1.5 rounded-[5px] px-2 py-1 transition hover:bg-bg-muted"
+            className="hover:bg-bg-muted inline-flex items-center gap-1.5 rounded-[5px] px-2 py-1 transition"
           >
             <Icon name="route" size="xs" /> Agent Handoff
           </button>
@@ -831,19 +1094,21 @@ export function AgentEditor({
       {/* Body — 3 columns */}
       <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)_120px]">
         {/* LEFT — prompt editor */}
-        <div className="flex min-w-0 flex-col bg-bg">
+        <div className="bg-bg flex min-w-0 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto">
             <textarea
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               spellCheck={false}
-              className="block h-full min-h-[60vh] w-full resize-none border-0 bg-transparent px-5 py-4 font-mono text-[12.5px] leading-[1.65] text-fg outline-none focus:ring-0"
-              placeholder={'## Identity\nYou are…\n\n## Style Guardrails\n- Be concise\n\n## Task\n1. …'}
+              className="text-fg block h-full min-h-[60vh] w-full resize-none border-0 bg-transparent px-5 py-4 font-mono text-[12.5px] leading-[1.65] outline-none focus:ring-0"
+              placeholder={
+                '## Identity\nYou are…\n\n## Style Guardrails\n- Be concise\n\n## Task\n1. …'
+              }
             />
             {promptIssues.length > 0 && (
-              <div className="border-t border-line bg-status-warn/5 px-5 py-3">
-                <p className="mb-1 text-[11.5px] font-medium text-status-warn">Prompt checks</p>
-                <ul className="space-y-1 text-[12px] text-fg-muted">
+              <div className="border-line bg-status-warn/5 border-t px-5 py-3">
+                <p className="text-status-warn mb-1 text-[11.5px] font-medium">Prompt checks</p>
+                <ul className="text-fg-muted space-y-1 text-[12px]">
                   {promptIssues.map((issue) => (
                     <li key={issue} className="flex gap-1.5">
                       <span className="text-status-warn">-</span>
@@ -859,7 +1124,7 @@ export function AgentEditor({
             <select
               value={fromE164}
               onChange={(e) => setFromE164(e.target.value)}
-              className="mt-2 h-10 w-full rounded border border-line bg-bg-subtle px-3 text-sm"
+              className="border-line bg-bg-subtle mt-2 h-10 w-full rounded border px-3 text-sm"
             >
               <option value="">Auto-select outbound number</option>
               {numbers.map((n) => (
@@ -870,8 +1135,8 @@ export function AgentEditor({
             </select>
           </div>
           {/* Welcome message footer */}
-          <div className="border-t border-line bg-bg px-4 py-3">
-            <p className="mb-2 text-[11.5px] font-medium text-fg">Welcome Message</p>
+          <div className="border-line bg-bg border-t px-4 py-3">
+            <p className="text-fg mb-2 text-[11.5px] font-medium">Welcome Message</p>
             <div className="flex flex-wrap items-center gap-2">
               <FooterSelect
                 value={welcomeMode}
@@ -882,9 +1147,9 @@ export function AgentEditor({
                   { k: 'silent', label: 'Silent until prompted' },
                 ]}
               />
-              <span className="inline-flex items-center gap-1.5 rounded-[5px] border border-line bg-bg px-2.5 py-1.5 text-[12px] text-fg-muted">
+              <span className="border-line bg-bg text-fg-muted inline-flex items-center gap-1.5 rounded-[5px] border px-2.5 py-1.5 text-[12px]">
                 <span>Pause Before Speaking:</span>
-                <span className="font-mono text-fg">{pauseBefore}s</span>
+                <span className="text-fg font-mono">{pauseBefore}s</span>
                 <button
                   type="button"
                   onClick={() => setPauseBefore((v) => Math.max(0, v - 1))}
@@ -917,34 +1182,37 @@ export function AgentEditor({
                 value={firstMessage}
                 onChange={(e) => setFirstMessage(e.target.value)}
                 placeholder="Hello — this is your agent."
-                className="mt-2 font-bangla text-[13px]"
+                className="font-bangla mt-2 text-[13px]"
               />
             )}
           </div>
         </div>
 
         {/* MIDDLE — accordion config */}
-        <aside className="hidden min-w-0 flex-col overflow-y-auto border-l border-line bg-bg-subtle/50 lg:flex">
+        <aside className="border-line bg-bg-subtle/50 hidden min-w-0 flex-col overflow-y-auto border-l lg:flex">
           <Accordion
             label="Functions"
             icon="zap"
             open={openSections.functions}
             onToggle={() => toggleSec('functions')}
           >
-            <p className="text-[12px] text-fg-muted">
+            <p className="text-fg-muted text-[12px]">
               Add tools the model can call mid-conversation (transfers, lookups, webhooks).
             </p>
             <div className="mt-2 grid gap-2">
               {tools.map((tool, i) => (
-                <div key={i} className="rounded-[5px] border border-line bg-bg p-2">
+                <div key={i} className="border-line bg-bg rounded-[5px] border p-2">
                   <div className="grid gap-1.5">
-                    <p className="text-[11px] text-fg-faint">
-                      Tool calls are logged with secrets redacted. Use allowed domains to prevent prompt-injected calls to unknown hosts.
+                    <p className="text-fg-faint text-[11px]">
+                      Tool calls are logged with secrets redacted. Use allowed domains to prevent
+                      prompt-injected calls to unknown hosts.
                     </p>
                     <Input
                       value={tool.name}
                       onChange={(e) =>
-                        setTools((xs) => xs.map((t, j) => (j === i ? { ...t, name: e.target.value } : t)))
+                        setTools((xs) =>
+                          xs.map((t, j) => (j === i ? { ...t, name: e.target.value } : t)),
+                        )
                       }
                       placeholder="lookup_order"
                     />
@@ -967,7 +1235,7 @@ export function AgentEditor({
                             ),
                           )
                         }
-                        className="h-9 rounded border border-line bg-bg-subtle px-2 text-[12px]"
+                        className="border-line bg-bg-subtle h-9 rounded border px-2 text-[12px]"
                       >
                         {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
                           <option key={m} value={m}>
@@ -978,7 +1246,9 @@ export function AgentEditor({
                       <Input
                         value={tool.url}
                         onChange={(e) =>
-                          setTools((xs) => xs.map((t, j) => (j === i ? { ...t, url: e.target.value } : t)))
+                          setTools((xs) =>
+                            xs.map((t, j) => (j === i ? { ...t, url: e.target.value } : t)),
+                          )
                         }
                         placeholder="https://api.example.com/lookup"
                       />
@@ -999,12 +1269,20 @@ export function AgentEditor({
                           setTools((xs) =>
                             xs.map((t, j) =>
                               j === i
-                                ? { ...t, authValue: e.target.value, authValueSet: Boolean(e.target.value) || t.authValueSet }
+                                ? {
+                                    ...t,
+                                    authValue: e.target.value,
+                                    authValueSet: Boolean(e.target.value) || t.authValueSet,
+                                  }
                                 : t,
                             ),
                           )
                         }
-                        placeholder={tool.authValueSet ? 'Secret set — enter to replace' : 'Bearer token or API key'}
+                        placeholder={
+                          tool.authValueSet
+                            ? 'Secret set — enter to replace'
+                            : 'Bearer token or API key'
+                        }
                         type="password"
                       />
                     </div>
@@ -1036,7 +1314,12 @@ export function AgentEditor({
                         onChange={(e) =>
                           setTools((xs) =>
                             xs.map((t, j) =>
-                              j === i ? { ...t, retries: Math.max(1, Math.min(3, Number(e.target.value) || 1)) } : t,
+                              j === i
+                                ? {
+                                    ...t,
+                                    retries: Math.max(1, Math.min(3, Number(e.target.value) || 1)),
+                                  }
+                                : t,
                             ),
                           )
                         }
@@ -1052,7 +1335,13 @@ export function AgentEditor({
                           setTools((xs) =>
                             xs.map((t, j) =>
                               j === i
-                                ? { ...t, timeoutMs: Math.max(500, Math.min(30000, Number(e.target.value) || 5000)) }
+                                ? {
+                                    ...t,
+                                    timeoutMs: Math.max(
+                                      500,
+                                      Math.min(30000, Number(e.target.value) || 5000),
+                                    ),
+                                  }
                                 : t,
                             ),
                           )
@@ -1061,7 +1350,7 @@ export function AgentEditor({
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 text-[12px] text-fg-muted">
+                      <label className="text-fg-muted flex items-center gap-2 text-[12px]">
                         <input
                           type="checkbox"
                           checked={tool.enabled}
@@ -1078,22 +1367,22 @@ export function AgentEditor({
                           type="button"
                           onClick={() => void testTool(i)}
                           disabled={toolTesting === i || !tool.name || !tool.url}
-                          className="text-[12px] text-fg-muted transition hover:text-fg disabled:opacity-50"
+                          className="text-fg-muted hover:text-fg text-[12px] transition disabled:opacity-50"
                         >
                           {toolTesting === i ? 'Testing...' : 'Test'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setTools((xs) => xs.filter((_, j) => j !== i))}
-                          className="text-[12px] text-status-fail"
+                          className="text-status-fail text-[12px]"
                         >
                           Remove
                         </button>
                       </div>
                     </div>
                     {toolResults[i] && (
-                      <pre className="max-h-32 overflow-auto rounded border border-line bg-bg-subtle p-2 font-mono text-[11px] text-fg-muted">
-{toolResults[i]}
+                      <pre className="border-line bg-bg-subtle text-fg-muted max-h-32 overflow-auto rounded border p-2 font-mono text-[11px]">
+                        {toolResults[i]}
                       </pre>
                     )}
                   </div>
@@ -1121,7 +1410,7 @@ export function AgentEditor({
                   },
                 ])
               }
-              className="mt-2 inline-flex items-center gap-1.5 rounded-[5px] border border-line bg-bg px-3 py-1.5 text-[12px] text-fg transition hover:bg-bg-muted"
+              className="border-line bg-bg text-fg hover:bg-bg-muted mt-2 inline-flex items-center gap-1.5 rounded-[5px] border px-3 py-1.5 text-[12px] transition"
             >
               <Icon name="plus" size="xs" /> Add function
             </button>
@@ -1134,7 +1423,7 @@ export function AgentEditor({
             onToggle={() => toggleSec('knowledge')}
           >
             {kbs.length === 0 ? (
-              <p className="text-[12px] text-fg-muted">
+              <p className="text-fg-muted text-[12px]">
                 No knowledge bases yet. Create one in{' '}
                 <Link className="text-fg underline" href="/knowledge">
                   Knowledge
@@ -1152,12 +1441,10 @@ export function AgentEditor({
                       onClick={() => toggleKb(k.id)}
                       className={cn(
                         'flex items-center justify-between rounded-[5px] border px-3 py-2 transition-colors',
-                        on
-                          ? 'border-fg/40 bg-fg/5'
-                          : 'border-line bg-bg hover:border-fg/20',
+                        on ? 'border-fg/40 bg-fg/5' : 'border-line bg-bg hover:border-fg/20',
                       )}
                     >
-                      <span className="truncate text-[12.5px] text-fg">{k.name}</span>
+                      <span className="text-fg truncate text-[12.5px]">{k.name}</span>
                       {on && <Icon name="check" size="xs" />}
                     </button>
                   )
@@ -1215,14 +1502,12 @@ export function AgentEditor({
                         }}
                         className={cn(
                           'flex items-center justify-between rounded-[5px] border px-3 py-2 transition-colors',
-                          on
-                            ? 'border-fg/40 bg-fg/5'
-                            : 'border-line bg-bg hover:border-fg/20',
+                          on ? 'border-fg/40 bg-fg/5' : 'border-line bg-bg hover:border-fg/20',
                         )}
                       >
                         <span className="min-w-0">
-                          <span className="block truncate text-[12.5px] text-fg">{v.label}</span>
-                          <span className="block truncate text-[10.5px] text-fg-muted">
+                          <span className="text-fg block truncate text-[12.5px]">{v.label}</span>
+                          <span className="text-fg-muted block truncate text-[10.5px]">
                             {v.accent}
                           </span>
                         </span>
@@ -1294,7 +1579,7 @@ export function AgentEditor({
                         }))
                       }
                       placeholder="Sales"
-                      className="flex-1 min-w-0"
+                      className="min-w-0 flex-1"
                     />
                     <Input
                       value={row.action}
@@ -1307,7 +1592,7 @@ export function AgentEditor({
                         }))
                       }
                       placeholder="transfer:+880..."
-                      className="flex-[2] min-w-0 font-mono text-[11.5px]"
+                      className="min-w-0 flex-[2] font-mono text-[11.5px]"
                     />
                     <button
                       type="button"
@@ -1317,7 +1602,7 @@ export function AgentEditor({
                           menu: d.menu.filter((_, j) => j !== i),
                         }))
                       }
-                      className="grid size-7 shrink-0 place-items-center rounded text-fg-muted transition hover:bg-status-fail/10 hover:text-status-fail"
+                      className="text-fg-muted hover:bg-status-fail/10 hover:text-status-fail grid size-7 shrink-0 place-items-center rounded transition"
                       aria-label="Remove key"
                     >
                       <Icon name="x" size="xs" />
@@ -1332,7 +1617,7 @@ export function AgentEditor({
                       menu: [...d.menu, { key: '', label: '', action: '' }],
                     }))
                   }
-                  className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-[5px] border border-line bg-bg px-3 py-1.5 text-[12px] text-fg transition hover:bg-bg-muted"
+                  className="border-line bg-bg text-fg hover:bg-bg-muted mt-1 inline-flex w-fit items-center gap-1.5 rounded-[5px] border px-3 py-1.5 text-[12px] transition"
                 >
                   <Icon name="plus" size="xs" /> Add key
                 </button>
@@ -1385,9 +1670,7 @@ export function AgentEditor({
               <Field label="No-input prompt URL">
                 <Input
                   value={dtmf.noInputPromptUrl}
-                  onChange={(e) =>
-                    setDtmf((d) => ({ ...d, noInputPromptUrl: e.target.value }))
-                  }
+                  onChange={(e) => setDtmf((d) => ({ ...d, noInputPromptUrl: e.target.value }))}
                   placeholder="https://your-cdn/no-input.wav"
                   className="font-mono text-[11.5px]"
                 />
@@ -1396,64 +1679,64 @@ export function AgentEditor({
           )}
 
           {showRealtimeStt && (
-          <Accordion
-            label="Realtime Transcription Settings"
-            icon="wave"
-            open={openSections.realtime}
-            onToggle={() => toggleSec('realtime')}
-          >
-            <SubLabel
-              title="Denoising Mode"
-              hint="Filter out unwanted background noise or speech."
-              link="Learn more"
-            />
-            <RadioGroup
-              value={denoise}
-              onChange={(v) => setDenoise(v as typeof denoise)}
-              options={DENOISE_MODES.map((o) => ({ k: o.k, label: o.label }))}
-            />
+            <Accordion
+              label="Realtime Transcription Settings"
+              icon="wave"
+              open={openSections.realtime}
+              onToggle={() => toggleSec('realtime')}
+            >
+              <SubLabel
+                title="Denoising Mode"
+                hint="Filter out unwanted background noise or speech."
+                link="Learn more"
+              />
+              <RadioGroup
+                value={denoise}
+                onChange={(v) => setDenoise(v as typeof denoise)}
+                options={DENOISE_MODES.map((o) => ({ k: o.k, label: o.label }))}
+              />
 
-            <Divider />
+              <Divider />
 
-            <SubLabel
-              title="Transcription Mode"
-              hint="Balance between speed and accuracy."
-              link="Learn more"
-            />
-            <RadioGroup
-              value={transMode}
-              onChange={(v) => setTransMode(v as typeof transMode)}
-              options={TRANSCRIPTION_MODES.map((o) => ({
-                k: o.k,
-                label: o.label,
-                sub: o.sub,
-              }))}
-            />
+              <SubLabel
+                title="Transcription Mode"
+                hint="Balance between speed and accuracy."
+                link="Learn more"
+              />
+              <RadioGroup
+                value={transMode}
+                onChange={(v) => setTransMode(v as typeof transMode)}
+                options={TRANSCRIPTION_MODES.map((o) => ({
+                  k: o.k,
+                  label: o.label,
+                  sub: o.sub,
+                }))}
+              />
 
-            <Divider />
+              <Divider />
 
-            <SubLabel
-              title="Vocabulary Specialization"
-              hint="Choose the vocabulary set to use for transcription."
-            />
-            <RadioGroup
-              value={vocab}
-              onChange={(v) => setVocab(v as typeof vocab)}
-              options={VOCAB_MODES.map((o) => ({ k: o.k, label: o.label, sub: o.sub }))}
-            />
+              <SubLabel
+                title="Vocabulary Specialization"
+                hint="Choose the vocabulary set to use for transcription."
+              />
+              <RadioGroup
+                value={vocab}
+                onChange={(v) => setVocab(v as typeof vocab)}
+                options={VOCAB_MODES.map((o) => ({ k: o.k, label: o.label, sub: o.sub }))}
+              />
 
-            <Divider />
+              <Divider />
 
-            <SubLabel
-              title="Boosted Keywords"
-              hint="Provide a customized list of keywords to expand our models' vocabulary."
-            />
-            <Input
-              value={boosted}
-              onChange={(e) => setBoosted(e.target.value)}
-              placeholder="Split by comma. Example: Retell, Wai…"
-            />
-          </Accordion>
+              <SubLabel
+                title="Boosted Keywords"
+                hint="Provide a customized list of keywords to expand our models' vocabulary."
+              />
+              <Input
+                value={boosted}
+                onChange={(e) => setBoosted(e.target.value)}
+                placeholder="Split by comma. Example: Retell, Wai…"
+              />
+            </Accordion>
           )}
 
           <Accordion
@@ -1483,8 +1766,8 @@ export function AgentEditor({
               onChange={setKeypadInput}
             />
             {keypadInput && (
-              <div className="rounded-md border border-line bg-bg px-3 py-3">
-                <p className="text-[11.5px] font-medium text-fg">
+              <div className="border-line bg-bg rounded-md border px-3 py-3">
+                <p className="text-fg text-[11.5px] font-medium">
                   The AI will respond when any of the following conditions are met:
                 </p>
                 <div className="mt-3 space-y-3">
@@ -1541,6 +1824,87 @@ export function AgentEditor({
           </Accordion>
 
           <Accordion
+            label="Revenue outcomes"
+            icon="check-badge"
+            open={openSections.outcomes}
+            onToggle={() => toggleSec('outcomes')}
+          >
+            <ToggleRow
+              title="Extract post-call outcome"
+              hint="Adds CRM-ready labels, conversion flags, callback details, and notes after completed calls."
+              checked={outcomeEnabled}
+              onChange={setOutcomeEnabled}
+            />
+            <Divider />
+            <div className="flex items-center justify-between gap-3">
+              <SubLabel
+                title="Labels"
+                hint={`${outcomeConfig.labels.length}/12 labels. Keep an unknown fallback.`}
+              />
+              <button
+                type="button"
+                onClick={addOutcomeLabel}
+                className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-7 items-center gap-1.5 rounded-[5px] border px-2 text-[11.5px] font-medium transition"
+              >
+                <Icon name="plus" size="xs" /> Add
+              </button>
+            </div>
+            <div className="space-y-2">
+              {outcomeLabels.map((label, index) => (
+                <div
+                  key={`${label.key}-${index}`}
+                  className="border-line bg-bg-subtle/40 rounded-md border p-3"
+                >
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="grid gap-2 md:grid-cols-[0.85fr_1fr]">
+                        <Field label="Key">
+                          <Input
+                            className="font-mono text-xs"
+                            value={label.key}
+                            onChange={(e) => updateOutcomeLabel(index, { key: e.target.value })}
+                            placeholder="callback_requested"
+                          />
+                        </Field>
+                        <Field label="Label">
+                          <Input
+                            value={label.label}
+                            onChange={(e) => updateOutcomeLabel(index, { label: e.target.value })}
+                            placeholder="Callback requested"
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeOutcomeLabel(index)}
+                      className="border-line bg-bg text-fg-muted hover:border-status-fail/30 hover:text-status-fail mt-5 inline-grid size-7 place-items-center rounded-md border transition"
+                      aria-label="Remove outcome label"
+                    >
+                      <Icon name="x" size="xs" />
+                    </button>
+                  </div>
+                  <Field label="Description">
+                    <Textarea
+                      rows={2}
+                      value={label.description}
+                      onChange={(e) => updateOutcomeLabel(index, { description: e.target.value })}
+                      placeholder="When should this label be selected?"
+                    />
+                  </Field>
+                  <div className="mt-3">
+                    <ToggleRow
+                      title="Counts as conversion"
+                      checked={label.conversion}
+                      onChange={(conversion) => updateOutcomeLabel(index, { conversion })}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Accordion>
+
+          <Accordion
             label="Webhook"
             icon="route"
             open={openSections.webhook}
@@ -1578,10 +1942,12 @@ export function AgentEditor({
           </Accordion>
 
           {(guardrails || description) && (
-            <div className="border-t border-line px-5 py-4">
+            <div className="border-line border-t px-5 py-4">
               {description && (
                 <>
-                  <p className="mb-1 text-[11.5px] font-medium text-fg-muted">Internal description</p>
+                  <p className="text-fg-muted mb-1 text-[11.5px] font-medium">
+                    Internal description
+                  </p>
                   <Textarea
                     rows={2}
                     value={description}
@@ -1592,7 +1958,7 @@ export function AgentEditor({
               )}
               {guardrails && (
                 <>
-                  <p className="mb-1 mt-3 text-[11.5px] font-medium text-fg-muted">Guardrails</p>
+                  <p className="text-fg-muted mb-1 mt-3 text-[11.5px] font-medium">Guardrails</p>
                   <Textarea
                     rows={3}
                     value={guardrails}
@@ -1603,12 +1969,12 @@ export function AgentEditor({
             </div>
           )}
 
-          <div className="mt-auto border-t border-line px-5 py-3">
+          <div className="border-line mt-auto border-t px-5 py-3">
             <button
               type="button"
               onClick={remove}
               disabled={pending}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-status-fail/30 bg-bg px-2.5 text-[11.5px] font-medium text-status-fail transition hover:bg-status-fail/10"
+              className="border-status-fail/30 bg-bg text-status-fail hover:bg-status-fail/10 inline-flex h-7 items-center gap-1.5 rounded-[5px] border px-2.5 text-[11.5px] font-medium transition"
             >
               Delete agent
             </button>
@@ -1616,8 +1982,8 @@ export function AgentEditor({
         </aside>
 
         {/* RIGHT — test rail */}
-        <aside className="hidden min-w-0 flex-col border-l border-line bg-bg-subtle/40 lg:flex">
-          <div className="flex flex-col items-stretch gap-1.5 border-b border-line px-2 py-2">
+        <aside className="border-line bg-bg-subtle/40 hidden min-w-0 flex-col border-l lg:flex">
+          <div className="border-line flex flex-col items-stretch gap-1.5 border-b px-2 py-2">
             <TestTab
               icon="speaker"
               label="Test Audio"
@@ -1638,16 +2004,16 @@ export function AgentEditor({
             />
           </div>
           <div className="flex flex-1 flex-col items-center justify-between gap-3 px-3 py-4">
-            <div className="grid size-16 place-items-center rounded-full border border-line bg-bg shadow-card">
+            <div className="border-line bg-bg shadow-card grid size-16 place-items-center rounded-full border">
               <Icon name="mic" size="lg" className="text-fg-muted" />
             </div>
-            <p className="text-center text-[11px] leading-snug text-fg-muted">
+            <p className="text-fg-muted text-center text-[11px] leading-snug">
               Please note call transfer is not supported on Webcall.
             </p>
             <button
               type="button"
               onClick={() => setTestOpen(true)}
-              className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[5px] border border-line bg-bg px-2 text-[12.5px] font-medium text-fg transition hover:bg-bg-muted"
+              className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[5px] border px-2 text-[12.5px] font-medium transition"
             >
               <PlayIcon /> Run Test
             </button>
@@ -1680,9 +2046,9 @@ export function AgentEditor({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Test this agent</DialogTitle>
-            <p className="text-[12.5px] text-fg-muted">
-              We&rsquo;ll originate a real call to the number you provide. Make sure the destination is
-              expecting the call.
+            <p className="text-fg-muted text-[12.5px]">
+              We&rsquo;ll originate a real call to the number you provide. Make sure the destination
+              is expecting the call.
             </p>
           </DialogHeader>
           <div>
@@ -1772,13 +2138,21 @@ function PlayIcon() {
   )
 }
 
-function IconBtn({ name, label, onClick }: { name: IconName; label: string; onClick?: () => void }) {
+function IconBtn({
+  name,
+  label,
+  onClick,
+}: {
+  name: IconName
+  label: string
+  onClick?: () => void
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="grid size-7 place-items-center rounded-[5px] text-fg-muted transition hover:bg-bg-muted hover:text-fg"
+      className="text-fg-muted hover:bg-bg-muted hover:text-fg grid size-7 place-items-center rounded-[5px] transition"
     >
       <Icon name={name} size="xs" />
     </button>
@@ -1845,10 +2219,10 @@ function ToolSelect({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-line bg-bg px-2 text-[12px] text-fg transition hover:bg-bg-muted"
+        className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-7 items-center gap-1.5 rounded-[5px] border px-2 text-[12px] transition"
       >
         {avatar ? (
-          <span className="grid size-4 place-items-center rounded-full bg-status-attn-soft text-[9px] font-semibold text-status-attn">
+          <span className="bg-status-attn-soft text-status-attn grid size-4 place-items-center rounded-full text-[9px] font-semibold">
             {label.charAt(0)}
           </span>
         ) : (
@@ -1856,7 +2230,7 @@ function ToolSelect({
         )}
         <span className="font-medium">{label}</span>
         {tag && (
-          <span className="rounded-sm bg-bg-muted px-1 text-[9.5px] font-medium uppercase tracking-[0.06em] text-fg-muted">
+          <span className="bg-bg-muted text-fg-muted rounded-sm px-1 text-[9.5px] font-medium uppercase tracking-[0.06em]">
             {tag}
           </span>
         )}
@@ -1865,7 +2239,7 @@ function ToolSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-md border border-line bg-bg shadow-pop">
+          <div className="border-line bg-bg shadow-pop absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-md border">
             {options.map((o) => (
               <button
                 key={o.k}
@@ -1880,13 +2254,13 @@ function ToolSelect({
                 )}
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-fg">{o.label}</span>
+                  <span className="text-fg block truncate">{o.label}</span>
                   {o.sub && (
-                    <span className="block truncate text-[10.5px] text-fg-muted">{o.sub}</span>
+                    <span className="text-fg-muted block truncate text-[10.5px]">{o.sub}</span>
                   )}
                 </span>
                 {o.badge && (
-                  <span className="rounded-sm bg-bg-muted px-1 text-[9.5px] font-medium uppercase tracking-[0.06em] text-fg-muted">
+                  <span className="bg-bg-muted text-fg-muted rounded-sm px-1 text-[9.5px] font-medium uppercase tracking-[0.06em]">
                     {o.badge}
                   </span>
                 )}
@@ -1916,7 +2290,7 @@ function FooterSelect({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-8 items-center gap-1.5 rounded-[5px] border border-line bg-bg px-2.5 text-[12px] text-fg transition hover:bg-bg-muted"
+        className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-8 items-center gap-1.5 rounded-[5px] border px-2.5 text-[12px] transition"
       >
         <span>{def.label}</span>
         <Icon name="chevron-down" size="xs" />
@@ -1924,7 +2298,7 @@ function FooterSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full left-0 z-20 mb-1 w-48 overflow-hidden rounded-md border border-line bg-bg shadow-pop">
+          <div className="border-line bg-bg shadow-pop absolute bottom-full left-0 z-20 mb-1 w-48 overflow-hidden rounded-md border">
             {options.map((o) => (
               <button
                 key={o.k}
@@ -1933,7 +2307,7 @@ function FooterSelect({
                   onChange(o.k)
                   setOpen(false)
                 }}
-                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[12.5px] text-fg transition hover:bg-bg-subtle"
+                className="text-fg hover:bg-bg-subtle flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[12.5px] transition"
               >
                 {o.label}
                 {o.k === value && <Icon name="check" size="xs" />}
@@ -1960,15 +2334,15 @@ function Accordion({
   children: React.ReactNode
 }) {
   return (
-    <div className="border-b border-line">
+    <div className="border-line border-b">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition hover:bg-bg-subtle/80"
+        className="hover:bg-bg-subtle/80 flex w-full items-center gap-2 px-4 py-2.5 text-left transition"
       >
         <Icon name={icon} size="xs" className="text-fg-muted" />
-        <span className="flex-1 text-[12.5px] font-medium text-fg">{label}</span>
+        <span className="text-fg flex-1 text-[12.5px] font-medium">{label}</span>
         <Icon
           name="chevron-down"
           size="xs"
@@ -1983,15 +2357,15 @@ function Accordion({
 function SubLabel({ title, hint, link }: { title: string; hint?: string; link?: string }) {
   return (
     <div>
-      <p className="text-[12px] font-medium text-fg">
+      <p className="text-fg text-[12px] font-medium">
         {title}
         {link && (
-          <span className="ml-1 cursor-pointer text-fg-muted underline-offset-2 hover:text-fg hover:underline">
+          <span className="text-fg-muted hover:text-fg ml-1 cursor-pointer underline-offset-2 hover:underline">
             ({link})
           </span>
         )}
       </p>
-      {hint && <p className="mt-0.5 text-[11px] text-fg-muted">{hint}</p>}
+      {hint && <p className="text-fg-muted mt-0.5 text-[11px]">{hint}</p>}
     </div>
   )
 }
@@ -2022,11 +2396,11 @@ function RadioGroup({
                 active ? 'border-fg' : 'border-line',
               )}
             >
-              {active && <span className="size-1.5 rounded-full bg-fg" />}
+              {active && <span className="bg-fg size-1.5 rounded-full" />}
             </span>
-            <span className="text-[12px] text-fg">
+            <span className="text-fg text-[12px]">
               {o.label}
-              {o.sub && <span className="ml-1 text-[11px] text-fg-muted">{o.sub}</span>}
+              {o.sub && <span className="text-fg-muted ml-1 text-[11px]">{o.sub}</span>}
             </span>
           </button>
         )
@@ -2052,12 +2426,12 @@ function ToggleRow({
     <div
       className={cn(
         'flex items-start justify-between gap-3',
-        inset && 'border-t border-line pt-3 first:border-t-0 first:pt-0',
+        inset && 'border-line border-t pt-3 first:border-t-0 first:pt-0',
       )}
     >
       <div className="min-w-0">
-        <p className="text-[12px] font-medium text-fg">{title}</p>
-        {hint && <p className="mt-0.5 text-[11px] text-fg-muted">{hint}</p>}
+        <p className="text-fg text-[12px] font-medium">{title}</p>
+        {hint && <p className="text-fg-muted mt-0.5 text-[11px]">{hint}</p>}
       </div>
       <button
         type="button"
@@ -2070,7 +2444,7 @@ function ToggleRow({
       >
         <span
           className={cn(
-            'block size-3 rounded-full bg-bg transition-transform',
+            'bg-bg block size-3 rounded-full transition-transform',
             checked ? 'translate-x-3' : 'translate-x-0',
           )}
         />
@@ -2104,12 +2478,12 @@ function SliderRow({
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] font-medium text-fg">{title}</p>
-        <span className="font-mono text-[11.5px] tabular-nums text-fg">
+        <p className="text-fg text-[12px] font-medium">{title}</p>
+        <span className="text-fg font-mono text-[11.5px] tabular-nums">
           {display} {suffix}
         </span>
       </div>
-      {hint && <p className="mt-0.5 text-[11px] text-fg-muted">{hint}</p>}
+      {hint && <p className="text-fg-muted mt-0.5 text-[11px]">{hint}</p>}
       <input
         type="range"
         min={min}
@@ -2117,7 +2491,7 @@ function SliderRow({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-2 w-full accent-fg"
+        className="accent-fg mt-2 w-full"
       />
     </div>
   )
@@ -2142,7 +2516,7 @@ function TestTab({
         'inline-flex flex-col items-center gap-0.5 rounded-[5px] border px-1.5 py-2 text-[10.5px] font-medium transition',
         active
           ? 'border-fg/40 bg-bg text-fg shadow-card'
-          : 'border-transparent text-fg-muted hover:bg-bg hover:text-fg',
+          : 'text-fg-muted hover:bg-bg hover:text-fg border-transparent',
       )}
     >
       <Icon name={icon} size="xs" />
@@ -2154,14 +2528,14 @@ function TestTab({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1 text-[11px] font-medium text-fg-muted">{label}</p>
+      <p className="text-fg-muted mb-1 text-[11px] font-medium">{label}</p>
       {children}
     </div>
   )
 }
 
 function Divider() {
-  return <div className="my-3 h-px bg-line" />
+  return <div className="bg-line my-3 h-px" />
 }
 
 function formatTime(d: Date) {
