@@ -25,13 +25,13 @@ function safeName(name: string): string {
 }
 
 function isUploadedFile(value: unknown): value is UploadedFile {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Record<string, unknown>
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'name' in value &&
-    'size' in value &&
-    'type' in value &&
-    typeof value.arrayBuffer === 'function'
+    typeof candidate.name === 'string' &&
+    typeof candidate.size === 'number' &&
+    typeof candidate.type === 'string' &&
+    typeof candidate.arrayBuffer === 'function'
   )
 }
 
