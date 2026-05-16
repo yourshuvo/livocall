@@ -6,7 +6,7 @@
  *   set. No-op otherwise. Safe to call from a top-level module (instrumented
  *   via Next.js `instrumentation.ts`).
  * - `getRequestId()` — reads `x-request-id` from the active request headers
- *   (set by `src/middleware.ts`) so API handlers can log with it.
+ *   (set by `src/proxy.ts`) so API handlers can log with it.
  */
 
 import { headers } from 'next/headers'

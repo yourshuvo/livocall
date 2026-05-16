@@ -1,93 +1,59 @@
-# LivoCall deployment tutorial: single-VPS Coolify + FreeSWITCH
+# LivoCall deployment: Coolify Dockerfiles + FreeSWITCH
 
-This guide deploys this repo on one BDIX VPS with:
+This guide deploys LivoCall on one BDIX VPS with:
 
-- Web dashboard in Coolify.
-- Voice engine in Coolify.
-- MongoDB and Redis in Coolify, MongoDB Atlas, or another managed service.
-- FreeSWITCH outside Coolify, running directly on the same VPS with host networking.
+- Web dashboard in Coolify using `apps/web/Dockerfile`.
+- Voice engine in Coolify using `services/voice/Dockerfile`.
+- MongoDB and Redis in Coolify, MongoDB Atlas, or managed services.
+- FreeSWITCH outside Coolify on the same VPS with host networking.
 
-This is the best shape if you want Coolify to manage the app services but still keep SIP/RTP under your control. FreeSWITCH should stay outside normal Coolify app mode because SIP/RTP needs host networking, UDP port ranges, provider IP allow-lists, and predictable network access.
+FreeSWITCH stays outside Coolify because SIP/RTP needs host networking, UDP port ranges, provider IP allow-lists, and direct control over FreeSWITCH XML.
 
-## 0. Important repo notes
-
-The voice engine is in:
+## 1. Repository Paths
 
 ```txt
-services/voice
+apps/web              Next.js web dashboard, port 3000
+services/voice        FastAPI voice engine, port 8084
+infra/freeswitch      FreeSWITCH XML, dialplan, ACL, scripts
+apps/web/.env.example Web environment template
+services/voice/.env.example Voice environment template
 ```
 
-It runs on port:
+The web app is upgraded to Next.js 16 and uses Node 23 in its Dockerfile.
 
-```txt
-8084
-```
+## 2. DNS
 
-The web app is in:
-
-```txt
-apps/web
-```
-
-It runs on port:
-
-```txt
-3000
-```
-
-FreeSWITCH config is in:
-
-```txt
-infra/freeswitch
-```
-
-Known deployment gotchas:
-
-- `infra/docker-compose.prod.yml` is a reference for this topology. It uses the app's current env names (`MONGODB_URI`, `VOICE_SERVICE_TOKEN`, `VOICE_SHARED_SECRET`/`WEB_SHARED_SECRET`) and exposes voice on `8084`.
-- `infra/freeswitch/event_socket.conf.xml` listens on `127.0.0.1` and uses `loopback.auto`. That works only when voice also runs on the host network. If voice runs in Coolify, you must change ESL bind/ACL.
-- `infra/freeswitch/dialplan/public/00_livocall_inbound.xml` uses `${voice_service_url}` and `${voice_service_token}`, but those variables are not automatically set by this repo. Put real values in the dialplan or set FreeSWITCH vars yourself.
-- `apps/web/src/app/api/numbers/freeswitch/route.ts` currently returns JSON, not complete FreeSWITCH gateway XML with decrypted passwords. For now, create gateway XML manually unless you implement that endpoint.
-- `modules.conf.xml` asks FreeSWITCH to load `mod_audio_fork`. Some public FreeSWITCH images may not include that module. You must verify it after startup.
-
-If you deploy this repo as one Coolify Docker Compose project, use:
-
-```txt
-infra/docker-compose.prod.yml
-infra/.env.prod.example
-```
-
-If you deploy web and voice as separate Coolify applications, use the same values from that file as the source of truth for each app's environment.
-
-## 1. DNS
-
-Create DNS records:
+Create:
 
 ```txt
 app.yourdomain.com      A      YOUR_VPS_PUBLIC_IP
 voice.yourdomain.com    A      YOUR_VPS_PUBLIC_IP
 ```
 
-Use `app.yourdomain.com` for the Next.js dashboard.
+Use:
 
-Use `voice.yourdomain.com` for the FastAPI voice engine. This is needed because FreeSWITCH outside Coolify must call the voice engine through a stable URL.
+```txt
+https://app.yourdomain.com
+https://voice.yourdomain.com
+```
 
-## 2. Firewall
+## 3. Firewall
 
-Open web ports:
+Open HTTP/HTTPS:
 
 ```bash
 ufw allow 80/tcp
 ufw allow 443/tcp
 ```
 
-Open SIP signalling:
+Open SIP profile port from `infra/freeswitch/sip_profiles/external.xml`:
 
 ```bash
 ufw allow 5080/udp
 ufw allow 5080/tcp
 ```
 
-The repo's `external.xml` uses SIP port `5080`. Open `5060` only if your provider specifically sends traffic there or you add another SIP profile:
+Open `5060` only if your SIP provider sends traffic there:
 
 ```bash
 ufw allow 5060/udp
@@ -100,17 +66,17 @@ Open RTP:
 ufw allow 16384:32768/udp
 ```
 
-Do not expose ESL publicly:
+Do not expose FreeSWITCH ESL publicly:
 
 ```bash
 ufw deny 8021/tcp
 ```
 
-If your firewall supports source-specific rules, allow `8021/tcp` only from the local Docker/Coolify network or VPS private IP, never from the public internet.
+If you can use source-specific firewall rules, allow `8021/tcp` only from your VPS private IP or the Coolify Docker subnet used by the voice container.
 
-## 3. Create secrets
+## 4. Secrets
 
-On the VPS:
+Generate secrets:
 
 ```bash
 openssl rand -hex 32
@@ -132,172 +98,138 @@ FS_ESL_PASSWORD
 FREESWITCH_CONFIG_TOKEN
 ```
 
-Keep these out of Git.
+## 5. MongoDB and Redis
 
-## 4. Deploy MongoDB and Redis
+Create MongoDB and Redis in Coolify, or use managed services.
 
-In Coolify, create:
-
-- MongoDB resource
-- Redis resource
-
-Copy their connection strings.
-
-Examples:
+Example values:
 
 ```env
-MONGODB_URI=mongodb://USERNAME:PASSWORD@mongo-host:27017/livocall?authSource=admin
+MONGODB_URI=mongodb://USER:PASSWORD@mongo-host:27017/livocall?authSource=admin
 REDIS_URL=redis://:PASSWORD@redis-host:6379/0
 ```
 
-You may also use MongoDB Atlas:
+Use the same `MONGODB_URI` for web and voice.
 
-```env
-MONGODB_URI=mongodb+srv://USER:PASSWORD@cluster.example.mongodb.net/livocall
-```
+## 6. Deploy Web in Coolify
 
-Make sure both the web app and voice engine use the same MongoDB database.
-
-## 5. Deploy the web app in Coolify
-
-Create a new Coolify Application from your Git repo.
+Create a Coolify Application from your private repo.
 
 Use:
 
 ```txt
+Build Pack: Dockerfile
 Base directory: apps/web
-Build pack: Nixpacks
+Dockerfile: Dockerfile
 Port: 3000
 Domain: https://app.yourdomain.com
 ```
 
-This repo includes `apps/web/nixpacks.toml` for Coolify Nixpacks. The web app is on Next.js 14, so `@clerk/nextjs` is pinned to the compatible Clerk 6 line. Do not upgrade Clerk to 7 unless you also upgrade Next.js to a Clerk-supported Next 15/16 release.
+The web Dockerfile uses:
 
-The Nixpacks install phase intentionally calls `pnpm` directly with
-`--prod=false`. Do not add `corepack enable` here: the Nixpacks image already
-installs pnpm, and Corepack can fail signature verification in the Coolify build
-image before dependencies install.
+```txt
+node:23-alpine
+npm install --legacy-peer-deps --no-audit --no-fund
+npm run build
+npm start
+```
 
-If you deploy with Dockerfile instead of Nixpacks, make sure your Dockerfile install step uses the pinned package version from `apps/web/package.json`.
+Set environment variables from:
 
-Set environment variables:
+```txt
+apps/web/.env.example
+```
+
+Minimum production web env:
 
 ```env
 NODE_ENV=production
 NEXT_PUBLIC_APP_URL=https://app.yourdomain.com
+APP_BASE_URL=https://app.yourdomain.com
+NEXT_PUBLIC_APP_BASE_URL=https://app.yourdomain.com
 
 MONGODB_URI=mongodb://...
+REDIS_URL=redis://...
 
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_or_test_...
 CLERK_SECRET_KEY=sk_live_or_test_...
 
-SIP_CREDENTIAL_SECRET=your-sip-credential-secret
-SECRETS_VAULT_KEY=your-secrets-vault-key
+SIP_CREDENTIAL_SECRET=...
+SECRETS_VAULT_KEY=...
 
 VOICE_SERVICE_URL=https://voice.yourdomain.com
-VOICE_SERVICE_TOKEN=your-voice-service-token
-VOICE_SHARED_SECRET=your-web-voice-shared-secret
+VOICE_SERVICE_TOKEN=same-as-voice-VOICE_SERVICE_TOKEN
+VOICE_SHARED_SECRET=same-as-voice-WEB_SHARED_SECRET
 
-FREESWITCH_CONFIG_TOKEN=your-freeswitch-config-token
-
-FILE_STORAGE_BUCKET=
-FILE_STORAGE_REGION=auto
-FILE_STORAGE_ENDPOINT=
-FILE_STORAGE_ACCESS_KEY_ID=
-FILE_STORAGE_SECRET_ACCESS_KEY=
-FILE_STORAGE_FORCE_PATH_STYLE=false
-FILE_STORAGE_PUBLIC_BASE_URL=
-
-PAYSTATION_MERCHANT_ID=
-PAYSTATION_PASSWORD=
-
-GEMINI_API_KEY=
-GOOGLE_API_KEY=
+FREESWITCH_CONFIG_TOKEN=...
 ```
 
-Deploy, then open:
+After deploy:
 
 ```txt
 https://app.yourdomain.com/status
 ```
 
-Voice may show unavailable until the next section is complete.
+## 7. Deploy Voice in Coolify
 
-If production logs show `@clerk/nextjs: Missing publishableKey`, set
-`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` on the Coolify web
-app and redeploy. This app uses `src/middleware.ts`, which is correct for the
-current Next.js 14 app.
-
-## 6. Deploy the voice engine in Coolify
-
-Create another Coolify Application from the same Git repo.
+Create a second Coolify Application from the same private repo.
 
 Use:
 
 ```txt
+Build Pack: Dockerfile
 Base directory: services/voice
-Build pack: Nixpacks
+Dockerfile: Dockerfile
 Port: 8084
 Domain: https://voice.yourdomain.com
 ```
 
-This repo includes `services/voice/nixpacks.toml` for Coolify Nixpacks. It installs the Python package with:
+The voice Dockerfile uses:
 
-```bash
+```txt
+python:3.11-slim
 pip install -e .
+uvicorn app.main:app --host 0.0.0.0 --port 8084
 ```
 
-and starts:
+Set environment variables from:
 
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8084}
+```txt
+services/voice/.env.example
 ```
 
-For the full realtime AI voice pipeline, the Python project defines optional dependencies. If a selected tier complains about missing Pipecat, Google, Deepgram, Cartesia, or storage libraries, change the install command to:
-
-```bash
-pip install -e ".[voice,storage]"
-```
-
-Enable WebSocket support on the Coolify proxy/domain if Coolify exposes that option.
-
-Set environment variables:
+Minimum production voice env:
 
 ```env
 MONGODB_URI=mongodb://...
 REDIS_URL=redis://...
 
 WEB_BASE_URL=https://app.yourdomain.com
-WEB_SHARED_SECRET=your-web-voice-shared-secret
+WEB_SHARED_SECRET=same-as-web-VOICE_SHARED_SECRET
 
-VOICE_SERVICE_TOKEN=your-voice-service-token
-VOICE_WS_SHARED_SECRET=your-voice-ws-shared-secret
+VOICE_SERVICE_TOKEN=same-as-web-VOICE_SERVICE_TOKEN
+VOICE_WS_SHARED_SECRET=...
 VOICE_WS_PUBLIC_URL=wss://voice.yourdomain.com/ws/audio
 
-FS_HOST=YOUR_VPS_PUBLIC_OR_PRIVATE_IP
+FS_HOST=YOUR_VPS_PRIVATE_OR_PUBLIC_IP
 FS_ESL_PORT=8021
-FS_ESL_PASSWORD=your-freeswitch-esl-password
+FS_ESL_PASSWORD=...
 FS_DEFAULT_GATEWAY=sip_custom
 
-GEMINI_API_KEY=
-GOOGLE_API_KEY=
-DEEPGRAM_API_KEY=
-CARTESIA_API_KEY=
-XAI_API_KEY=
+VOICE_FAKE_DRIVER=false
 
 ENABLE_CAMPAIGN_DIALER=true
 ENABLE_KB_INGESTOR=true
 ENABLE_WEBHOOK_SCHEDULER=true
-VOICE_FAKE_DRIVER=false
 ```
 
-For first dashboard-only testing, you can temporarily use:
+For first dashboard-only testing, set:
 
 ```env
 VOICE_FAKE_DRIVER=true
 ```
 
-For real calls:
+For real calling, set:
 
 ```env
 VOICE_FAKE_DRIVER=false
@@ -315,41 +247,49 @@ Expected:
 {"ok":true,"service":"livocall-engine"}
 ```
 
-### How voice reaches FreeSWITCH ESL
+### Real AI Pipeline Dependencies
 
-Because voice is inside a Coolify Docker container, `FS_HOST=127.0.0.1` will not work. Use one of:
+The current voice Dockerfile installs the base service. If you want Gemini Live, Deepgram, Cartesia, and Pipecat pipelines inside the container, change this line in `services/voice/Dockerfile`:
 
-```env
-FS_HOST=YOUR_VPS_PRIVATE_IP
+```dockerfile
+RUN pip install -e .
 ```
 
-or:
+to:
 
-```env
-FS_HOST=YOUR_VPS_PUBLIC_IP
+```dockerfile
+RUN pip install -e ".[voice,storage]"
 ```
 
-Then lock down port `8021` with firewall and FreeSWITCH ACL.
+Without those extras, the voice routes still run, but some tiers fall back to echo/test behavior when Pipecat provider packages are missing.
 
-If your VPS has no private IP, use the public IP but allow `8021` only from Docker/Coolify networks where possible.
+## 8. Private Repo Notes
 
-## 7. Copy the repo to the VPS for FreeSWITCH config
+Coolify can deploy private repos through its GitHub/GitLab integration.
 
-SSH into the VPS:
+For FreeSWITCH config on the VPS, you still need `infra/freeswitch`. Use one of:
 
 ```bash
-ssh root@YOUR_VPS_PUBLIC_IP
+scp -r infra/freeswitch root@YOUR_VPS_IP:/opt/livocall/freeswitch
 ```
 
-Clone the repo:
+or clone with a deploy key:
 
 ```bash
-mkdir -p /opt/livocall
-cd /opt/livocall
-git clone YOUR_GIT_REPO_URL repo
+ssh-keygen -t ed25519 -C "livocall-vps" -f ~/.ssh/livocall_deploy
+cat ~/.ssh/livocall_deploy.pub
 ```
 
-Copy FreeSWITCH config:
+Add the public key to your private repo as a deploy key, then:
+
+```bash
+GIT_SSH_COMMAND='ssh -i ~/.ssh/livocall_deploy' \
+git clone git@github.com:YOUR_USER/YOUR_REPO.git /opt/livocall/repo
+```
+
+## 9. Prepare FreeSWITCH Config
+
+On the VPS:
 
 ```bash
 mkdir -p /opt/livocall/freeswitch
@@ -357,7 +297,13 @@ cp -R /opt/livocall/repo/infra/freeswitch/* /opt/livocall/freeswitch/
 mkdir -p /opt/livocall/freeswitch/sip_profiles/external
 ```
 
-## 8. Fix FreeSWITCH ESL for Coolify voice
+If you uploaded by `scp`, make sure this file exists:
+
+```txt
+/opt/livocall/freeswitch/scripts/inbound_route.py
+```
+
+## 10. FreeSWITCH ESL Config
 
 Edit:
 
@@ -365,7 +311,7 @@ Edit:
 nano /opt/livocall/freeswitch/event_socket.conf.xml
 ```
 
-Replace the repo default:
+The repo default is localhost-only:
 
 ```xml
 <param name="listen-ip" value="127.0.0.1"/>
@@ -373,7 +319,7 @@ Replace the repo default:
 <param name="apply-inbound-acl" value="loopback.auto"/>
 ```
 
-With:
+Because the voice engine runs in Coolify, change it to:
 
 ```xml
 <param name="listen-ip" value="0.0.0.0"/>
@@ -382,9 +328,9 @@ With:
 <param name="apply-inbound-acl" value="livocall_esl"/>
 ```
 
-`0.0.0.0` is acceptable only if you also restrict access using firewall and ACL. Do not leave `8021` open to the internet.
+This is safe only if firewall and ACL restrict `8021`.
 
-## 9. Add FreeSWITCH ACLs
+## 11. FreeSWITCH ACLs
 
 Edit:
 
@@ -392,7 +338,7 @@ Edit:
 nano /opt/livocall/freeswitch/acl.conf.xml
 ```
 
-Use this structure:
+Use:
 
 ```xml
 <configuration name="acl.conf" description="Network Lists">
@@ -413,15 +359,17 @@ Use this structure:
 </configuration>
 ```
 
-For `livocall_trunks`, add only the SIP signalling IPs from your BD SIP provider.
+Add only your SIP provider signalling IPs to `livocall_trunks`.
 
-For `livocall_esl`, narrow the Docker ranges after you discover Coolify's actual Docker network range:
+Find Coolify Docker subnets:
 
 ```bash
 docker network inspect $(docker network ls --format '{{.Name}}') | grep -A 3 Subnet
 ```
 
-## 10. Fix inbound route URL/token
+Narrow `livocall_esl` after you know the correct subnet.
+
+## 12. Inbound Route Command
 
 Edit:
 
@@ -429,29 +377,29 @@ Edit:
 nano /opt/livocall/freeswitch/dialplan/public/00_livocall_inbound.xml
 ```
 
-Find the `system` action. The repo default uses variables that are not automatically set:
+The repo default uses unset variables:
 
 ```xml
 VOICE_SERVICE_URL=${voice_service_url} VOICE_SERVICE_TOKEN=${voice_service_token}
 ```
 
-Replace it with your real voice URL and token:
+Replace the `system` action with real values:
 
 ```xml
 <action application="system" data="VOICE_SERVICE_URL=https://voice.yourdomain.com VOICE_SERVICE_TOKEN=your-voice-service-token destination_number=${destination_number} caller_id_number=${caller_id_number} uuid=${uuid} /usr/local/freeswitch/scripts/inbound_route.py"/>
 ```
 
-This script calls:
+That script calls:
 
 ```txt
 POST https://voice.yourdomain.com/calls/inbound-route
 ```
 
-The voice service returns the signed WebSocket URL used by `audio_fork`.
+and receives the signed `wss://voice.yourdomain.com/ws/audio...` URL for `mod_audio_fork`.
 
-## 11. Check SIP profile settings
+## 13. SIP Profile
 
-The repo's external SIP profile is:
+The main profile is:
 
 ```txt
 /opt/livocall/freeswitch/sip_profiles/external.xml
@@ -468,25 +416,25 @@ Important values:
 <param name="auth-calls" value="false"/>
 ```
 
-If your provider sends SIP to `5060`, either ask them to send to `5080` or change `sip-port` to `5060` and adjust firewall.
+If your provider uses `5060`, change `sip-port` or ask them to send to `5080`.
 
-For a public VPS, the profile uses:
+For one static public IP, if NAT detection causes one-way audio, replace:
 
 ```xml
 <param name="ext-rtp-ip" value="auto-nat"/>
 <param name="ext-sip-ip" value="auto-nat"/>
 ```
 
-If you have one static public IP and NAT detection causes trouble, replace both with your public IP:
+with:
 
 ```xml
 <param name="ext-rtp-ip" value="YOUR_VPS_PUBLIC_IP"/>
 <param name="ext-sip-ip" value="YOUR_VPS_PUBLIC_IP"/>
 ```
 
-## 12. Create SIP gateway XML
+## 14. SIP Gateway XML
 
-Because the current dashboard endpoint does not yet output complete gateway XML with decrypted passwords, use manual XML for production.
+The current `/api/numbers/freeswitch` route returns JSON, not complete gateway XML with decrypted passwords. Create gateway XML manually for now.
 
 Create:
 
@@ -494,7 +442,7 @@ Create:
 nano /opt/livocall/freeswitch/sip_profiles/external/sip_custom.xml
 ```
 
-Example for registration-based SIP trunk:
+Registration-based trunk:
 
 ```xml
 <include>
@@ -513,7 +461,7 @@ Example for registration-based SIP trunk:
 </include>
 ```
 
-Example for IP-authenticated SIP trunk:
+IP-authenticated trunk:
 
 ```xml
 <include>
@@ -535,9 +483,9 @@ The gateway name must match:
 FS_DEFAULT_GATEWAY=sip_custom
 ```
 
-and/or the phone number's `providerSlug` in MongoDB.
+and/or the phone number `providerSlug` in MongoDB.
 
-## 13. Run FreeSWITCH outside Coolify
+## 15. Run FreeSWITCH
 
 Create:
 
@@ -561,7 +509,7 @@ services:
       - /opt/livocall/freeswitch/dialplan:/etc/freeswitch/dialplan:ro
       - /opt/livocall/freeswitch/sip_profiles/external.xml:/etc/freeswitch/sip_profiles/external.xml:ro
       - /opt/livocall/freeswitch/sip_profiles/external:/etc/freeswitch/sip_profiles/external:ro
-      - /opt/livocall/repo/infra/freeswitch/scripts/inbound_route.py:/usr/local/freeswitch/scripts/inbound_route.py:ro
+      - /opt/livocall/freeswitch/scripts/inbound_route.py:/usr/local/freeswitch/scripts/inbound_route.py:ro
       - livocall-fs-state:/var/lib/freeswitch
       - livocall-recordings:/var/lib/freeswitch/recordings
     environment:
@@ -580,13 +528,13 @@ cd /opt/livocall
 docker compose -f freeswitch.compose.yml up -d
 ```
 
-Check logs:
+Logs:
 
 ```bash
 docker logs -f livocall-freeswitch
 ```
 
-## 14. Verify FreeSWITCH
+## 16. Verify FreeSWITCH
 
 Open CLI:
 
@@ -611,42 +559,23 @@ Expected:
 - Gateway is `REGED` if registration is enabled.
 - `module_exists mod_audio_fork` returns true.
 
-If `mod_audio_fork` is missing, the official image you used does not include it. Build or use a FreeSWITCH image with `mod_audio_fork`.
+If `mod_audio_fork` is missing, the image does not include it. Use or build a FreeSWITCH image with `mod_audio_fork`.
 
-## 15. Verify voice to FreeSWITCH ESL
+## 17. Verify App Links
 
-In Coolify voice logs, after `VOICE_FAKE_DRIVER=false`, you should not see repeated ESL connection failures.
-
-From the VPS, test that `8021` is listening:
+Web:
 
 ```bash
-ss -lntp | grep 8021
+curl https://app.yourdomain.com/api/health
 ```
 
-From inside the voice container, test TCP reachability if you know the container name:
-
-```bash
-docker exec -it VOICE_CONTAINER_NAME sh
-nc -vz YOUR_VPS_PRIVATE_OR_PUBLIC_IP 8021
-```
-
-If this fails:
-
-- Check `event_socket.conf.xml` listens on `0.0.0.0`.
-- Check `apply-inbound-acl` points to `livocall_esl`.
-- Check `acl.conf.xml` allows the Coolify Docker subnet.
-- Check the VPS firewall allows `8021` only from that subnet/private source.
-- Check `FS_HOST`, `FS_ESL_PORT`, and `FS_ESL_PASSWORD` in Coolify voice env.
-
-## 16. Verify FreeSWITCH to voice API and WebSocket
-
-From the VPS:
+Voice:
 
 ```bash
 curl https://voice.yourdomain.com/health
 ```
 
-Inside the FreeSWITCH container:
+FreeSWITCH to voice:
 
 ```bash
 docker exec -it livocall-freeswitch bash
@@ -656,107 +585,136 @@ print(urllib.request.urlopen("https://voice.yourdomain.com/health", timeout=5).r
 PY
 ```
 
-If HTTPS fails inside the container, check DNS, CA certificates, and Coolify proxy.
+Voice to FreeSWITCH ESL:
 
-The voice env must use:
-
-```env
-VOICE_WS_PUBLIC_URL=wss://voice.yourdomain.com/ws/audio
+```bash
+ss -lntp | grep 8021
 ```
 
-That URL is what FreeSWITCH receives for `mod_audio_fork`.
+If you know the Coolify voice container name:
 
-## 17. Configure dashboard data
+```bash
+docker exec -it VOICE_CONTAINER_NAME sh
+nc -vz YOUR_VPS_PRIVATE_OR_PUBLIC_IP 8021
+```
 
-In the web dashboard:
+## 18. Dashboard Data
 
-1. Create or sign in to an org.
+In the dashboard:
+
+1. Create/sign in to an org.
 2. Create an agent.
-3. Set the agent status to live.
-4. Add a phone number/DID.
-5. Use E.164 format, for example `+8801XXXXXXXXX`.
-6. Set provider slug to `sip_custom`, or match your gateway name.
-7. Enable inbound and/or outbound.
-8. Attach inbound DID to the live agent.
+3. Set agent status to live.
+4. Add a DID in E.164 format, for example `+8801XXXXXXXXX`.
+5. Set provider slug to `sip_custom`, or match your gateway name.
+6. Enable inbound and/or outbound.
+7. Attach inbound DID to the live agent.
 
-For outbound fallback, voice uses:
+## 19. Outbound Checklist
 
-```env
-FS_DEFAULT_GATEWAY=sip_custom
-```
+- Web has `VOICE_SERVICE_URL=https://voice.yourdomain.com`.
+- Web and voice share the same `VOICE_SERVICE_TOKEN`.
+- Web `VOICE_SHARED_SECRET` equals voice `WEB_SHARED_SECRET`.
+- Voice has `VOICE_FAKE_DRIVER=false`.
+- Voice can connect to FreeSWITCH ESL at `FS_HOST:8021`.
+- FreeSWITCH ESL listens on `0.0.0.0` with `livocall_esl` ACL.
+- FreeSWITCH has gateway `sip_custom`.
+- `mod_audio_fork` is loaded.
+- `VOICE_WS_PUBLIC_URL=wss://voice.yourdomain.com/ws/audio`.
+- AI provider keys are configured for the tier you use.
 
-if no matching phone number gateway is found.
+## 20. Inbound Checklist
 
-## 18. Smoke tests
+- SIP provider sends INVITE to `YOUR_VPS_PUBLIC_IP:5080`.
+- Provider signalling IPs are in `livocall_trunks`.
+- DID is stored as E.164, for example `+8801XXXXXXXXX`.
+- DID has `inboundEnabled=true`.
+- DID is attached to a live agent.
+- Inbound XML uses real `VOICE_SERVICE_URL` and `VOICE_SERVICE_TOKEN`.
+- `/usr/local/freeswitch/scripts/inbound_route.py` exists inside the FreeSWITCH container.
+- FreeSWITCH can reach `https://voice.yourdomain.com/health`.
 
-Web:
+## 21. Common Problems
+
+### Dockerfile Still Uses Old Node
+
+Coolify may cache an old Dockerfile or UI override. Confirm the final Dockerfile log shows:
 
 ```txt
-https://app.yourdomain.com/status
+FROM node:23-alpine
 ```
 
-Voice:
+If it shows `node:20-alpine`, update the Dockerfile in the repo and remove any pasted Dockerfile override in Coolify.
+
+### Web Build Fails at `npm install`
+
+The web Dockerfile must include:
+
+```dockerfile
+RUN npm install --legacy-peer-deps --no-audit --no-fund
+```
+
+### Web Says Voice Unavailable
+
+Check:
 
 ```bash
 curl https://voice.yourdomain.com/health
 ```
 
-FreeSWITCH:
+Then verify:
 
-```bash
-docker exec -it livocall-freeswitch fs_cli -x "status"
-docker exec -it livocall-freeswitch fs_cli -x "sofia status profile external"
-docker exec -it livocall-freeswitch fs_cli -x "sofia status gateway sip_custom"
-docker exec -it livocall-freeswitch fs_cli -x "module_exists mod_audio_fork"
+```env
+VOICE_SERVICE_URL=https://voice.yourdomain.com
+VOICE_SERVICE_TOKEN=...
 ```
 
-Watch logs during a call:
+### Voice Logs Show ESL Connection Errors
 
-```bash
-docker logs -f livocall-freeswitch
-```
+Fix:
 
-In Coolify, open the voice service logs at the same time.
+- `event_socket.conf.xml` listen IP is `0.0.0.0`.
+- `apply-inbound-acl=livocall_esl`.
+- `acl.conf.xml` allows the Coolify Docker subnet.
+- Firewall allows `8021` only from local/private Docker subnet.
+- Voice env has correct `FS_HOST`, `FS_ESL_PORT`, `FS_ESL_PASSWORD`.
 
-## 19. Outbound call checklist
+### Calls Connect But No AI Audio
 
-Before outbound calls work:
+Check:
 
-- Web has `VOICE_SERVICE_URL=https://voice.yourdomain.com`.
-- Web has the same `VOICE_SERVICE_TOKEN` as voice.
-- Voice has `VOICE_FAKE_DRIVER=false`.
-- Voice can connect to FreeSWITCH ESL on `FS_HOST:8021`.
-- FreeSWITCH `event_socket.conf.xml` is not limited to `127.0.0.1`.
-- FreeSWITCH `livocall_esl` ACL allows the Coolify voice container subnet.
-- FreeSWITCH has gateway `sip_custom`.
-- Agent exists in MongoDB.
-- Phone number row has `outboundEnabled=true`.
-- Phone number row has `providerSlug=sip_custom`, or voice has `FS_DEFAULT_GATEWAY=sip_custom`.
-- Selected AI tier has its API key configured.
-- `mod_audio_fork` is loaded.
+- `module_exists mod_audio_fork`.
+- Coolify voice domain supports WebSockets.
 - `VOICE_WS_PUBLIC_URL=wss://voice.yourdomain.com/ws/audio`.
+- Voice logs show `/ws/audio` or `/ws/audio-pcmu`.
+- AI provider key is configured.
+- Voice Dockerfile includes `pip install -e ".[voice,storage]"` if you need real Pipecat pipelines.
 
-## 20. Inbound call checklist
+### One-Way Audio
 
-Before inbound calls work:
+Set explicit public IP in `external.xml`:
 
-- SIP provider sends INVITE to `YOUR_VPS_PUBLIC_IP:5080`.
-- Provider signalling IPs are in `livocall_trunks`.
-- FreeSWITCH external profile is running on `5080`.
-- Inbound dialplan command uses `VOICE_SERVICE_URL=https://voice.yourdomain.com`.
-- Inbound dialplan command uses the correct `VOICE_SERVICE_TOKEN`.
-- DID is stored as E.164, for example `+8801XXXXXXXXX`.
-- DID has `inboundEnabled=true`.
-- DID is attached to a live agent.
-- `/usr/local/freeswitch/scripts/inbound_route.py` exists inside the FreeSWITCH container.
-- FreeSWITCH can reach `https://voice.yourdomain.com/health`.
-- Voice returns a `wss://voice.yourdomain.com/ws/audio...` URL.
+```xml
+<param name="ext-rtp-ip" value="YOUR_VPS_PUBLIC_IP"/>
+<param name="ext-sip-ip" value="YOUR_VPS_PUBLIC_IP"/>
+```
 
-## 21. Updating deployment
+Reload:
+
+```bash
+docker exec -it livocall-freeswitch fs_cli -x "reloadxml"
+docker exec -it livocall-freeswitch fs_cli -x "sofia profile external restart reloadxml"
+```
+
+Confirm RTP UDP range `16384-32768` is open.
+
+## 22. Update Flow
 
 For web and voice:
 
-- Redeploy both apps from Coolify.
+```txt
+Push to private repo, then redeploy both Coolify Dockerfile apps.
+```
 
 For FreeSWITCH config:
 
@@ -766,124 +724,33 @@ git pull
 cp -R /opt/livocall/repo/infra/freeswitch/* /opt/livocall/freeswitch/
 ```
 
-Re-apply your production edits:
+Re-apply production edits:
 
 - ESL password.
 - ESL listen IP and ACL.
 - SIP provider IP ACL.
 - Inbound route URL/token.
-- Manual gateway XML.
+- Gateway XML.
 
-Restart or reload:
-
-```bash
-cd /opt/livocall
-docker compose -f freeswitch.compose.yml up -d
-docker exec -it livocall-freeswitch fs_cli -x "reloadxml"
-docker exec -it livocall-freeswitch fs_cli -x "sofia profile external restart reloadxml"
-```
-
-## 22. Common problems
-
-### Web says voice unavailable
-
-Check:
-
-```bash
-curl https://voice.yourdomain.com/health
-```
-
-Then verify web env:
-
-```env
-VOICE_SERVICE_URL=https://voice.yourdomain.com
-VOICE_SERVICE_TOKEN=...
-```
-
-### Voice logs show ESL connection errors
-
-The voice app is in Coolify, so this will fail if FreeSWITCH still listens only on `127.0.0.1`.
-
-Fix:
-
-- `event_socket.conf.xml` listen IP `0.0.0.0`.
-- `apply-inbound-acl=livocall_esl`.
-- `acl.conf.xml` allows Coolify Docker subnet.
-- firewall allows `8021` only from local/private Docker subnet.
-- Coolify voice env has correct `FS_HOST`.
-
-### Inbound calls reject immediately
-
-Check:
-
-- Provider IPs are in `livocall_trunks`.
-- DID format is `+880...` in MongoDB.
-- Agent is live.
-- Inbound route script is mounted.
-- Inbound XML uses real voice URL/token.
-- Voice logs show `/calls/inbound-route`.
-
-### Calls connect but no AI audio
-
-Check:
-
-- `module_exists mod_audio_fork`.
-- `VOICE_WS_PUBLIC_URL=wss://voice.yourdomain.com/ws/audio`.
-- Coolify proxy supports WebSockets for voice domain.
-- Voice logs show `/ws/audio` or `/ws/audio-pcmu`.
-- AI provider key is configured for selected tier.
-
-### SIP registration fails
-
-Check:
-
-```bash
-docker exec -it livocall-freeswitch fs_cli -x "sofia status gateway sip_custom"
-```
-
-Verify:
-
-- username
-- auth username
-- password
-- realm
-- proxy
-- register flag
-- transport
-- provider IP-auth vs registration mode
-
-### One-way audio
-
-Try setting public IP explicitly in `external.xml`:
-
-```xml
-<param name="ext-rtp-ip" value="YOUR_VPS_PUBLIC_IP"/>
-<param name="ext-sip-ip" value="YOUR_VPS_PUBLIC_IP"/>
-```
-
-Then:
+Reload:
 
 ```bash
 docker exec -it livocall-freeswitch fs_cli -x "reloadxml"
 docker exec -it livocall-freeswitch fs_cli -x "sofia profile external restart reloadxml"
 ```
 
-Also confirm RTP UDP range `16384-32768` is open.
-
-## 23. Minimum production checklist
+## 23. Production Checklist
 
 - `app.yourdomain.com` SSL works.
 - `voice.yourdomain.com` SSL works.
-- Coolify voice app has WebSocket support.
-- MongoDB has backups.
-- Redis persistence is enabled if campaigns/webhooks matter.
-- `8021` is not open to the public internet.
+- Web and voice deployed through Dockerfile, not Nixpacks.
+- MongoDB backups are enabled.
+- Redis persistence is enabled if campaign/webhook workers matter.
+- `8021` is not public.
 - FreeSWITCH ESL password is changed.
-- `livocall_esl` ACL allows only local/private Docker networks.
-- SIP provider IPs are allow-listed in `livocall_trunks`.
+- SIP provider IPs are allow-listed.
 - `mod_audio_fork` is loaded.
-- FreeSWITCH gateway registration is healthy.
+- Gateway registration is healthy.
 - Inbound route script is mounted.
-- Inbound route XML has real voice URL/token.
 - `VOICE_WS_PUBLIC_URL` uses `wss://voice.yourdomain.com/ws/audio`.
 - Test inbound and outbound with one real BD number before opening to users.
