@@ -1,5 +1,3 @@
-import * as cheerio from 'cheerio'
-import mammoth from 'mammoth'
 import { getObjectBuffer } from '@/lib/object-storage'
 
 export type KnowledgeSourceType = 'url' | 'pdf' | 'docx' | 'text' | 'website'
@@ -30,6 +28,7 @@ async function extractWebsite(ref: string): Promise<ExtractionResult> {
     })
     if (!res.ok) throw new Error(`website fetch failed (${res.status})`)
     const html = await res.text()
+    const cheerio = await import('cheerio')
     const $ = cheerio.load(html)
     $('script,style,noscript,svg,iframe,nav,footer,header').remove()
     const title = normalize($('title').first().text())
@@ -48,6 +47,7 @@ async function extractFile(type: KnowledgeSourceType, ref: string): Promise<Extr
     const buf = await getObjectBuffer(ref)
     let text = ''
     if (type === 'docx') {
+      const mammoth = (await import('mammoth')).default
       const result = await mammoth.extractRawText({ buffer: buf })
       text = result.value
     } else if (type === 'pdf') {
