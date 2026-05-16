@@ -106,10 +106,11 @@ const Patch = z.object({
   outcomeConfig: OutcomeConfigSchema.optional(),
 })
 
-export const GET = withErrors(async (_req: Request, ctx: { params: { id: string } }) => {
+export const GET = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input', 'invalid id')
   await connectMongo()
   const agent = await Agent.findOne({ _id: oid, orgId: s.orgId }).lean()
@@ -117,12 +118,13 @@ export const GET = withErrors(async (_req: Request, ctx: { params: { id: string 
   return NextResponse.json(agentToJson(agent))
 })
 
-export const PATCH = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
   const forbidden = requireRole(s, 'admin')
   if (forbidden) return forbidden
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input', 'invalid id')
   const body = Patch.parse(await req.json().catch(() => ({})))
   await connectMongo()
@@ -183,12 +185,13 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: { id: string
   return NextResponse.json(agentToJson(agent))
 })
 
-export const DELETE = withErrors(async (_req: Request, ctx: { params: { id: string } }) => {
+export const DELETE = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
   const forbidden = requireRole(s, 'admin')
   if (forbidden) return forbidden
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input', 'invalid id')
   await connectMongo()
   const r = await Agent.deleteOne({ _id: oid, orgId: s.orgId })

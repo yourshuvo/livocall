@@ -9,8 +9,12 @@ function safeRedirect(searchParams?: { redirect_url?: string | string[] }) {
   return value && value.startsWith('/') && !value.startsWith('//') ? value : '/overview'
 }
 
-export default function LoginPage({ searchParams }: { searchParams?: { redirect_url?: string | string[] } }) {
-  const redirectUrl = safeRedirect(searchParams)
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ redirect_url?: string | string[] }>
+}) {
+  const redirectUrl = safeRedirect(await searchParams)
   return (
     <SignIn
       path="/login"

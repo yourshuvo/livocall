@@ -23,13 +23,14 @@ const Body = z.object({
     .optional(),
 })
 
-export const POST = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
   const limit = await dashboardRateLimit(s.orgId, 'test-call')
   if (!limit.ok) return apiError('rate_limited', 'too many test calls')
 
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input', 'invalid agent id')
   const body = Body.parse(await req.json().catch(() => ({})))
 

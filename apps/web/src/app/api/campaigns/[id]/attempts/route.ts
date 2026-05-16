@@ -7,10 +7,11 @@ import { Campaign } from '@/models/Campaign'
 import { CampaignAttempt } from '@/models/CampaignAttempt'
 import { Contact } from '@/models/Contact'
 
-export const GET = withErrors(async (_req: Request, ctx: { params: { id: string } }) => {
+export const GET = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   await connectMongo()
   const campaign = await Campaign.findOne({ _id: oid, orgId: s.orgId }).lean()

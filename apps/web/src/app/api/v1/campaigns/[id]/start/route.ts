@@ -7,12 +7,13 @@ import { apiError, withErrors } from '@/lib/errors'
 import { campaignToJson } from '@/lib/serialize'
 
 export const POST = withErrors(
-  async (req: Request, { params }: { params: { id: string } }) => {
+  async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const { id } = await params
     const auth = await authV1(req, 'campaigns:write')
     if (isResponse(auth)) return auth
     await connectMongo()
     const doc = await Campaign.findOneAndUpdate(
-      { _id: params.id, orgId: auth.orgId },
+      { _id: id, orgId: auth.orgId },
       { $set: { status: 'running' } },
       { new: true },
     ).lean()

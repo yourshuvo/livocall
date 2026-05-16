@@ -15,11 +15,12 @@ import { cn } from '@/lib/cn'
 
 export const dynamic = 'force-dynamic'
 
-export default async function CallDetailPage({ params }: { params: { id: string } }) {
+export default async function CallDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   if (!isMongoConfigured()) notFound()
   const session = await getSession()
   await connectMongo()
-  const call = await Call.findOne({ _id: params.id, orgId: session.orgId }).lean<CallLean>()
+  const call = await Call.findOne({ _id: id, orgId: session.orgId }).lean<CallLean>()
   if (!call) notFound()
   const agent = call.agentId
     ? await Agent.findOne({ _id: call.agentId, orgId: session.orgId }).lean<AgentLean>()

@@ -32,11 +32,12 @@ function escapeRegExp(value: string) {
 export default async function CallsPage({
   searchParams,
 }: {
-  searchParams?: { filter?: string; q?: string }
+  searchParams?: Promise<{ filter?: string; q?: string }>
 }) {
   const session = await getSession()
-  const filter = (searchParams?.filter ?? 'all') as FilterKey
-  const q = (searchParams?.q ?? '').trim()
+  const resolvedSearchParams = await searchParams
+  const filter = (resolvedSearchParams?.filter ?? 'all') as FilterKey
+  const q = (resolvedSearchParams?.q ?? '').trim()
   const safeQ = q ? escapeRegExp(q) : ''
   let calls: CallLean[] = []
   let loadError = ''

@@ -11,9 +11,9 @@
 
 import { headers } from 'next/headers'
 
-export function getRequestId(): string {
+export async function getRequestId(): Promise<string> {
   try {
-    return headers().get('x-request-id') || ''
+    return (await headers()).get('x-request-id') || ''
   } catch {
     // headers() throws outside a request scope — that's fine.
     return ''
@@ -58,12 +58,12 @@ export async function initSentry(): Promise<void> {
  * are easy to correlate across web/voice. Uses console.log — operators wire
  * whatever log collector they prefer.
  */
-export function log(
+export async function log(
   level: 'info' | 'warn' | 'error',
   event: string,
   fields: Record<string, unknown> = {},
-): void {
-  const reqId = getRequestId()
+): Promise<void> {
+  const reqId = await getRequestId()
   const payload = JSON.stringify({ level, event, reqId, ...fields, ts: new Date().toISOString() })
   if (level === 'error') console.error(payload)
   else if (level === 'warn') console.warn(payload)

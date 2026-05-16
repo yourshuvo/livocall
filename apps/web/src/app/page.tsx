@@ -1,7 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs'
+import { Show, UserButton } from '@clerk/nextjs'
 import type { ReactNode } from 'react'
 import { LangSwitcher } from '@/components/lang-switcher'
 import { MarketingFooter } from '@/components/marketing/footer'
@@ -87,8 +87,9 @@ const KPI_ROWS = [
   { label: 'Handoffs', value: '6', tone: 'warn' },
 ]
 
-export default function LandingPage() {
-  const locale: Locale = getLocaleFromCookie(cookies().get('livocall_locale')?.value)
+export default async function LandingPage() {
+  const cookieStore = await cookies()
+  const locale: Locale = getLocaleFromCookie(cookieStore.get('livocall_locale')?.value)
 
   return (
     <main className="min-h-screen bg-bg text-fg">
@@ -211,20 +212,20 @@ function HomepageNav({ locale }: { locale: Locale }) {
           <div className="hidden sm:block">
             <LangSwitcher locale={locale} />
           </div>
-          <SignedOut>
+          <Show when="signed-out">
             <Link href="/login" className="hidden px-2 text-[13px] font-medium text-fg-muted/90 transition-all hover:text-fg sm:inline">
               Sign in
             </Link>
             <Button asChild size="sm" className="rounded-full px-5 shadow-sm transition-transform hover:scale-105">
               <Link href="/signup">Get Started</Link>
             </Button>
-          </SignedOut>
-          <SignedIn>
+          </Show>
+          <Show when="signed-in">
             <Link href="/overview" className="hidden rounded-full bg-fg px-4 py-2 text-[13px] font-medium text-fg-inverse shadow-sm transition-transform hover:scale-105 sm:inline">
               Dashboard
             </Link>
             <UserButton />
-          </SignedIn>
+          </Show>
         </div>
       </header>
     </div>

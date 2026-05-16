@@ -9,12 +9,13 @@ import { AgentEditor } from './editor-client'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AgentDetailPage({ params }: { params: { id: string } }) {
+export default async function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   if (!isMongoConfigured()) notFound()
   const session = await getSession()
   await connectMongo()
   const [agent, kbs, numbers] = await Promise.all([
-    Agent.findOne({ _id: params.id, orgId: session.orgId }).lean<AgentLean>(),
+    Agent.findOne({ _id: id, orgId: session.orgId }).lean<AgentLean>(),
     KnowledgeBase.find({ orgId: session.orgId }).sort({ name: 1 }).lean<KnowledgeBaseLean[]>(),
     PhoneNumber.find({ orgId: session.orgId, outboundEnabled: true }).sort({ e164: 1 }).lean<PhoneNumberLean[]>(),
   ])

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { cookies } from 'next/headers'
-import { ClerkProvider, SignedIn, UserButton } from '@clerk/nextjs'
+import { ClerkProvider, Show, UserButton } from '@clerk/nextjs'
 import { getLocaleFromCookie, type Locale } from '@/lib/i18n'
 import './globals.css'
 
@@ -55,8 +55,9 @@ export const viewport: Viewport = {
   initialScale: 1,
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale: Locale = getLocaleFromCookie(cookies().get('livocall_locale')?.value)
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies()
+  const locale: Locale = getLocaleFromCookie(cookieStore.get('livocall_locale')?.value)
 
   return (
     <html lang={locale}>
@@ -68,9 +69,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           signUpForceRedirectUrl="/overview"
         >
           <header className="sr-only">
-            <SignedIn>
+            <Show when="signed-in">
               <UserButton />
-            </SignedIn>
+            </Show>
           </header>
           {children}
         </ClerkProvider>

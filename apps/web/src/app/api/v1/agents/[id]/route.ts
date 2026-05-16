@@ -7,12 +7,13 @@ import { authV1, isResponse } from '@/lib/auth/v1'
 import { apiError, withErrors } from '@/lib/errors'
 import { agentToJson } from '@/lib/serialize'
 
-export const GET = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const GET = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const auth = await authV1(req, 'agents:read')
   if (isResponse(auth)) return auth
-  if (!Types.ObjectId.isValid(ctx.params.id)) return apiError('invalid_input')
+  if (!Types.ObjectId.isValid(id)) return apiError('invalid_input')
   await connectMongo()
-  const agent = await Agent.findOne({ _id: ctx.params.id, orgId: auth.orgId }).lean()
+  const agent = await Agent.findOne({ _id: id, orgId: auth.orgId }).lean()
   if (!agent) return apiError('not_found')
   return NextResponse.json(agentToJson(agent))
 })

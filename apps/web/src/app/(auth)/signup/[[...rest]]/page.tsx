@@ -11,8 +11,12 @@ function safeRedirect(searchParams?: { redirect_url?: string | string[] }) {
   return value && value.startsWith('/') && !value.startsWith('//') ? value : '/overview'
 }
 
-export default function SignupPage({ searchParams }: { searchParams?: { redirect_url?: string | string[] } }) {
-  const redirectUrl = safeRedirect(searchParams)
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ redirect_url?: string | string[] }>
+}) {
+  const redirectUrl = safeRedirect(await searchParams)
   return (
     <div>
       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-faint">

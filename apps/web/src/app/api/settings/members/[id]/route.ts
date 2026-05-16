@@ -14,12 +14,13 @@ import { recordAudit } from '@/lib/audit'
 
 const Patch = z.object({ role: z.enum(['owner', 'admin', 'agent']) })
 
-export const PATCH = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
   const forbidden = requireRole(s, 'admin')
   if (forbidden) return forbidden
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   const body = Patch.parse(await req.json().catch(() => ({})))
   await connectMongo()
@@ -43,12 +44,13 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: { id: string
   return NextResponse.json({ ok: true })
 })
 
-export const DELETE = withErrors(async (_req: Request, ctx: { params: { id: string } }) => {
+export const DELETE = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
   const forbidden = requireRole(s, 'admin')
   if (forbidden) return forbidden
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   await connectMongo()
   const m = await Membership.findOne({ _id: oid, orgId: s.orgId })

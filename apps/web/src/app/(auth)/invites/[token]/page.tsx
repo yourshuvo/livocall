@@ -12,13 +12,14 @@ export const dynamic = 'force-dynamic'
 export default async function AcceptInvitePage({
   params,
 }: {
-  params: { token: string }
+  params: Promise<{ token: string }>
 }) {
+  const { token } = await params
   if (!isMongoConfigured()) {
     return <InvalidInvite reason="Mongo is not configured." />
   }
   await connectMongo()
-  const invite = await Invite.findOne({ tokenHash: hashToken(params.token) }).lean()
+  const invite = await Invite.findOne({ tokenHash: hashToken(token) }).lean()
   if (
     !invite ||
     invite.acceptedAt ||
@@ -55,7 +56,7 @@ export default async function AcceptInvitePage({
         ))}
       </div>
       <div className="mt-8">
-        <AcceptInviteForm token={params.token} />
+        <AcceptInviteForm token={token} />
       </div>
     </div>
   )

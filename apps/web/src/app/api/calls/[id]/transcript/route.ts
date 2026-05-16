@@ -6,10 +6,11 @@ import { Call } from '@/models/Call'
 import { isResponse, objectIdOr400, requireDashboardSession } from '@/lib/api-helpers'
 import { apiError, withErrors } from '@/lib/errors'
 
-export const GET = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const GET = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   await connectMongo()
   const call = await Call.findOne({ _id: oid, orgId: s.orgId }).lean()

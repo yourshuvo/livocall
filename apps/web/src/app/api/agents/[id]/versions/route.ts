@@ -31,10 +31,11 @@ function restorePayload(snapshot: Record<string, unknown>) {
   }
 }
 
-export const GET = withErrors(async (_req: Request, ctx: { params: { id: string } }) => {
+export const GET = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input', 'invalid id')
   await connectMongo()
   const rows = await AgentVersion.find({ orgId: s.orgId, agentId: oid })
@@ -52,12 +53,13 @@ export const GET = withErrors(async (_req: Request, ctx: { params: { id: string 
   })
 })
 
-export const POST = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
   const forbidden = requireRole(s, 'admin')
   if (forbidden) return forbidden
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input', 'invalid id')
   const body = Body.parse(await req.json().catch(() => ({})))
   await connectMongo()

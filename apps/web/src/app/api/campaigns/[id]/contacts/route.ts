@@ -26,10 +26,11 @@ const Body = z.object({ contacts: z.array(ContactIn).min(1).max(10_000) })
  * Bulk-import contacts and append them to the campaign.
  * Upserts each contact by (orgId, e164) so it's idempotent.
  */
-export const POST = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
 
   const data = Body.parse(await req.json().catch(() => ({})))

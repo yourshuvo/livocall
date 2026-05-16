@@ -18,7 +18,7 @@ export async function recordAudit(
   entry: AuditInput,
 ): Promise<void> {
   try {
-    const h = headers()
+    const h = await headers()
     const ip =
       h.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       h.get('x-real-ip') ||

@@ -29,10 +29,11 @@ const PatchBody = z.object({
   ref: z.string().min(1).max(2000),
 })
 
-export const POST = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   const body = Body.parse(await req.json().catch(() => ({})))
   const extraction = await extractKnowledgeSource(body.type, body.ref)
@@ -70,10 +71,11 @@ export const POST = withErrors(async (req: Request, ctx: { params: { id: string 
   return NextResponse.json(kbToJson(updated))
 })
 
-export const DELETE = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const DELETE = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   const url = new URL(req.url)
   const ref = url.searchParams.get('ref')
@@ -93,10 +95,11 @@ export const DELETE = withErrors(async (req: Request, ctx: { params: { id: strin
   return NextResponse.json(kbToJson(updated))
 })
 
-export const PATCH = withErrors(async (req: Request, ctx: { params: { id: string } }) => {
+export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   const body = PatchBody.parse(await req.json().catch(() => ({})))
   await connectMongo()

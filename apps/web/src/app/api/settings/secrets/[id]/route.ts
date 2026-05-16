@@ -7,12 +7,13 @@ import { requireRole } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
 import { Secret } from '@/models/Secret'
 
-export const DELETE = withErrors(async (_req: Request, ctx: { params: { id: string } }) => {
+export const DELETE = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params
   const s = await requireDashboardSession()
   if (isResponse(s)) return s
   const forbidden = requireRole(s, 'admin')
   if (forbidden) return forbidden
-  const oid = objectIdOr400(ctx.params.id)
+  const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   await connectMongo()
   const doc = await Secret.findOneAndUpdate(
