@@ -5,10 +5,10 @@ NIXPACKS_NODE_PACKAGE_MANAGER = "pnpm"
 PNPM_HOME = "/root/.local/share/pnpm"
 
 [phases.install]
-cmds = ["pnpm install --prod=false --no-frozen-lockfile"]
+cmds = ["node -v && pnpm install --prod=false --no-frozen-lockfile"]
 
 [phases.build]
-cmds = ["pnpm run build"]
+cmds = ["node -v && pnpm run build"]
 
 [start]
 cmd = "pnpm run start"
