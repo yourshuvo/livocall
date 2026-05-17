@@ -1,11 +1,12 @@
 [variables]
-NPM_CONFIG_PRODUCTION = "false"
+NIXPACKS_NODE_PACKAGE_MANAGER = "pnpm"
+PNPM_HOME = "/root/.local/share/pnpm"
 
 [phases.install]
-cmds = ["npm install --include=dev"]
+cmds = ["corepack enable", "pnpm install --no-frozen-lockfile"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["pnpm run build"]
 
 [start]
-cmd = "npm run start"
+cmd = "pnpm run start"
