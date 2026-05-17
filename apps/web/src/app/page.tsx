@@ -1,7 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Show, UserButton } from '@clerk/nextjs'
+import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs'
 import type { ReactNode } from 'react'
 import { LangSwitcher } from '@/components/lang-switcher'
 import { MarketingFooter } from '@/components/marketing/footer'
@@ -211,20 +211,20 @@ function HomepageNav({ locale }: { locale: Locale }) {
           <div className="hidden sm:block">
             <LangSwitcher locale={locale} />
           </div>
-          <Show when="signed-out">
+          <SignedOut>
             <Link href="/login" className="hidden px-2 text-[13px] font-medium text-fg-muted/90 transition-all hover:text-fg sm:inline">
               Sign in
             </Link>
             <Button asChild size="sm" className="rounded-full px-5 shadow-sm transition-transform hover:scale-105">
               <Link href="/signup">Get Started</Link>
             </Button>
-          </Show>
-          <Show when="signed-in">
+          </SignedOut>
+          <SignedIn>
             <Link href="/overview" className="hidden rounded-full bg-fg px-4 py-2 text-[13px] font-medium text-fg-inverse shadow-sm transition-transform hover:scale-105 sm:inline">
               Dashboard
             </Link>
             <UserButton />
-          </Show>
+          </SignedIn>
         </div>
       </header>
     </div>

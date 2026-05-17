@@ -46,6 +46,17 @@ docker compose -f infra/docker/docker-compose.yml up -d freeswitch
 docker exec -it livocall-fs fs_cli
 ```
 
+## Production deployment
+
+For a single-VPS Coolify deployment with host-network FreeSWITCH, use
+[`DEPLOYMENT_COOLIFY_FREESWITCH.md`](./DEPLOYMENT_COOLIFY_FREESWITCH.md) and
+[`infra/docker-compose.prod.yml`](./infra/docker-compose.prod.yml), with
+[`infra/.env.prod.example`](./infra/.env.prod.example) as the combined env
+template. The production compose file is aligned with the app runtime settings:
+web listens on `3000`, voice listens on `8084`, both apps use `MONGODB_URI`,
+web calls voice with `VOICE_SERVICE_TOKEN`, and voice calls web with
+`WEB_SHARED_SECRET` using the same value as web's `VOICE_SHARED_SECRET`.
+
 ## Tech stack
 
 | Layer | Choice |

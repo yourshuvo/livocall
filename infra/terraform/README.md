@@ -49,8 +49,8 @@ resource "vercel_project" "web" {
   name      = "${var.project_name}-web"
   framework = "nextjs"
   environment = [
-    { key = "MONGODB_URL",        value = mongodbatlas_cluster.db.connection_strings[0].standard_srv, target = ["production"] },
-    { key = "S3_RECORDINGS_BUCKET", value = aws_s3_bucket.recordings.bucket, target = ["production"] },
+    { key = "MONGODB_URI",        value = "${mongodbatlas_cluster.db.connection_strings[0].standard_srv}/livocall", target = ["production"] },
+    { key = "FILE_STORAGE_BUCKET", value = aws_s3_bucket.recordings.bucket, target = ["production"] },
   ]
 }
 ```
@@ -63,5 +63,6 @@ terraform plan -var-file=prod.tfvars
 terraform apply -var-file=prod.tfvars
 ```
 
-Secrets (`SESSION_PASSWORD`, `WEB_SHARED_SECRET`, `VOICE_WS_SHARED_SECRET`, etc.)
-should live in a secrets manager (AWS Secrets Manager / HashiCorp Vault / Doppler).
+Secrets (`VOICE_SERVICE_TOKEN`, `VOICE_SHARED_SECRET`, `WEB_SHARED_SECRET`,
+`VOICE_WS_SHARED_SECRET`, `SIP_CREDENTIAL_SECRET`, etc.) should live in a
+secrets manager (AWS Secrets Manager / HashiCorp Vault / Doppler).

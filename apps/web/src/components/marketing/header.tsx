@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Show, UserButton } from '@clerk/nextjs'
+import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs'
 import { Wordmark } from '@/components/wordmark'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -48,7 +48,7 @@ export function MarketingHeader({ locale }: { locale: Locale }) {
           <div className="hidden sm:block">
             <LangSwitcher locale={locale} />
           </div>
-          <Show when="signed-out">
+          <SignedOut>
             <Link href="/login" className="hidden rounded-full px-3 py-2 text-[13px] text-fg-muted transition hover:bg-bg-subtle hover:text-fg sm:inline">
                 {t(locale, 'nav.signin')}
             </Link>
@@ -58,8 +58,8 @@ export function MarketingHeader({ locale }: { locale: Locale }) {
                 <Icon name="arrow-right" size="xs" square={false} />
               </Link>
             </Button>
-          </Show>
-          <Show when="signed-in">
+          </SignedOut>
+          <SignedIn>
             <Link
               href="/overview"
               className="hidden rounded-full bg-fg px-4 py-2 text-[13px] text-fg-inverse transition hover:bg-fg-strong sm:inline"
@@ -67,7 +67,7 @@ export function MarketingHeader({ locale }: { locale: Locale }) {
               Dashboard
             </Link>
             <UserButton />
-          </Show>
+          </SignedIn>
         </div>
       </div>
     </header>

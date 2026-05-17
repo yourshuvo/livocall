@@ -1,4 +1,4 @@
-# LivoCall deployment tutorial: Coolify voice + external FreeSWITCH
+# LivoCall deployment tutorial: single-VPS Coolify + FreeSWITCH
 
 This guide deploys this repo on one BDIX VPS with:
 
@@ -41,13 +41,22 @@ FreeSWITCH config is in:
 infra/freeswitch
 ```
 
-Known deployment gotchas in the current repo:
+Known deployment gotchas:
 
-- `infra/docker-compose.prod.yml` is not ready for this deployment style. It uses prebuilt `ghcr.io/livocall/...` images and has the wrong voice port mapping for this Dockerfile.
+- `infra/docker-compose.prod.yml` is a reference for this topology. It uses the app's current env names (`MONGODB_URI`, `VOICE_SERVICE_TOKEN`, `VOICE_SHARED_SECRET`/`WEB_SHARED_SECRET`) and exposes voice on `8084`.
 - `infra/freeswitch/event_socket.conf.xml` listens on `127.0.0.1` and uses `loopback.auto`. That works only when voice also runs on the host network. If voice runs in Coolify, you must change ESL bind/ACL.
 - `infra/freeswitch/dialplan/public/00_livocall_inbound.xml` uses `${voice_service_url}` and `${voice_service_token}`, but those variables are not automatically set by this repo. Put real values in the dialplan or set FreeSWITCH vars yourself.
 - `apps/web/src/app/api/numbers/freeswitch/route.ts` currently returns JSON, not complete FreeSWITCH gateway XML with decrypted passwords. For now, create gateway XML manually unless you implement that endpoint.
 - `modules.conf.xml` asks FreeSWITCH to load `mod_audio_fork`. Some public FreeSWITCH images may not include that module. You must verify it after startup.
+
+If you deploy this repo as one Coolify Docker Compose project, use:
+
+```txt
+infra/docker-compose.prod.yml
+infra/.env.prod.example
+```
+
+If you deploy web and voice as separate Coolify applications, use the same values from that file as the source of truth for each app's environment.
 
 ## 1. DNS
 
@@ -162,9 +171,9 @@ Port: 3000
 Domain: https://app.yourdomain.com
 ```
 
-This repo includes `apps/web/nixpacks.toml` and `apps/web/.npmrc` for Coolify Nixpacks. They are needed because Coolify's default Nixpacks build runs a plain `npm i`, and npm rejects the current `@clerk/nextjs` / Next.js peer dependency combination unless `legacy-peer-deps` is enabled.
+This repo includes `apps/web/nixpacks.toml` for Coolify Nixpacks. The web app is on Next.js 14, so `@clerk/nextjs` is pinned to the compatible Clerk 6 line. Do not upgrade Clerk to 7 unless you also upgrade Next.js to a Clerk-supported Next 15/16 release.
 
-If you deploy with Dockerfile instead of Nixpacks, make sure your Dockerfile install step also uses either pnpm from the workspace lockfile or `npm install --legacy-peer-deps`.
+If you deploy with Dockerfile instead of Nixpacks, make sure your Dockerfile install step uses the pinned package version from `apps/web/package.json`.
 
 Set environment variables:
 
@@ -208,6 +217,11 @@ https://app.yourdomain.com/status
 ```
 
 Voice may show unavailable until the next section is complete.
+
+If production logs show `@clerk/nextjs: Missing publishableKey`, set
+`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` on the Coolify web
+app and redeploy. This app uses `src/middleware.ts`, which is correct for the
+current Next.js 14 app.
 
 ## 6. Deploy the voice engine in Coolify
 

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { cookies } from 'next/headers'
-import { ClerkProvider, Show, UserButton } from '@clerk/nextjs'
+import { ClerkProvider, SignedIn, UserButton } from '@clerk/nextjs'
 import { getLocaleFromCookie, type Locale } from '@/lib/i18n'
 import './globals.css'
 
@@ -68,9 +68,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           signUpForceRedirectUrl="/overview"
         >
           <header className="sr-only">
-            <Show when="signed-in">
+            <SignedIn>
               <UserButton />
-            </Show>
+            </SignedIn>
           </header>
           {children}
         </ClerkProvider>

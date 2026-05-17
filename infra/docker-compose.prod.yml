@@ -1,9 +1,6 @@
-# Production reference topology for LivoCall on a single VM / small cluster.
-# This is deliberately thin — real deployments should split the voice engine
-# onto its own host (next to FreeSWITCH) and move MongoDB + Redis to managed
-# services. Treat this as a starting point.
-
-version: '3.9'
+# Production reference for one VPS running Coolify-managed app containers plus
+# host-network FreeSWITCH. If Coolify deploys web and voice as separate apps,
+# copy the same environment values into each app.
 
 services:
   mongo:
@@ -11,67 +8,124 @@ services:
     restart: unless-stopped
     volumes:
       - mongo-data:/data/db
-    command: ['mongod', '--bind_ip_all']
+    command: ["mongod", "--bind_ip_all"]
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ['redis-server', '--appendonly', 'yes']
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
 
   freeswitch:
-    image: signalwire/freeswitch:1.10-release
+    image: signalwire/freeswitch:1.10.11-release
     restart: unless-stopped
-    network_mode: host   # required for SIP NAT traversal + RTP
+    network_mode: host
     volumes:
-      - ./freeswitch:/etc/freeswitch:ro
+      - ./freeswitch/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
+      - ./freeswitch/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro
+      - ./freeswitch/acl.conf.xml:/etc/freeswitch/autoload_configs/acl.conf.xml:ro
+      - ./freeswitch/dialplan:/etc/freeswitch/dialplan:ro
+      - ./freeswitch/sip_profiles/external.xml:/etc/freeswitch/sip_profiles/external.xml:ro
+      - ./freeswitch/sip_profiles/external:/etc/freeswitch/sip_profiles/external:ro
+      - ./freeswitch/scripts/inbound_route.py:/usr/local/freeswitch/scripts/inbound_route.py:ro
+      - fs-state:/var/lib/freeswitch
       - fs-recordings:/var/lib/freeswitch/recordings
     environment:
-      - SOUND_RATES=8000:16000
-      - SOUND_TYPES=music:en-us-callie
+      SOUND_RATES: "8000:16000"
+      SOUND_TYPES: "music:en-us-callie"
 
   voice:
     image: ghcr.io/livocall/voice:latest
     restart: unless-stopped
-    depends_on: [mongo, redis]
+    depends_on:
+      - mongo
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      MONGODB_URL: mongodb://mongo:27017
-      REDIS_URL: redis://redis:6379/0
-      WEB_BASE_URL: http://web:3000
-      WEB_SHARED_SECRET: ${WEB_SHARED_SECRET}
+      NODE_ENV: production
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/livocall}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://web:3000}
+      WEB_SHARED_SECRET: ${VOICE_SHARED_SECRET}
+      VOICE_SERVICE_TOKEN: ${VOICE_SERVICE_TOKEN}
+
       VOICE_WS_SHARED_SECRET: ${VOICE_WS_SHARED_SECRET}
-      FS_HOST: host.docker.internal
-      FS_ESL_PORT: '8021'
+      VOICE_WS_PUBLIC_URL: ${VOICE_WS_PUBLIC_URL:-wss://voice.yourdomain.com/ws/audio}
+
+      FS_HOST: ${FS_HOST:-host.docker.internal}
+      FS_ESL_PORT: ${FS_ESL_PORT:-8021}
       FS_ESL_PASSWORD: ${FS_ESL_PASSWORD}
+      FS_DEFAULT_GATEWAY: ${FS_DEFAULT_GATEWAY:-sip_custom}
+
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
+      CARTESIA_API_KEY: ${CARTESIA_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+
       RECORDINGS_LOCAL_DIR: /recordings
       S3_RECORDINGS_BUCKET: ${S3_RECORDINGS_BUCKET:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+
       SENTRY_DSN: ${SENTRY_DSN:-}
-      ENABLE_CAMPAIGN_DIALER: 'true'
-      ENABLE_KB_INGESTOR: 'true'
-      ENABLE_WEBHOOK_SCHEDULER: 'true'
+      ENABLE_CAMPAIGN_DIALER: ${ENABLE_CAMPAIGN_DIALER:-true}
+      ENABLE_KB_INGESTOR: ${ENABLE_KB_INGESTOR:-true}
+      ENABLE_WEBHOOK_SCHEDULER: ${ENABLE_WEBHOOK_SCHEDULER:-true}
+      VOICE_FAKE_DRIVER: ${VOICE_FAKE_DRIVER:-false}
     volumes:
       - fs-recordings:/recordings:ro
     ports:
-      - '8080:8080'
+      - "8084:8084"
 
   web:
     image: ghcr.io/livocall/web:latest
     restart: unless-stopped
-    depends_on: [mongo]
+    depends_on:
+      - mongo
+      - voice
     environment:
-      MONGODB_URL: mongodb://mongo:27017/livocall
-      VOICE_SERVICE_URL: http://voice:8080
-      VOICE_SHARED_SECRET: ${VOICE_SHARED_SECRET}
-      WEB_SHARED_SECRET: ${WEB_SHARED_SECRET}
-      SESSION_PASSWORD: ${SESSION_PASSWORD}
-      MAGIC_LINK_SECRET: ${MAGIC_LINK_SECRET}
       NODE_ENV: production
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://app.yourdomain.com}
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/livocall}
+
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?Set the Clerk publishable key for production}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?Set the Clerk secret key for production}
+
+      SIP_CREDENTIAL_SECRET: ${SIP_CREDENTIAL_SECRET}
+      SECRETS_VAULT_KEY: ${SECRETS_VAULT_KEY:-}
+
+      VOICE_SERVICE_URL: ${VOICE_SERVICE_URL:-http://voice:8084}
+      VOICE_SERVICE_TOKEN: ${VOICE_SERVICE_TOKEN}
+      VOICE_SHARED_SECRET: ${VOICE_SHARED_SECRET}
+
+      FREESWITCH_CONFIG_TOKEN: ${FREESWITCH_CONFIG_TOKEN:-}
+
+      FILE_STORAGE_BUCKET: ${FILE_STORAGE_BUCKET:-}
+      FILE_STORAGE_REGION: ${FILE_STORAGE_REGION:-auto}
+      FILE_STORAGE_ENDPOINT: ${FILE_STORAGE_ENDPOINT:-}
+      FILE_STORAGE_ACCESS_KEY_ID: ${FILE_STORAGE_ACCESS_KEY_ID:-}
+      FILE_STORAGE_SECRET_ACCESS_KEY: ${FILE_STORAGE_SECRET_ACCESS_KEY:-}
+      FILE_STORAGE_FORCE_PATH_STYLE: ${FILE_STORAGE_FORCE_PATH_STYLE:-false}
+      FILE_STORAGE_PUBLIC_BASE_URL: ${FILE_STORAGE_PUBLIC_BASE_URL:-}
+
+      PAYSTATION_MERCHANT_ID: ${PAYSTATION_MERCHANT_ID:-}
+      PAYSTATION_PASSWORD: ${PAYSTATION_PASSWORD:-}
+      PAYSTATION_BASE_URL: ${PAYSTATION_BASE_URL:-https://api.paystation.com.bd}
+
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
-      - '3000:3000'
+      - "3000:3000"
 
 volumes:
   mongo-data:
   redis-data:
+  fs-state:
   fs-recordings:

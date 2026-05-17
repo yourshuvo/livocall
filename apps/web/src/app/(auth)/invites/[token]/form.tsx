@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Show } from '@clerk/nextjs'
+import { SignedIn, SignedOut } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 
@@ -36,7 +36,7 @@ export function AcceptInviteForm({
 
   return (
     <div className="space-y-4">
-      <Show when="signed-out">
+      <SignedOut>
         <p className="rounded-md border border-line bg-bg-subtle px-4 py-3 text-[13px] text-fg-muted">
           Sign in or sign up with the invited email, then accept the workspace invitation to access its features.
         </p>
@@ -52,8 +52,8 @@ export function AcceptInviteForm({
             </Link>
           </Button>
         </div>
-      </Show>
-      <Show when="signed-in">
+      </SignedOut>
+      <SignedIn>
         <div className="mb-3 flex items-center gap-2 rounded-md border border-line bg-bg-subtle px-4 py-3 text-[12px] text-fg-muted">
           <Icon name="check-badge" size="sm" />
           <span>Ready to join this feature workspace.</span>
@@ -61,7 +61,7 @@ export function AcceptInviteForm({
         <Button type="button" onClick={acceptInvite} disabled={loading} className="w-full" size="lg">
           {loading ? 'Accepting…' : 'Accept invitation'}
         </Button>
-      </Show>
+      </SignedIn>
       {error && <p className="text-sm text-status-fail">{error}</p>}
     </div>
   )
