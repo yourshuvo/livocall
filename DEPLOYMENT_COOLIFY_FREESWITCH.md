@@ -173,6 +173,11 @@ Domain: https://app.yourdomain.com
 
 This repo includes `apps/web/nixpacks.toml` for Coolify Nixpacks. The web app is on Next.js 14, so `@clerk/nextjs` is pinned to the compatible Clerk 6 line. Do not upgrade Clerk to 7 unless you also upgrade Next.js to a Clerk-supported Next 15/16 release.
 
+The Nixpacks install phase intentionally calls `pnpm` directly with
+`--prod=false`. Do not add `corepack enable` here: the Nixpacks image already
+installs pnpm, and Corepack can fail signature verification in the Coolify build
+image before dependencies install.
+
 If you deploy with Dockerfile instead of Nixpacks, make sure your Dockerfile install step uses the pinned package version from `apps/web/package.json`.
 
 Set environment variables:
