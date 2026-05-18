@@ -1,10 +1,7 @@
 'use client'
 import type { ReactNode } from 'react'
-import { Icon } from '@/components/ui/icon'
-
 export function TopBar({
   title,
-  searchPlaceholder,
   actions,
 }: {
   title: string
@@ -21,12 +18,6 @@ export function TopBar({
           {title}
         </h1>
       </div>
-      {searchPlaceholder && (
-        <div className="hidden h-9 min-w-[240px] items-center gap-2 rounded-md border border-line bg-bg-subtle px-3 text-[12.5px] text-fg-faint lg:flex">
-          <Icon name="search" size="xs" />
-          <span>{searchPlaceholder}</span>
-        </div>
-      )}
       {actions && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>}
     </div>
   )

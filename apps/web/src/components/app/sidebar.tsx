@@ -7,6 +7,7 @@ import { Icon, type IconName } from '@/components/ui/icon'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api-fetch'
 import { useToast } from '@/components/ui/toast'
+import { BrandIcon, Wordmark } from '@/components/wordmark'
 
 export interface WorkspaceSummary {
   orgId: string
@@ -83,101 +84,116 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <aside
-      className={cn(
-        'flex h-screen shrink-0 flex-col border-r border-line bg-bg transition-[width]',
-        collapsed ? 'w-[56px]' : 'w-[220px]',
-      )}
-    >
-      {/* Top: brand row */}
-      <div className="flex h-12 items-center justify-between px-3">
-        <Link href="/overview" className="flex items-center gap-2 text-fg">
-          {!collapsed ? (
-            <img 
-              src="https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779089995/file_00000000f26c71fa9ffe8fb9cb675e19_wxjm8x.png" 
-              alt="Brand Wordmark" 
-              className="h-6 w-auto" 
-            />
-          ) : (
-            <img 
-              src="https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779084797/file_0000000019fc72079de24940c9d76d56_lki6kr.png" 
-              alt="Brand Icon" 
-              className="h-6 w-auto" 
-            />
-          )}
-        </Link>
-        <button
-          type="button"
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed((v) => !v)}
-          className="grid size-6 place-items-center rounded-[4px] text-fg-faint transition hover:bg-bg-muted hover:text-fg"
-        >
-          <Icon name="panel-left" size="sm" />
-        </button>
-      </div>
-
-      {/* Workspace switcher */}
-      {!collapsed && (
-      <div className="px-2 pb-2">
-        <WorkspaceSwitcher
-          orgName={orgName}
-          orgId={orgId}
-          memberships={memberships}
-          role={role}
-        />
-      </div>
-      )}
-
-      {/* Nav sections */}
-      <nav className="flex-1 overflow-y-auto px-2 pb-3">
-        {SECTIONS.map((section) => (
-          <NavGroup
-            key={section.label}
-            section={section}
-            pathname={pathname}
-            role={role}
-            collapsed={collapsed}
-          />
-        ))}
-      </nav>
-
-      {/* Free trial card */}
-      {!collapsed && (
-      <div className="px-2 pb-2">
-        <FreeTrialCard initialCreditsPaisa={creditsPaisa} />
-      </div>
-      )}
-
-      {/* Account selector */}
-      {!collapsed && (
-      <div className="border-t border-line px-2 pt-2">
-        <AccountSelector email={email} />
-        <div className="flex flex-wrap items-center gap-x-0.5 gap-y-0.5 pb-2 pt-1">
+    <>
+      <MobileNav role={role} creditsPaisa={creditsPaisa} />
+      <aside
+        className={cn(
+          'hidden h-dvh shrink-0 flex-col border-r border-line bg-bg transition-[width] md:flex',
+          collapsed ? 'w-[64px]' : 'w-[248px]',
+        )}
+      >
+        {/* Top: brand row */}
+        <div className="flex h-16 items-center justify-between px-3">
+          <Link href="/overview" className="flex min-w-0 items-center gap-2 text-fg">
+            {!collapsed ? (
+              <Wordmark className="h-11 max-w-[196px]" />
+            ) : (
+              <BrandIcon className="size-10" />
+            )}
+          </Link>
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-1 text-[11.5px] text-fg-muted transition hover:bg-bg-muted hover:text-fg"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((v) => !v)}
+            className="grid size-6 place-items-center rounded-[4px] text-fg-faint transition hover:bg-bg-muted hover:text-fg"
           >
-            <Icon name="help" size="xs" />
-            Help
+            <Icon name="panel-left" size="sm" />
           </button>
-          <span aria-hidden className="text-[10px] text-fg-faint">
-            ·
-          </span>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-1 text-[11.5px] text-fg-muted transition hover:bg-bg-muted hover:text-fg"
-          >
-            <Icon name="zap" size="xs" />
-            Updates
-          </button>
-          <span aria-hidden className="text-[10px] text-fg-faint">
-            ·
-          </span>
         </div>
-      </div>
-      )}
-    </aside>
+
+        {/* Workspace switcher */}
+        {!collapsed && (
+          <div className="px-2 pb-2">
+            <WorkspaceSwitcher
+              orgName={orgName}
+              orgId={orgId}
+              memberships={memberships}
+              role={role}
+            />
+          </div>
+        )}
+
+        {/* Nav sections */}
+        <nav className="flex-1 overflow-y-auto px-2 pb-3">
+          {SECTIONS.map((section) => (
+            <NavGroup
+              key={section.label}
+              section={section}
+              pathname={pathname}
+              role={role}
+              collapsed={collapsed}
+            />
+          ))}
+        </nav>
+
+        {/* Balance warning */}
+        {!collapsed && (
+          <div className="px-2 pb-2">
+            <BalanceWarningCard initialCreditsPaisa={creditsPaisa} />
+          </div>
+        )}
+
+        {/* Account selector */}
+        {!collapsed && (
+          <div className="border-t border-line px-2 pb-2 pt-2">
+            <AccountSelector email={email} />
+          </div>
+        )}
+      </aside>
+    </>
+  )
+}
+
+function MobileNav({ role, creditsPaisa }: { role: string; creditsPaisa: number }) {
+  const pathname = usePathname()
+  const items = [
+    { href: '/overview', icon: 'dashboard', label: 'Home' },
+    { href: '/agents', icon: 'bot', label: 'Agents' },
+    { href: '/calls', icon: 'phone-call', label: 'Calls' },
+    ...(role === 'owner' || role === 'admin'
+      ? [{ href: '/numbers', icon: 'hash', label: 'Numbers' }]
+      : []),
+    {
+      href: creditsPaisa <= LOW_BALANCE_PAISA ? '/billing' : '/settings',
+      icon: creditsPaisa <= LOW_BALANCE_PAISA ? 'wallet' : 'settings',
+      label: creditsPaisa <= LOW_BALANCE_PAISA ? 'Balance' : 'More',
+    },
+  ] as NavItem[]
+  const gridClass = items.length >= 5 ? 'grid-cols-5' : 'grid-cols-4'
+
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 px-2 pb-[env(safe-area-inset-bottom)] pt-1.5 backdrop-blur md:hidden">
+      <ul className={cn('grid gap-1', gridClass)}>
+        {items.slice(0, 5).map((item) => {
+          const active = pathname === item.href || pathname.startsWith(item.href + '/')
+          return (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                className={cn(
+                  'flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md text-[10.5px] transition',
+                  active ? 'bg-bg-muted text-fg' : 'text-fg-muted hover:bg-bg-muted/60 hover:text-fg',
+                )}
+              >
+                <Icon name={item.icon} size="sm" />
+                <span className="max-w-full truncate">{item.label}</span>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
   )
 }
 
@@ -197,9 +213,9 @@ function NavGroup({
   return (
     <div className="mb-3">
       {!collapsed && (
-      <p className="px-2 pb-1 pt-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-fg-faint">
-        {section.label}
-      </p>
+        <p className="px-2 pb-1 pt-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-fg-faint">
+          {section.label}
+        </p>
       )}
       <ul className="space-y-px">
         {items.map((it) => {
@@ -273,7 +289,7 @@ function WorkspaceSwitcher({
   }
 
   const initials = orgName.slice(0, 1).toUpperCase()
-  const truncated = orgName.length > 14 ? `${orgName.slice(0, 14)}…` : orgName
+  const truncated = orgName.length > 14 ? `${orgName.slice(0, 14)}...` : orgName
 
   return (
     <div className="relative">
@@ -331,7 +347,9 @@ function WorkspaceSwitcher({
   )
 }
 
-function FreeTrialCard({ initialCreditsPaisa }: { initialCreditsPaisa: number }) {
+const LOW_BALANCE_PAISA = 10_000
+
+function BalanceWarningCard({ initialCreditsPaisa }: { initialCreditsPaisa: number }) {
   const [credits, setCredits] = useState(initialCreditsPaisa)
   useEffect(() => {
     let cancelled = false
@@ -356,34 +374,19 @@ function FreeTrialCard({ initialCreditsPaisa }: { initialCreditsPaisa: number })
     currency: 'BDT',
     maximumFractionDigits: 0,
   }).format(credits / 100)
+  if (credits > LOW_BALANCE_PAISA) return null
   return (
-    <div className="rounded-[6px] border border-line bg-bg-subtle/60 p-2.5">
+    <div className="rounded-[6px] border border-status-warn/35 bg-status-warn-soft/60 p-2.5">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-fg">
-          <Icon name="sparkles" size="xs" className="text-sky-500" />
-          Free Trial
+          <Icon name="wallet" size="xs" className="text-status-warn" />
+          Low balance
         </span>
-        <button
-          type="button"
-          aria-label="Dismiss"
-          className="grid size-4 place-items-center rounded-sm text-fg-faint transition hover:bg-bg-muted hover:text-fg"
-        >
-          <Icon name="x" size="xs" />
-        </button>
       </div>
       <dl className="space-y-0.5 text-[11px] leading-tight">
         <div className="flex items-center justify-between text-fg-muted">
-          <dt>Remaining:</dt>
+          <dt>Balance:</dt>
           <dd className="font-medium text-fg">{bdt}</dd>
-        </div>
-        <div className="flex items-center justify-between text-fg-muted">
-          <dt className="inline-flex items-center gap-1">
-            Concurrency Used:
-            <span className="grid size-3 place-items-center rounded-full bg-bg-muted text-[8px] text-fg-faint">
-              ?
-            </span>
-          </dt>
-          <dd className="font-medium text-fg">0/20</dd>
         </div>
       </dl>
       <Link
@@ -391,7 +394,7 @@ function FreeTrialCard({ initialCreditsPaisa }: { initialCreditsPaisa: number })
         className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-[5px] bg-fg px-2 py-1.5 text-[11.5px] font-medium text-fg-inverse transition hover:bg-fg-strong"
       >
         <Icon name="arrow-up-right" size="xs" />
-        Add Payment
+        Top up balance
       </Link>
     </div>
   )

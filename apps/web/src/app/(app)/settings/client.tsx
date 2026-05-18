@@ -4,6 +4,7 @@ import { Card, CardBody, CardTitle, CardDescription } from '@/components/ui/card
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Icon } from '@/components/ui/icon'
@@ -337,11 +338,15 @@ function OrgForm({ initial, canAdmin }: { initial: Org; canAdmin: boolean }) {
         </div>
         <div className="md:col-span-2 grid gap-4 rounded-md border border-line bg-bg-subtle p-4 md:grid-cols-2">
           <label className="flex items-center gap-2 text-[13px] text-fg">
-            <input type="checkbox" checked={piiRedaction} onChange={(e) => setPiiRedaction(e.target.checked)} disabled={!canAdmin} />
+            <Switch checked={piiRedaction} onChange={setPiiRedaction} disabled={!canAdmin} />
             Redact PII in transcripts and exports
           </label>
           <label className="flex items-center gap-2 text-[13px] text-fg">
-            <input type="checkbox" checked={detectOptOutSpeech} onChange={(e) => setDetectOptOutSpeech(e.target.checked)} disabled={!canAdmin} />
+            <Switch
+              checked={detectOptOutSpeech}
+              onChange={setDetectOptOutSpeech}
+              disabled={!canAdmin}
+            />
             Detect opt-out speech and add callers to DNC
           </label>
           <div>
@@ -353,7 +358,11 @@ function OrgForm({ initial, canAdmin }: { initial: Org; canAdmin: boolean }) {
             <Input className="mt-2" type="number" min={1} value={auditRetentionDays} onChange={(e) => setAuditRetentionDays(e.target.value)} disabled={!canAdmin} />
           </div>
           <label className="flex items-center gap-2 text-[13px] text-fg md:col-span-2">
-            <input type="checkbox" checked={agentRoleCanExport} onChange={(e) => setAgentRoleCanExport(e.target.checked)} disabled={!canAdmin} />
+            <Switch
+              checked={agentRoleCanExport}
+              onChange={setAgentRoleCanExport}
+              disabled={!canAdmin}
+            />
             Allow agent role to export calls and transcripts
           </label>
         </div>

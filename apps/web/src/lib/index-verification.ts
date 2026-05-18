@@ -7,6 +7,7 @@ import { Campaign } from '@/models/Campaign'
 import { CampaignAttempt } from '@/models/CampaignAttempt'
 import { DncEntry } from '@/models/DncEntry'
 import { KnowledgeBase } from '@/models/KnowledgeBase'
+import { MissedCallback } from '@/models/MissedCallback'
 import { Secret } from '@/models/Secret'
 import { User } from '@/models/User'
 
@@ -19,6 +20,7 @@ const MODELS: Model<never>[] = [
   CampaignAttempt as unknown as Model<never>,
   DncEntry as unknown as Model<never>,
   KnowledgeBase as unknown as Model<never>,
+  MissedCallback as unknown as Model<never>,
   Secret as unknown as Model<never>,
   User as unknown as Model<never>,
 ]

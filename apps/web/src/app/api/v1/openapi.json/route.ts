@@ -131,7 +131,32 @@ const spec = {
           providerSlug: { type: 'string' },
           inboundEnabled: { type: 'boolean' },
           outboundEnabled: { type: 'boolean' },
+          autoCallback: { $ref: '#/components/schemas/AutoCallbackConfig' },
           agentId: { type: 'string', nullable: true },
+        },
+      },
+      AutoCallbackConfig: {
+        type: 'object',
+        properties: {
+          enabled: { type: 'boolean' },
+          eligibleOutcomes: {
+            type: 'array',
+            items: { type: 'string', enum: ['no_answer', 'busy', 'failed', 'voicemail'] },
+          },
+          delaySeconds: { type: 'integer', minimum: 0, maximum: 86400 },
+          maxAttempts: { type: 'integer', minimum: 1, maximum: 5 },
+          retryDelayMinutes: { type: 'integer', minimum: 1, maximum: 10080 },
+          cooldownMinutesPerCaller: { type: 'integer', minimum: 0, maximum: 10080 },
+          maxCallbacksPerDay: { type: 'integer', minimum: 1, maximum: 10000 },
+          quietHours: {
+            type: 'object',
+            properties: {
+              enabled: { type: 'boolean' },
+              fromMinutes: { type: 'integer', minimum: 0, maximum: 1439 },
+              toMinutes: { type: 'integer', minimum: 0, maximum: 1439 },
+              timezone: { type: 'string', default: 'Asia/Dhaka' },
+            },
+          },
         },
       },
       Contact: {
@@ -280,8 +305,45 @@ const spec = {
       get: { summary: 'List phone numbers', responses: { '200': { description: 'OK' } } },
       post: {
         summary: 'Connect a phone number',
-        requestBody: { required: true, content: { 'application/json': {} } },
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  autoCallback: { $ref: '#/components/schemas/AutoCallbackConfig' },
+                },
+              },
+            },
+          },
+        },
         responses: { '201': { description: 'Created' } },
+      },
+    },
+    '/api/v1/numbers/{id}': {
+      get: {
+        summary: 'Retrieve a phone number',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'OK' } },
+      },
+      patch: {
+        summary: 'Update a phone number',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  autoCallback: { $ref: '#/components/schemas/AutoCallbackConfig' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'OK' } },
       },
     },
     '/api/v1/contacts': {

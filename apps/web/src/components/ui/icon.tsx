@@ -258,8 +258,7 @@ export function Icon({
   if (!square) {
     return (
       <span
-        role="img"
-        aria-label={name}
+        aria-hidden="true"
         className={cn('inline-flex items-center justify-center text-current', className)}
       >
         {glyph}
@@ -269,8 +268,7 @@ export function Icon({
 
   return (
     <span
-      role="img"
-      aria-label={name}
+      aria-hidden="true"
       className={cn(
         'inline-flex items-center justify-center rounded-[6px] border border-line bg-bg-subtle text-fg-muted',
         tileSize[size],

@@ -10,6 +10,7 @@ import { requireRole } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
+import { AutoCallbackConfigSchema } from '@/lib/auto-callback'
 
 const Body = z.object({
   e164: z.string().regex(/^\+\d{8,15}$/, 'must be E.164'),
@@ -29,6 +30,7 @@ const Body = z.object({
   agentId: z.string().optional(),
   inboundEnabled: z.boolean().optional().default(true),
   outboundEnabled: z.boolean().optional().default(true),
+  autoCallback: AutoCallbackConfigSchema,
 })
 
 export const GET = withErrors(async () => {

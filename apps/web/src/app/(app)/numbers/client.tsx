@@ -29,6 +29,7 @@ interface NumberItem {
   agentId: string | null
   inboundEnabled: boolean
   outboundEnabled: boolean
+  autoCallback: AutoCallbackConfig
   createdAt: string | null
 }
 
@@ -36,6 +37,31 @@ interface AgentRef {
   id: string
   name: string
 }
+
+type CallbackOutcome = 'no_answer' | 'busy' | 'failed' | 'voicemail'
+
+interface AutoCallbackConfig {
+  enabled: boolean
+  eligibleOutcomes: CallbackOutcome[]
+  delaySeconds: number
+  maxAttempts: number
+  retryDelayMinutes: number
+  cooldownMinutesPerCaller: number
+  maxCallbacksPerDay: number
+  quietHours: {
+    enabled: boolean
+    fromMinutes: number
+    toMinutes: number
+    timezone: string
+  }
+}
+
+const CALLBACK_OUTCOMES: { key: CallbackOutcome; label: string }[] = [
+  { key: 'no_answer', label: 'No answer' },
+  { key: 'busy', label: 'Busy' },
+  { key: 'failed', label: 'Failed' },
+  { key: 'voicemail', label: 'Voicemail' },
+]
 
 export function NumbersClient({
   initial,
@@ -52,6 +78,7 @@ export function NumbersClient({
   const [sipPassword, setSipPassword] = useState('')
   const [agentId, setAgentId] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
+  const [openCallbackFor, setOpenCallbackFor] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const { toast } = useToast()
 
@@ -105,6 +132,27 @@ export function NumbersClient({
         toast((e as Error).message, 'error')
       }
     })
+  }
+
+  function patchAutoCallback(number: NumberItem, patchValue: Partial<AutoCallbackConfig>) {
+    patch(number.id, { autoCallback: { ...number.autoCallback, ...patchValue } } as Partial<NumberItem>)
+  }
+
+  function patchQuietHours(
+    number: NumberItem,
+    patchValue: Partial<AutoCallbackConfig['quietHours']>,
+  ) {
+    patchAutoCallback(number, {
+      quietHours: { ...number.autoCallback.quietHours, ...patchValue },
+    })
+  }
+
+  function toggleEligibleOutcome(number: NumberItem, outcome: CallbackOutcome) {
+    const current = number.autoCallback.eligibleOutcomes
+    const next = current.includes(outcome)
+      ? current.filter((item) => item !== outcome)
+      : [...current, outcome]
+    patchAutoCallback(number, { eligibleOutcomes: next.length ? next : ['no_answer'] })
   }
 
   function remove(id: string) {
@@ -180,7 +228,7 @@ export function NumbersClient({
                 onChange={(e) => setAgentId(e.target.value)}
                 className="mt-2 h-10 w-full rounded border border-line bg-bg-subtle px-3 text-sm"
               >
-                <option value="">— none —</option>
+                <option value="">-- none --</option>
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
@@ -217,7 +265,10 @@ export function NumbersClient({
           </CardBody>
         ) : (
           <ul className="divide-y divide-line">
-            {items.map((n) => (
+            {items.map((n) => {
+              const callbackBlocked = !n.agentId || !n.outboundEnabled
+              const callbackOpen = openCallbackFor === n.id
+              return (
               <li
                 key={n.id}
                 className="flex flex-wrap items-center gap-4 px-5 py-4 transition hover:bg-bg-subtle/40"
@@ -270,14 +321,197 @@ export function NumbersClient({
                   />
                   outbound
                 </label>
+                <label className="inline-flex items-center gap-1.5 text-[11.5px]">
+                  <input
+                    type="checkbox"
+                    checked={n.autoCallback.enabled}
+                    onChange={(e) => patchAutoCallback(n, { enabled: e.target.checked })}
+                    disabled={pending || (callbackBlocked && !n.autoCallback.enabled)}
+                  />
+                  auto callback
+                </label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOpenCallbackFor(callbackOpen ? null : n.id)}
+                >
+                  Callback settings
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => remove(n.id)}>
                   Remove
                 </Button>
+                {callbackOpen && (
+                  <div className="basis-full rounded-md border border-line bg-bg p-4">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[13px] font-medium text-fg">Auto callback policy</p>
+                        <p className="mt-0.5 text-[12px] text-fg-muted">
+                          Calls the missed caller back with this number&apos;s assigned agent.
+                        </p>
+                      </div>
+                      {callbackBlocked && (
+                        <Badge variant="outline">
+                          {!n.agentId ? 'assign an agent first' : 'enable outbound first'}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      <div>
+                        <Label>Callback delay (seconds)</Label>
+                        <Input
+                          className="mt-2"
+                          type="number"
+                          min={0}
+                          max={86400}
+                          value={n.autoCallback.delaySeconds}
+                          onChange={(e) =>
+                            patchAutoCallback(n, { delaySeconds: Number(e.target.value) || 0 })
+                          }
+                          disabled={pending}
+                        />
+                      </div>
+                      <div>
+                        <Label>Max attempts</Label>
+                        <Input
+                          className="mt-2"
+                          type="number"
+                          min={1}
+                          max={5}
+                          value={n.autoCallback.maxAttempts}
+                          onChange={(e) =>
+                            patchAutoCallback(n, { maxAttempts: Number(e.target.value) || 1 })
+                          }
+                          disabled={pending}
+                        />
+                      </div>
+                      <div>
+                        <Label>Retry delay (minutes)</Label>
+                        <Input
+                          className="mt-2"
+                          type="number"
+                          min={1}
+                          max={10080}
+                          value={n.autoCallback.retryDelayMinutes}
+                          onChange={(e) =>
+                            patchAutoCallback(n, {
+                              retryDelayMinutes: Number(e.target.value) || 10,
+                            })
+                          }
+                          disabled={pending}
+                        />
+                      </div>
+                      <div>
+                        <Label>Daily callback limit</Label>
+                        <Input
+                          className="mt-2"
+                          type="number"
+                          min={1}
+                          max={10000}
+                          value={n.autoCallback.maxCallbacksPerDay}
+                          onChange={(e) =>
+                            patchAutoCallback(n, {
+                              maxCallbacksPerDay: Number(e.target.value) || 50,
+                            })
+                          }
+                          disabled={pending}
+                        />
+                      </div>
+                      <div>
+                        <Label>Caller cooldown (minutes)</Label>
+                        <Input
+                          className="mt-2"
+                          type="number"
+                          min={0}
+                          max={10080}
+                          value={n.autoCallback.cooldownMinutesPerCaller}
+                          onChange={(e) =>
+                            patchAutoCallback(n, {
+                              cooldownMinutesPerCaller: Number(e.target.value) || 0,
+                            })
+                          }
+                          disabled={pending}
+                        />
+                      </div>
+                      <div>
+                        <Label>Quiet starts</Label>
+                        <Input
+                          className="mt-2"
+                          type="time"
+                          value={minutesToTime(n.autoCallback.quietHours.fromMinutes)}
+                          onChange={(e) =>
+                            patchQuietHours(n, { fromMinutes: timeToMinutes(e.target.value) })
+                          }
+                          disabled={pending || !n.autoCallback.quietHours.enabled}
+                        />
+                      </div>
+                      <div>
+                        <Label>Quiet ends</Label>
+                        <Input
+                          className="mt-2"
+                          type="time"
+                          value={minutesToTime(n.autoCallback.quietHours.toMinutes)}
+                          onChange={(e) =>
+                            patchQuietHours(n, { toMinutes: timeToMinutes(e.target.value) })
+                          }
+                          disabled={pending || !n.autoCallback.quietHours.enabled}
+                        />
+                      </div>
+                      <div>
+                        <Label>Timezone</Label>
+                        <Input
+                          className="mt-2"
+                          value={n.autoCallback.quietHours.timezone}
+                          onChange={(e) => patchQuietHours(n, { timezone: e.target.value })}
+                          disabled={pending || !n.autoCallback.quietHours.enabled}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <label className="inline-flex items-center gap-1.5 text-[12px]">
+                        <input
+                          type="checkbox"
+                          checked={n.autoCallback.quietHours.enabled}
+                          onChange={(e) => patchQuietHours(n, { enabled: e.target.checked })}
+                          disabled={pending}
+                        />
+                        Respect quiet hours
+                      </label>
+                      <span className="text-[12px] text-fg-muted">Trigger on:</span>
+                      {CALLBACK_OUTCOMES.map((outcome) => (
+                        <label key={outcome.key} className="inline-flex items-center gap-1.5 text-[12px]">
+                          <input
+                            type="checkbox"
+                            checked={n.autoCallback.eligibleOutcomes.includes(outcome.key)}
+                            onChange={() => toggleEligibleOutcome(n, outcome.key)}
+                            disabled={pending}
+                          />
+                          {outcome.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </li>
-            ))}
+            )})}
           </ul>
         )}
       </Card>
     </div>
   )
+}
+
+function minutesToTime(minutes: number) {
+  const h = Math.floor(minutes / 60)
+    .toString()
+    .padStart(2, '0')
+  const m = (minutes % 60).toString().padStart(2, '0')
+  return `${h}:${m}`
+}
+
+function timeToMinutes(value: string) {
+  const [h, m] = value.split(':').map((part) => Number(part))
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0
+  return Math.max(0, Math.min(1439, h * 60 + m))
 }

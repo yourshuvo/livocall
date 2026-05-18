@@ -65,9 +65,22 @@ export function MembersClient({
   }
 
   useEffect(() => {
-    void refresh()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    let cancelled = false
+    async function load() {
+      try {
+        const j = await api.get<MembersPayload>('/api/settings/members')
+        if (!cancelled) setData(j)
+      } catch (e) {
+        if (!cancelled) toast((e as Error).message, 'error')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [toast])
 
   function invite(e: React.FormEvent) {
     e.preventDefault()

@@ -922,7 +922,7 @@ export function AgentEditor({
   const tokenBudget = modelDef?.tokenBudget ?? '—'
 
   return (
-    <div className="flex h-screen min-w-0 flex-1 flex-col">
+    <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
       {/* Top header */}
       <div className="border-line bg-bg flex items-center gap-2 border-b px-3 py-2">
         <Link
@@ -1092,7 +1092,7 @@ export function AgentEditor({
       </div>
 
       {/* Body — 3 columns */}
-      <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)_120px]">
+      <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)_120px] lg:overflow-hidden">
         {/* LEFT — prompt editor */}
         <div className="bg-bg flex min-w-0 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1189,7 +1189,7 @@ export function AgentEditor({
         </div>
 
         {/* MIDDLE — accordion config */}
-        <aside className="border-line bg-bg-subtle/50 hidden min-w-0 flex-col overflow-y-auto border-l lg:flex">
+        <aside className="border-line bg-bg-subtle/50 flex min-w-0 flex-col overflow-y-auto border-t lg:border-l lg:border-t-0">
           <Accordion
             label="Functions"
             icon="zap"
@@ -1982,7 +1982,7 @@ export function AgentEditor({
         </aside>
 
         {/* RIGHT — test rail */}
-        <aside className="border-line bg-bg-subtle/40 hidden min-w-0 flex-col border-l lg:flex">
+        <aside className="border-line bg-bg-subtle/40 flex min-w-0 flex-col border-t lg:border-l lg:border-t-0">
           <div className="border-line flex flex-col items-stretch gap-1.5 border-b px-2 py-2">
             <TestTab
               icon="speaker"

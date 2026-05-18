@@ -32,9 +32,9 @@ export default function AgentsLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname() ?? '/agents'
   const showRail = LIST_ROUTES.has(pathname)
   return (
-    <div className="flex h-screen">
+    <div className="flex min-h-full">
       {showRail && <SubNav title="All Agents" rootHref="/agents" groups={AGENT_GROUPS} />}
-      <div className="flex h-screen min-w-0 flex-1 flex-col">{children}</div>
+      <div className="flex min-h-full min-w-0 flex-1 flex-col">{children}</div>
     </div>
   )
 }

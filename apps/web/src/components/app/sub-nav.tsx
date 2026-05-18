@@ -35,7 +35,7 @@ export function SubNav({
   const pathname = usePathname()
   const rootActive = pathname === rootHref
   return (
-    <aside className="hidden h-screen w-[200px] shrink-0 flex-col border-r border-line bg-bg-subtle/50 md:flex">
+    <aside className="hidden h-dvh w-[200px] shrink-0 flex-col border-r border-line bg-bg-subtle/50 md:flex">
       <div className="flex h-12 items-center justify-between border-b border-line px-3">
         <Link
           href={rootHref}

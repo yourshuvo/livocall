@@ -7,7 +7,7 @@ import { LangSwitcher } from '@/components/lang-switcher'
 import { MarketingFooter } from '@/components/marketing/footer'
 import { FaqList } from '@/components/marketing/faq-list'
 import { PricingTable } from '@/components/marketing/pricing-table'
-import { Wordmark } from '@/components/wordmark'
+import { BrandIcon, Wordmark } from '@/components/wordmark'
 import { Button } from '@/components/ui/button'
 import { Icon, type IconName } from '@/components/ui/icon'
 import { getLocaleFromCookie, type Locale } from '@/lib/i18n'
@@ -156,8 +156,8 @@ function Hero({ locale }: { locale: Locale }) {
             </Button>
             <Button asChild size="lg" variant="secondary" className="rounded-full bg-white/80 px-5">
               <Link href="#product">
-                <span className="grid size-6 place-items-center rounded-full border border-line bg-bg">
-                  <Icon name="phone-call" size="xs" square={false} />
+                <span className="grid size-8 place-items-center rounded-full border border-line bg-bg">
+                  <BrandIcon className="size-6" />
                 </span>
                 View product
               </Link>
@@ -193,11 +193,9 @@ function HomepageNav({ locale }: { locale: Locale }) {
     <div className="z-50 px-4 py-4 sm:px-6 w-full flex justify-center">
       <header className="flex w-full max-w-5xl items-center justify-between gap-4 rounded-full border border-white/50 bg-white/40 px-3 py-2 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl md:px-5">
         <Link href="/" className="inline-flex items-center gap-2 group">
-          <span className="grid size-9 place-items-center rounded-full bg-fg text-fg-inverse shadow-sm transition-transform group-hover:scale-105">
-            <Icon name="phone-call" size="sm" square={false} />
-          </span>
+          <BrandIcon className="size-12 shrink-0 transition-transform group-hover:scale-105" />
           <span className="hidden sm:inline-block transition-opacity group-hover:opacity-80">
-            <Wordmark />
+            <Wordmark className="h-10" />
           </span>
         </Link>
 

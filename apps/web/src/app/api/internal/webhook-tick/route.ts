@@ -11,6 +11,7 @@ import { apiError, withErrors } from '@/lib/errors'
 import { connectMongo } from '@/lib/db'
 import { runCampaignTick } from '@/lib/campaign-runner'
 import { runComplianceRetention } from '@/lib/compliance'
+import { runMissedCallbackTick } from '@/lib/missed-callbacks'
 
 const SHARED_SECRET = process.env.VOICE_SHARED_SECRET || ''
 
@@ -23,12 +24,13 @@ function authOk(req: Request): boolean {
 export const POST = withErrors(async (req: Request) => {
   if (!authOk(req)) return apiError('unauthenticated')
   await connectMongo()
-  const [delivered, campaigns, compliance] = await Promise.all([
+  const [delivered, campaigns, missedCallbacks, compliance] = await Promise.all([
     processWebhookQueue(32),
     runCampaignTick(32),
+    runMissedCallbackTick(32),
     runComplianceRetention(),
   ])
-  return NextResponse.json({ delivered, campaigns, compliance })
+  return NextResponse.json({ delivered, campaigns, missedCallbacks, compliance })
 })
 
 export const GET = POST

@@ -140,7 +140,7 @@ function AgentsTable({
                       <span className="grid size-5 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-400 to-sky-600 text-[10px] font-semibold text-white">
                         {a.name.charAt(0).toUpperCase()}
                       </span>
-                      <span className="truncate font-medium">{truncateMiddle(a.name, 18)}</span>
+                      <span className="truncate font-medium">{a.name}</span>
                     </Link>
                   </td>
                   <td className="px-4 py-3">
@@ -219,11 +219,6 @@ function EmptyAgents() {
       </CreateAgentButton>
     </div>
   )
-}
-
-function truncateMiddle(s: string, max: number) {
-  if (s.length <= max) return s
-  return `${s.slice(0, max - 1)}…`
 }
 
 function voiceLabel(a: AgentLean) {

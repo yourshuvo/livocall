@@ -18,6 +18,10 @@ import { emitDirectWebhook, emitWebhook } from '@/lib/webhooks'
 import { enforceTranscriptCompliance } from '@/lib/compliance'
 import { analyzeBusinessOutcome } from '@/lib/business-outcome-analyzer'
 import { campaignOutcomeStatus } from '@/lib/business-outcomes'
+import {
+  completeMissedCallbackAttempt,
+  enqueueMissedCallbackForCall,
+} from '@/lib/missed-callbacks'
 import { CampaignAttempt } from '@/models/CampaignAttempt'
 import { Campaign } from '@/models/Campaign'
 
@@ -156,6 +160,8 @@ export const POST = withErrors(async (req: Request) => {
       await updateCampaignAttemptWithBusinessOutcome(call)
     }
   }
+  await completeMissedCallbackAttempt(call)
+  await enqueueMissedCallbackForCall(call)
 
   if (data.cost && data.cost.totalPaisa > 0) {
     await postLedger({

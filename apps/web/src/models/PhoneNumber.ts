@@ -1,4 +1,34 @@
 import mongoose, { Schema, type InferSchemaType, type Model } from 'mongoose'
+import { DEFAULT_AUTO_CALLBACK_CONFIG } from '@/lib/auto-callback'
+
+const autoCallbackSchema = new Schema(
+  {
+    enabled: { type: Boolean, default: DEFAULT_AUTO_CALLBACK_CONFIG.enabled },
+    eligibleOutcomes: {
+      type: [String],
+      enum: ['no_answer', 'busy', 'failed', 'voicemail'],
+      default: () => [...DEFAULT_AUTO_CALLBACK_CONFIG.eligibleOutcomes],
+    },
+    delaySeconds: { type: Number, default: DEFAULT_AUTO_CALLBACK_CONFIG.delaySeconds },
+    maxAttempts: { type: Number, default: DEFAULT_AUTO_CALLBACK_CONFIG.maxAttempts },
+    retryDelayMinutes: {
+      type: Number,
+      default: DEFAULT_AUTO_CALLBACK_CONFIG.retryDelayMinutes,
+    },
+    cooldownMinutesPerCaller: {
+      type: Number,
+      default: DEFAULT_AUTO_CALLBACK_CONFIG.cooldownMinutesPerCaller,
+    },
+    maxCallbacksPerDay: { type: Number, default: DEFAULT_AUTO_CALLBACK_CONFIG.maxCallbacksPerDay },
+    quietHours: {
+      enabled: { type: Boolean, default: DEFAULT_AUTO_CALLBACK_CONFIG.quietHours.enabled },
+      fromMinutes: { type: Number, default: DEFAULT_AUTO_CALLBACK_CONFIG.quietHours.fromMinutes },
+      toMinutes: { type: Number, default: DEFAULT_AUTO_CALLBACK_CONFIG.quietHours.toMinutes },
+      timezone: { type: String, default: DEFAULT_AUTO_CALLBACK_CONFIG.quietHours.timezone },
+    },
+  },
+  { _id: false },
+)
 
 const phoneNumberSchema = new Schema(
   {
@@ -10,6 +40,7 @@ const phoneNumberSchema = new Schema(
     didRange: { type: String, default: '' },
     inboundEnabled: { type: Boolean, default: true },
     outboundEnabled: { type: Boolean, default: true },
+    autoCallback: { type: autoCallbackSchema, default: () => ({}) },
     agentId: { type: Schema.Types.ObjectId, ref: 'Agent' },
     sipServer: { type: String, default: '' },
     sipPort: { type: Number, default: 5060 },

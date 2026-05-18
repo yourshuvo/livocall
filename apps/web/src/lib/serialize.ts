@@ -16,6 +16,7 @@ import type { DncEntryLean } from '@/models/DncEntry'
 import type { OrgLean } from '@/models/Org'
 import type { UserDoc } from '@/models/User'
 import type { SecretLean } from '@/models/Secret'
+import { normalizeAutoCallbackConfig } from '@/lib/auto-callback'
 
 const id = (v: unknown) => (v ? String(v) : null)
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? String(v) : null)
@@ -145,10 +146,11 @@ export function phoneNumberToJson(p: PhoneNumberLean) {
     sipPasswordSet: Boolean(p.sipPasswordSet),
     sipRegister: p.sipRegister ?? true,
     sipTransport: p.sipTransport ?? 'udp',
-    sipCodecs: p.sipCodecs ?? 'PCMU@20i',
+    sipCodecs: p.sipCodecs ?? 'PCMU@20ms',
     agentId: p.agentId ? id(p.agentId) : null,
     inboundEnabled: p.inboundEnabled,
     outboundEnabled: p.outboundEnabled,
+    autoCallback: normalizeAutoCallbackConfig(p.autoCallback),
     createdAt: iso(p.createdAt),
   }
 }

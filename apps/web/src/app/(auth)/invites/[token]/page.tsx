@@ -19,12 +19,13 @@ export default async function AcceptInvitePage({
     return <InvalidInvite reason="Mongo is not configured." />
   }
   await connectMongo()
+  const now = new Date()
   const invite = await Invite.findOne({ tokenHash: hashToken(token) }).lean()
   if (
     !invite ||
     invite.acceptedAt ||
     invite.revokedAt ||
-    invite.expiresAt.getTime() < Date.now()
+    invite.expiresAt < now
   ) {
     return <InvalidInvite reason="This invite is invalid or has expired." />
   }

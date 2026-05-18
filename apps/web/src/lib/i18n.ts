@@ -11,12 +11,12 @@ const en: Dict = {
   'nav.pricing': 'Pricing',
   'nav.docs': 'Docs',
   'nav.signin': 'Sign in',
-  'nav.start': 'Start free',
+  'nav.start': 'Get started',
   'hero.eyebrow': 'Built for Bangladesh',
   'hero.title': 'Phone calls, automated.',
   'hero.subtitle':
     'Deploy Bangla and English voice agents for support, campaigns, reminders, and follow-up calls from ৳0.85 per minute.',
-  'hero.cta.primary': 'Start a free trial',
+  'hero.cta.primary': 'Start building',
   'hero.cta.secondary': 'Hear a demo call',
   'tiers.title': 'Three call types, one workspace',
   'tiers.subtitle':
@@ -77,7 +77,7 @@ const en: Dict = {
   'faq.eyebrow': 'Questions',
   'faq.title': 'Frequently asked',
   'cta.kicker': 'Ready when you are',
-  'cta.primary': 'Start a free trial',
+  'cta.primary': 'Start building',
   'cta.secondary': 'Talk to a human',
   'tier1.h1': 'Live support conversations',
   'tier1.h2': 'Native barge-in & interruption',

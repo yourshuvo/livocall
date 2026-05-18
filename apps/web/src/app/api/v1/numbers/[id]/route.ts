@@ -4,23 +4,16 @@ import { z } from 'zod'
 import { connectMongo } from '@/lib/db'
 import { PhoneNumber } from '@/models/PhoneNumber'
 import { Agent } from '@/models/Agent'
-import {
-  isResponse,
-  objectIdOr400,
-  requireDashboardSession,
-} from '@/lib/api-helpers'
+import { authV1, isResponse } from '@/lib/auth/v1'
 import { apiError, withErrors } from '@/lib/errors'
-import { requireRole } from '@/lib/rbac'
-import { recordAudit } from '@/lib/audit'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
 import { normalizeAutoCallbackConfig } from '@/lib/auto-callback'
 
 const Patch = z.object({
   agentId: z.string().nullable().optional(),
-  providerName: z.string().trim().min(1).max(80).optional(),
+  providerName: z.string().trim().max(80).optional(),
   providerSlug: z.string().trim().max(64).optional(),
-  didRange: z.string().max(120).optional(),
   sipServer: z.string().trim().min(1).max(255).optional(),
   sipPort: z.number().int().min(1).max(65535).optional(),
   sipProxy: z.string().trim().max(255).optional(),
@@ -37,31 +30,25 @@ const Patch = z.object({
 })
 
 export const GET = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const auth = await authV1(_req, 'numbers:read')
+  if (isResponse(auth)) return auth
   const { id } = await ctx.params
-  const s = await requireDashboardSession()
-  if (isResponse(s)) return s
-  const oid = objectIdOr400(id)
-  if (!oid) return apiError('invalid_input')
   await connectMongo()
-  const num = await PhoneNumber.findOne({ _id: oid, orgId: s.orgId }).lean()
-  if (!num) return apiError('not_found')
-  return NextResponse.json(phoneNumberToJson(num))
+  const number = await PhoneNumber.findOne({ _id: id, orgId: auth.orgId }).lean()
+  if (!number) return apiError('not_found', 'number not found')
+  return NextResponse.json(phoneNumberToJson(number))
 })
 
 export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const auth = await authV1(req, 'numbers:write')
+  if (isResponse(auth)) return auth
   const { id } = await ctx.params
-  const s = await requireDashboardSession()
-  if (isResponse(s)) return s
-  const forbidden = requireRole(s, 'admin')
-  if (forbidden) return forbidden
-  const oid = objectIdOr400(id)
-  if (!oid) return apiError('invalid_input')
   const body = Patch.parse(await req.json().catch(() => ({})))
   const autoCallback =
     body.autoCallback === undefined ? undefined : normalizeAutoCallbackConfig(body.autoCallback)
   await connectMongo()
   if (body.agentId) {
-    const agent = await Agent.findOne({ _id: body.agentId, orgId: s.orgId }).lean()
+    const agent = await Agent.findOne({ _id: body.agentId, orgId: auth.orgId }).lean()
     if (!agent) return apiError('invalid_input', 'agent does not belong to this org')
   }
   const providerSlug =
@@ -69,12 +56,11 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
       ? slugifySipProvider(body.providerSlug || body.providerName || '')
       : undefined
   const updated = await PhoneNumber.findOneAndUpdate(
-    { _id: oid, orgId: s.orgId },
+    { _id: id, orgId: auth.orgId },
     {
       $set: {
         ...(body.providerName !== undefined ? { providerName: body.providerName } : {}),
         ...(providerSlug !== undefined ? { providerSlug } : {}),
-        ...(body.didRange !== undefined ? { didRange: body.didRange } : {}),
         ...(body.sipServer !== undefined ? { sipServer: body.sipServer } : {}),
         ...(body.sipPort !== undefined ? { sipPort: body.sipPort } : {}),
         ...(body.sipProxy !== undefined ? { sipProxy: body.sipProxy } : {}),
@@ -102,30 +88,6 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
     },
     { new: true },
   ).lean()
-  if (!updated) return apiError('not_found')
-  const auditMeta = { ...body, ...(body.sipPassword !== undefined ? { sipPassword: '[redacted]' } : {}) }
-  await recordAudit(s, {
-    action: 'number.update',
-    resource: { type: 'PhoneNumber', id: String(updated._id) },
-    meta: auditMeta,
-  })
+  if (!updated) return apiError('not_found', 'number not found')
   return NextResponse.json(phoneNumberToJson(updated))
-})
-
-export const DELETE = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
-  const { id } = await ctx.params
-  const s = await requireDashboardSession()
-  if (isResponse(s)) return s
-  const forbidden = requireRole(s, 'admin')
-  if (forbidden) return forbidden
-  const oid = objectIdOr400(id)
-  if (!oid) return apiError('invalid_input')
-  await connectMongo()
-  const r = await PhoneNumber.deleteOne({ _id: oid, orgId: s.orgId })
-  if (r.deletedCount === 0) return apiError('not_found')
-  await recordAudit(s, {
-    action: 'number.delete',
-    resource: { type: 'PhoneNumber', id: String(oid) },
-  })
-  return NextResponse.json({ ok: true })
 })

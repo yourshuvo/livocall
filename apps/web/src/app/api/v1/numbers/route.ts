@@ -3,10 +3,12 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { connectMongo } from '@/lib/db'
 import { PhoneNumber } from '@/models/PhoneNumber'
+import { Agent } from '@/models/Agent'
 import { authV1, isResponse } from '@/lib/auth/v1'
 import { apiError, withErrors } from '@/lib/errors'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
+import { AutoCallbackConfigSchema } from '@/lib/auto-callback'
 
 const Body = z.object({
   e164: z.string().regex(/^\+\d{8,15}$/).optional(),
@@ -21,10 +23,11 @@ const Body = z.object({
   sipPassword: z.string().max(512).optional().default(''),
   sipRegister: z.boolean().optional().default(true),
   sipTransport: z.enum(['udp', 'tcp', 'tls']).optional().default('udp'),
-  sipCodecs: z.string().trim().max(120).optional().default('PCMU@20i'),
+  sipCodecs: z.string().trim().max(120).optional().default('PCMU@20ms'),
   inboundEnabled: z.boolean().optional(),
   outboundEnabled: z.boolean().optional(),
   agentId: z.string().optional().nullable(),
+  autoCallback: AutoCallbackConfigSchema,
 })
 
 export const GET = withErrors(async (req: Request) => {
@@ -46,6 +49,10 @@ export const POST = withErrors(async (req: Request) => {
     return apiError('invalid_input', 'send e164 or use an E.164 SIP username')
   }
   await connectMongo()
+  if (body.agentId) {
+    const agent = await Agent.findOne({ _id: body.agentId, orgId: auth.orgId }).lean()
+    if (!agent) return apiError('invalid_input', 'agent does not belong to this org')
+  }
   const exists = await PhoneNumber.findOne({ orgId: auth.orgId, e164 })
   if (exists) return apiError('conflict', 'number already connected')
   const providerSlug = slugifySipProvider(body.providerSlug || body.providerName)
@@ -68,6 +75,7 @@ export const POST = withErrors(async (req: Request) => {
     inboundEnabled: body.inboundEnabled ?? true,
     outboundEnabled: body.outboundEnabled ?? true,
     agentId: body.agentId || null,
+    autoCallback: body.autoCallback,
   })
   return NextResponse.json(phoneNumberToJson(created.toObject()), { status: 201 })
 })

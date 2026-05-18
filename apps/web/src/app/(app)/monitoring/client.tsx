@@ -35,16 +35,22 @@ export function MonitoringClient({
 }) {
   const [calls, setCalls] = useState(initialCalls)
   const [actionKey, setActionKey] = useState<string | null>(null)
-  const [supervisorTarget, setSupervisorTarget] = useState('')
+  const [supervisorTarget, setSupervisorTarget] = useState(() =>
+    typeof window === 'undefined'
+      ? ''
+      : window.localStorage.getItem('livocall.supervisorTargetE164') || '',
+  )
   const [supervisorDialog, setSupervisorDialog] = useState<{
     callId: string
     action: 'listen' | 'barge'
   } | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const [pending, start] = useTransition()
   const { toast } = useToast()
 
   useEffect(() => {
-    setSupervisorTarget(window.localStorage.getItem('livocall.supervisorTargetE164') || '')
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -115,7 +121,7 @@ export function MonitoringClient({
                 const latest = call.transcript[call.transcript.length - 1]
                 const startedAt = call.startedAt ? new Date(call.startedAt) : null
                 const elapsedSec = startedAt
-                  ? Math.max(0, Math.round((Date.now() - startedAt.getTime()) / 1000))
+                  ? Math.max(0, Math.round((now - startedAt.getTime()) / 1000))
                   : 0
                 return (
                   <div key={call.id} className="border-line bg-bg-subtle rounded-lg border p-4">

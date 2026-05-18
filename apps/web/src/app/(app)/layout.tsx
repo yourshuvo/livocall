@@ -50,7 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ToastProvider>
-      <div className="flex h-screen bg-bg">
+      <div className="flex h-dvh bg-bg">
         <Sidebar
           orgName={orgName}
           orgId={String(session.orgId)}
@@ -59,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           creditsPaisa={creditsPaisa}
           memberships={memberships}
         />
-        <main className="flex-1 overflow-y-auto bg-bg">{children}</main>
+        <main className="min-w-0 flex-1 overflow-y-auto bg-bg pb-16 md:pb-0">{children}</main>
       </div>
     </ToastProvider>
   )
