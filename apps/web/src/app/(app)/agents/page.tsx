@@ -9,6 +9,7 @@ import { PhoneNumber, type PhoneNumberLean } from '@/models/PhoneNumber'
 import { type Tier } from '@/types/agent'
 import { fmtDate, fmtPhoneE164 } from '@/lib/format'
 import { AgentsImportButton } from './import-button'
+import { CreateAgentButton } from './create-agent-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,12 +68,9 @@ export default async function AgentsPage() {
             <Suspense>
               <AgentsImportButton />
             </Suspense>
-            <Link
-              href="/agents/new"
-              className="inline-flex h-8 items-center gap-1.5 rounded-[5px] bg-fg px-3 text-[12.5px] font-medium text-fg-inverse transition hover:bg-fg-strong"
-            >
+            <CreateAgentButton className="h-8 rounded-[5px] px-3 text-[12.5px] tracking-normal">
               Create an Agent
-            </Link>
+            </CreateAgentButton>
           </>
         }
       />
@@ -164,7 +162,9 @@ function AgentsTable({
                   <td className="px-4 py-3 text-fg-muted">
                     {phones.length ? (
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-[12px] text-fg">{fmtPhoneE164(phones[0])}</span>
+                        <span className="font-mono text-[12px] text-fg">
+                          {fmtPhoneE164(phones[0])}
+                        </span>
                         {phones.length > 1 && (
                           <span className="rounded bg-bg-muted px-1.5 py-0.5 text-[10.5px] text-fg-muted">
                             +{phones.length - 1}
@@ -187,7 +187,7 @@ function AgentsTable({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      href={`/agents/${a._id}/edit`}
+                      href={`/agents/${a._id}`}
                       className="inline-flex h-7 items-center rounded-[5px] px-2 text-[12px] text-fg-muted transition hover:bg-bg-muted hover:text-fg"
                     >
                       Edit
@@ -211,15 +211,12 @@ function EmptyAgents() {
       </span>
       <h2 className="text-[15px] font-semibold text-fg">Build your first agent</h2>
       <p className="mx-auto mt-1.5 max-w-md text-[13px] text-fg-muted">
-        Pick an engine tier, write a system prompt, choose a voice — we'll wire up the SIP and
-        AI plumbing. First call lands in under 5 minutes.
+        Pick an engine tier, write a system prompt, choose a voice — we'll wire up the SIP and AI
+        plumbing. First call lands in under 5 minutes.
       </p>
-      <Link
-        href="/agents/new"
-        className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-[5px] bg-fg px-3 text-[12.5px] font-medium text-fg-inverse transition hover:bg-fg-strong"
-      >
+      <CreateAgentButton className="mt-4 h-8 rounded-[5px] px-3 text-[12.5px] tracking-normal">
         Create an Agent
-      </Link>
+      </CreateAgentButton>
     </div>
   )
 }

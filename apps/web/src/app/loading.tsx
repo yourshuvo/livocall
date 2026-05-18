@@ -5,7 +5,11 @@ export default function Loading() {
     <div className="grid min-h-screen place-items-center bg-bg">
       <div className="rounded-2xl border border-line bg-bg-subtle px-8 py-7 text-center shadow-sm">
         <div className="mx-auto grid size-12 animate-pulse place-items-center rounded-xl bg-fg text-fg-inverse">
-          <Icon name="phone" size="md" />
+          <img
+            src="https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779084797/file_0000000019fc72079de24940c9d76d56_lki6kr.png"
+            alt="Loading"
+            className="size-6 object-contain"
+          />
         </div>
         <p className="mt-4 font-display text-[18px] font-semibold tracking-[-0.02em] text-fg">
           Loading LivoCall

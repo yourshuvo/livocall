@@ -5,7 +5,6 @@ import { StatCard } from '@/components/app/stat-card'
 import { EmptyState } from '@/components/app/empty-state'
 import { Card, CardBody } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { StatusDot } from '@/components/ui/status-dot'
 import { connectMongo, isMongoConfigured } from '@/lib/db'
 import { getSession } from '@/lib/session'
@@ -13,6 +12,7 @@ import { Agent, type AgentLean } from '@/models/Agent'
 import { Call, type CallLean } from '@/models/Call'
 import { fmtBdt, fmtDuration, fmtDate } from '@/lib/format'
 import { tierBadge, tierLabel } from '@/types/agent'
+import { CreateAgentButton } from '../agents/create-agent-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,12 +91,9 @@ export default async function OverviewPage() {
             >
               <Icon name="phone" size="xs" /> Call log
             </Link>
-            <Link
-              href="/agents/new"
-              className="inline-flex h-8 items-center gap-1.5 rounded-[5px] bg-fg px-3 text-[12.5px] font-medium text-fg-inverse transition hover:bg-fg-strong"
-            >
+            <CreateAgentButton className="h-8 rounded-[5px] px-3 text-[12.5px] tracking-normal">
               <Icon name="bot" size="xs" /> New agent
-            </Link>
+            </CreateAgentButton>
           </>
         }
       />
@@ -234,9 +231,7 @@ export default async function OverviewPage() {
                 title="No agents yet"
                 body="Spin up your first agent — pick a tier, write a prompt, connect a number."
                 action={
-                  <Button asChild size="sm">
-                    <Link href="/agents/new">Create agent</Link>
-                  </Button>
+                  <CreateAgentButton>Create agent</CreateAgentButton>
                 }
               />
             ) : (

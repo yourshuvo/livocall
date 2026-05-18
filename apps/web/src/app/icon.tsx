@@ -6,21 +6,11 @@ export const contentType = 'image/png'
 export default function Icon() {
   return new ImageResponse(
     (
-      <div
-        style={{
-          alignItems: 'center',
-          background: '#0a0a0a',
-          color: '#ffffff',
-          display: 'flex',
-          fontSize: 18,
-          fontWeight: 700,
-          height: '100%',
-          justifyContent: 'center',
-          width: '100%',
-        }}
-      >
-        L
-      </div>
+      <img
+        src="https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779084797/file_0000000019fc72079de24940c9d76d56_lki6kr.png"
+        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        alt="Icon"
+      />
     ),
     size,
   )

@@ -90,7 +90,7 @@ export function AgentActions({
         <Icon name="phone-out" size="sm" /> Test call
       </Button>
       <Button asChild size="sm" className="gap-1.5">
-        <Link href={`/agents/${agentId}/edit`}>
+        <Link href={`/agents/${agentId}`}>
           <Icon name="settings" size="sm" /> Edit
         </Link>
       </Button>

@@ -1,6 +1,6 @@
-import Link from 'next/link'
 import { Icon } from '@/components/ui/icon'
 import { TopBar } from '@/components/app/top-bar'
+import { CreateAgentButton } from '../create-agent-button'
 
 export default function TransferScreeningPage() {
   return (
@@ -9,13 +9,10 @@ export default function TransferScreeningPage() {
         title="Transfer Screening Agents"
         searchPlaceholder="Search transfer agents..."
         actions={
-          <Link
-            href="/agents/new"
-            className="inline-flex h-8 items-center gap-1.5 rounded-[5px] bg-fg px-3 text-[12.5px] font-medium text-fg-inverse transition hover:bg-fg-strong"
-          >
+          <CreateAgentButton className="h-8 rounded-[5px] px-3 text-[12.5px] tracking-normal">
             Create transfer agent
             <Icon name="chevron-down" size="xs" />
-          </Link>
+          </CreateAgentButton>
         }
       />
       <div className="flex-1 overflow-y-auto bg-bg">

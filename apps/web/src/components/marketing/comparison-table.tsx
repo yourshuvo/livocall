@@ -34,7 +34,11 @@ export function ComparisonTable({ locale }: { locale: Locale }) {
     <div className="overflow-hidden rounded-xl border border-line bg-bg">
       <div className="grid grid-cols-[1.5fr_1fr_1fr] items-center gap-4 border-b border-line bg-bg-subtle/60 px-5 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-fg-subtle">
         <span className={cn(bangla && 'font-bangla')}>{bangla ? 'ব্যবসার ফল' : 'Business result'}</span>
-        <span className="text-fg">LivoCall</span>
+        <img
+          src="https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779089995/file_00000000f26c71fa9ffe8fb9cb675e19_wxjm8x.png"
+          alt="LivoCall"
+          className="h-5 w-auto inline-block"
+        />
         <span>{bangla ? 'ম্যানুয়াল পদ্ধতি' : 'Manual process'}</span>
       </div>
       <div className="divide-y divide-line">

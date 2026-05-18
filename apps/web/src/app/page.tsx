@@ -22,6 +22,9 @@ const NAV_ITEMS = [
 
 const TRUST_MARKS = ['E-commerce', 'Clinics', 'Education', 'Finance', 'Logistics']
 
+const HERO_VIDEO_URL =
+  'https://player.cloudinary.com/embed/?cloud_name=dfb3ym0jr&public_id=watermark_removed_4eb7bce2-4a4f-4a96-80fd-4680079b0524_oc3asn&autoplay=true&muted=true&loop=true&controls=false'
+
 const FEATURE_ASSETS = [
   {
     asset: '/assets/landing/gloss-agent.png',
@@ -108,15 +111,17 @@ export default async function LandingPage() {
 function Hero({ locale }: { locale: Locale }) {
   return (
     <section className="relative isolate flex min-h-screen overflow-hidden border-b border-line">
-      <Image
-        src="/assets/landing/frosted-hero.png"
-        alt=""
-        fill
-        priority
-        quality={100}
-        sizes="100vw"
-        className="absolute inset-0 -z-20 object-cover object-top"
-      />
+      <div className="absolute inset-0 -z-20 overflow-hidden bg-bg">
+        <iframe
+          src={HERO_VIDEO_URL}
+          title="LivoCall voice agent video"
+          aria-hidden="true"
+          tabIndex={-1}
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          className="absolute left-1/2 top-1/2 h-[120vw] min-h-[120vh] w-[213.34vh] min-w-[120vw] -translate-x-1/2 -translate-y-1/2 border-0"
+        />
+      </div>
+      <div className="absolute inset-0 -z-10 bg-white/70" />
 
       <div className="mx-auto flex w-full max-w-full flex-col overflow-hidden bg-transparent pb-32">
         <AnnouncementBar />

@@ -92,15 +92,19 @@ export function Sidebar({
       {/* Top: brand row */}
       <div className="flex h-12 items-center justify-between px-3">
         <Link href="/overview" className="flex items-center gap-2 text-fg">
-          <span
-            aria-hidden
-            className="grid size-5 place-items-center rounded-[4px] bg-fg text-fg-inverse"
-          >
-            <Icon name="phone" size="xs" strokeWidth={2.2} />
-          </span>
-          <span className="font-display text-[14.5px] font-semibold tracking-[-0.015em]">
-            {!collapsed && 'livocall'}
-          </span>
+          {!collapsed ? (
+            <img 
+              src="https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779089995/file_00000000f26c71fa9ffe8fb9cb675e19_wxjm8x.png" 
+              alt="Brand Wordmark" 
+              className="h-6 w-auto" 
+            />
+          ) : (
+            <img 
+              src="https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779084797/file_0000000019fc72079de24940c9d76d56_lki6kr.png" 
+              alt="Brand Icon" 
+              className="h-6 w-auto" 
+            />
+          )}
         </Link>
         <button
           type="button"

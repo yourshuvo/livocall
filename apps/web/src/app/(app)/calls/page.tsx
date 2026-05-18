@@ -3,7 +3,6 @@ import { TopBar } from '@/components/app/top-bar'
 import { EmptyState } from '@/components/app/empty-state'
 import { Card, CardBody } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { connectMongo, isMongoConfigured } from '@/lib/db'
 import { getSession } from '@/lib/session'
@@ -11,6 +10,7 @@ import { Call, type CallLean } from '@/models/Call'
 import { fmtBdt, fmtDate, fmtDuration, fmtPhoneE164 } from '@/lib/format'
 import { tierBadge } from '@/types/agent'
 import { cn } from '@/lib/cn'
+import { CreateAgentButton } from '../agents/create-agent-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -180,9 +180,7 @@ export default async function CallsPage({
                 body="Once an agent is live and a phone number is attached, every conversation will land here in real time — with transcript, audio replay and per-paisa cost breakdown."
                 hint="Tip: tier 3 agents log DTMF paths too"
                 action={
-                  <Button asChild size="sm">
-                    <Link href="/agents/new">Spin up an AI agent</Link>
-                  </Button>
+                  <CreateAgentButton>Spin up an AI agent</CreateAgentButton>
                 }
               />
             ) : (

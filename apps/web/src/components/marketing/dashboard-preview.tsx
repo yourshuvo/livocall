@@ -34,7 +34,11 @@ export function DashboardPreview({ locale }: { locale: Locale }) {
         <div className="grid grid-cols-[145px_1fr]">
           <aside className="hidden border-r border-line bg-bg p-3 sm:block">
             <div className="mb-3 flex items-center gap-2">
-              <span className="text-[12px] font-semibold tracking-[-0.02em] text-fg">livocall</span>
+              <img 
+                src="https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779089995/file_00000000f26c71fa9ffe8fb9cb675e19_wxjm8x.png" 
+                alt="Brand Wordmark" 
+                className="h-4 w-auto" 
+              />
             </div>
             <div className="mb-3 rounded-md border border-line bg-bg-subtle px-2 py-1.5">
               <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-fg-faint">
