@@ -8,6 +8,7 @@ import { apiError, withErrors } from '@/lib/errors'
 import { requireRole } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
 import { orgToJson } from '@/lib/serialize'
+import { updateClerkOrganizationName } from '@/lib/clerk-orgs'
 
 const Patch = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -46,6 +47,9 @@ export const PATCH = withErrors(async (req: Request) => {
   await connectMongo()
   const org = await Org.findByIdAndUpdate(s.orgId, { $set: body }, { new: true }).lean()
   if (!org) return apiError('not_found')
+  if (body.name) {
+    await updateClerkOrganizationName(org)
+  }
   await recordAudit(s, {
     action: 'org.update',
     resource: { type: 'Org', id: String(org._id) },

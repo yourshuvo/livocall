@@ -10,6 +10,7 @@ const inviteSchema = new Schema(
     email: { type: String, required: true, lowercase: true, index: true },
     role: { type: String, enum: ['owner', 'admin', 'agent'], default: 'agent' },
     tokenHash: { type: String, required: true, unique: true, index: true },
+    clerkInvitationId: { type: String, index: true },
     invitedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     expiresAt: { type: Date, required: true, index: true },
     acceptedAt: { type: Date },
@@ -29,5 +30,4 @@ export type InviteDoc = InferSchemaType<typeof inviteSchema> & {
 export type InviteLean = InviteDoc
 
 export const Invite: Model<InviteDoc> =
-  (mongoose.models.Invite as Model<InviteDoc>) ||
-  mongoose.model<InviteDoc>('Invite', inviteSchema)
+  (mongoose.models.Invite as Model<InviteDoc>) || mongoose.model<InviteDoc>('Invite', inviteSchema)

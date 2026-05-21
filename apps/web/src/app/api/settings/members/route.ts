@@ -11,6 +11,8 @@ import { User } from '@/models/User'
 import { generateToken, hashToken } from '@/lib/tokens'
 import { sendMail, appBaseUrl } from '@/lib/mailer'
 import { recordAudit } from '@/lib/audit'
+import { Org } from '@/models/Org'
+import { createClerkWorkspaceInvitation } from '@/lib/clerk-orgs'
 
 interface MemberRow {
   id: string
@@ -68,9 +70,7 @@ export const GET = withErrors(async () => {
     invitedBy: m.invitedBy ? String(m.invitedBy) : null,
     acceptedAt: m.acceptedAt ? new Date(m.acceptedAt).toISOString() : null,
     createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : null,
-    lastLoginAt: m.userId?.lastLoginAt
-      ? new Date(m.userId.lastLoginAt).toISOString()
-      : null,
+    lastLoginAt: m.userId?.lastLoginAt ? new Date(m.userId.lastLoginAt).toISOString() : null,
   }))
   const pending: InviteRow[] = invites.map((i) => ({
     id: String(i._id),
@@ -108,6 +108,9 @@ export const POST = withErrors(async (req: Request) => {
   })
   if (pending) return apiError('conflict', 'invite already pending')
 
+  const org = await Org.findById(s.orgId)
+  if (!org) return apiError('not_found', 'workspace was removed')
+
   const token = generateToken()
   const invite = await Invite.create({
     orgId: s.orgId,
@@ -118,20 +121,35 @@ export const POST = withErrors(async (req: Request) => {
     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7), // 7 days
   })
   const link = `${appBaseUrl()}/invites/${token}`
-  await sendMail({
-    to: body.email,
-    subject: "You're invited to join a LivoCall workspace",
-    text: `You've been invited to join a workspace on LivoCall as ${body.role}.\n\nAccept the invite within 7 days:\n${link}\n\nIf you didn't expect this email, you can safely ignore it.`,
-  })
+  let delivery: 'clerk' | 'livocall' = 'livocall'
+  try {
+    const clerkInvite = await createClerkWorkspaceInvitation({
+      org,
+      inviteId: String(invite._id),
+      email: body.email.toLowerCase(),
+      role: body.role,
+      inviterClerkId: s.clerkId,
+    })
+    invite.clerkInvitationId = clerkInvite.id
+    await invite.save()
+    delivery = 'clerk'
+  } catch {
+    await sendMail({
+      to: body.email,
+      subject: "You're invited to join a LivoCall workspace",
+      text: `You've been invited to join a workspace on LivoCall as ${body.role}.\n\nAccept the invite within 7 days:\n${link}\n\nIf you didn't expect this email, you can safely ignore it.`,
+    })
+  }
   await recordAudit(s, {
     action: 'member.invite',
     resource: { type: 'Invite', id: String(invite._id) },
-    meta: { email: body.email, role: body.role },
+    meta: { email: body.email, role: body.role, delivery },
   })
   return NextResponse.json({
     id: String(invite._id),
     email: invite.email,
     role: invite.role,
     expiresAt: invite.expiresAt.toISOString(),
+    delivery,
   })
 })

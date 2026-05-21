@@ -86,8 +86,11 @@ export function MembersClient({
     e.preventDefault()
     start(async () => {
       try {
-        await api.post('/api/settings/members', { email: inviteEmail, role: inviteRole })
-        toast('Invite sent', 'success')
+        const sent = await api.post<{ delivery?: 'clerk' | 'livocall' }>('/api/settings/members', {
+          email: inviteEmail,
+          role: inviteRole,
+        })
+        toast(sent.delivery === 'clerk' ? 'Clerk workspace invite sent' : 'Invite sent', 'success')
         setInviteEmail('')
         setInviteRole('agent')
         await refresh()
@@ -140,15 +143,16 @@ export function MembersClient({
     <div className="space-y-8">
       {canAdmin && (
         <Card>
-          <div className="border-b border-line p-5">
+          <div className="border-line border-b p-5">
             <div className="flex items-center gap-2">
-              <span className="grid size-7 place-items-center rounded-md border border-line bg-bg-subtle text-fg">
+              <span className="border-line bg-bg-subtle text-fg grid size-7 place-items-center rounded-md border">
                 <Icon name="plus" size="sm" />
               </span>
               <CardTitle>Invite member</CardTitle>
             </div>
             <CardDescription>
-              We&rsquo;ll email the invite link. It&rsquo;s good for 7 days or until you revoke it.
+              Clerk sends the workspace invitation when organization sync is available. Invites
+              remain valid for 7 days or until revoked.
             </CardDescription>
           </div>
           <CardBody>
@@ -168,7 +172,7 @@ export function MembersClient({
                 <Label htmlFor="inv-role">Role</Label>
                 <select
                   id="inv-role"
-                  className="mt-2 h-10 w-full rounded-md border border-line bg-bg px-2 text-[13px]"
+                  className="border-line bg-bg mt-2 h-10 w-full rounded-md border px-2 text-[13px]"
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as Role)}
                 >
@@ -190,9 +194,9 @@ export function MembersClient({
       )}
 
       <Card>
-        <div className="border-b border-line p-5">
+        <div className="border-line border-b p-5">
           <div className="flex items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-md border border-line bg-bg-subtle text-fg">
+            <span className="border-line bg-bg-subtle text-fg grid size-7 place-items-center rounded-md border">
               <Icon name="headset" size="sm" />
             </span>
             <CardTitle>Members</CardTitle>
@@ -222,28 +226,28 @@ export function MembersClient({
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-fg-muted">
-                    Loading…
+                  <td colSpan={4} className="text-fg-muted px-4 py-6 text-center">
+                    Loading...
                   </td>
                 </tr>
               )}
               {!loading && data.members.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-fg-muted">
+                  <td colSpan={4} className="text-fg-muted px-4 py-6 text-center">
                     No members yet.
                   </td>
                 </tr>
               )}
               {data.members.map((m) => (
-                <tr key={m.id} className="border-t border-line">
+                <tr key={m.id} className="border-line border-t">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-fg">{m.name || m.email}</div>
+                    <div className="text-fg font-medium">{m.name || m.email}</div>
                     {m.name && <div className="text-fg-muted">{m.email}</div>}
                   </td>
                   <td className="px-4 py-3">
                     {canAdmin && m.userId !== currentUserId ? (
                       <select
-                        className="h-8 rounded-md border border-line bg-bg px-2 text-[12px]"
+                        className="border-line bg-bg h-8 rounded-md border px-2 text-[12px]"
                         value={m.role}
                         onChange={(e) => updateRole(m, e.target.value as Role)}
                         disabled={pending}
@@ -258,8 +262,8 @@ export function MembersClient({
                       <Badge>{m.role}</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3 font-mono text-[12px] text-fg-muted">
-                    {m.lastLoginAt ? new Date(m.lastLoginAt).toLocaleString() : '—'}
+                  <td className="text-fg-muted px-4 py-3 font-mono text-[12px]">
+                    {m.lastLoginAt ? new Date(m.lastLoginAt).toLocaleString() : '-'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {canAdmin && m.userId !== currentUserId && (
@@ -282,15 +286,15 @@ export function MembersClient({
 
       {data.pending.length > 0 && (
         <Card>
-          <div className="border-b border-line p-5">
+          <div className="border-line border-b p-5">
             <div className="flex items-center gap-2">
-              <span className="grid size-7 place-items-center rounded-md border border-line bg-bg-subtle text-fg">
+              <span className="border-line bg-bg-subtle text-fg grid size-7 place-items-center rounded-md border">
                 <Icon name="clock" size="sm" />
               </span>
               <CardTitle>Pending invites</CardTitle>
             </div>
             <CardDescription>
-              These invites haven&rsquo;t been accepted yet. Resending an invite revokes the old one.
+              These invites have not been accepted yet. Resending an invite revokes the old one.
             </CardDescription>
           </div>
           <CardBody className="p-0">
@@ -313,13 +317,13 @@ export function MembersClient({
               </thead>
               <tbody>
                 {data.pending.map((i) => (
-                  <tr key={i.id} className="border-t border-line">
-                    <td className="px-4 py-3 text-fg">{i.email}</td>
+                  <tr key={i.id} className="border-line border-t">
+                    <td className="text-fg px-4 py-3">{i.email}</td>
                     <td className="px-4 py-3">
                       <Badge>{i.role}</Badge>
                     </td>
-                    <td className="px-4 py-3 font-mono text-[12px] text-fg-muted">
-                      {i.expiresAt ? new Date(i.expiresAt).toLocaleString() : '—'}
+                    <td className="text-fg-muted px-4 py-3 font-mono text-[12px]">
+                      {i.expiresAt ? new Date(i.expiresAt).toLocaleString() : '-'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {canAdmin && (

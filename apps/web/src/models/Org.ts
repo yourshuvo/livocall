@@ -4,6 +4,7 @@ const orgSchema = new Schema(
   {
     name: { type: String, required: true },
     slug: { type: String, required: true, unique: true, index: true },
+    clerkOrgId: { type: String },
     plan: { type: String, enum: ['starter', 'growth', 'scale'], default: 'starter' },
     creditsPaisa: { type: Number, default: 0 },
     btrcDisclosure: { type: String, default: '' },
@@ -30,6 +31,8 @@ const orgSchema = new Schema(
   },
   { timestamps: true },
 )
+
+orgSchema.index({ clerkOrgId: 1 }, { sparse: true })
 
 export type OrgDoc = InferSchemaType<typeof orgSchema> & {
   _id: mongoose.Types.ObjectId

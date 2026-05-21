@@ -2,15 +2,18 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { connectMongo } from '@/lib/db'
-import {
-  isResponse,
-  objectIdOr400,
-  requireDashboardSession,
-} from '@/lib/api-helpers'
+import { isResponse, objectIdOr400, requireDashboardSession } from '@/lib/api-helpers'
 import { apiError, withErrors } from '@/lib/errors'
 import { requireRole } from '@/lib/rbac'
 import { Membership } from '@/models/Membership'
 import { recordAudit } from '@/lib/audit'
+import { User } from '@/models/User'
+import { Org } from '@/models/Org'
+import {
+  ensureClerkOrganization,
+  ensureClerkOrganizationMembership,
+  removeClerkOrganizationMembership,
+} from '@/lib/clerk-orgs'
 
 const Patch = z.object({ role: z.enum(['owner', 'admin', 'agent']) })
 
@@ -36,6 +39,18 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
     { new: true },
   ).lean()
   if (!m) return apiError('not_found')
+  const [org, user] = await Promise.all([
+    Org.findById(s.orgId).lean(),
+    User.findById(current.userId).lean(),
+  ])
+  if (org && user?.clerkId) {
+    const clerkOrgId = await ensureClerkOrganization(org, s.clerkId)
+    await ensureClerkOrganizationMembership({
+      clerkOrgId,
+      clerkUserId: user.clerkId,
+      role: body.role,
+    })
+  }
   await recordAudit(s, {
     action: 'member.update',
     resource: { type: 'Membership', id: String(m._id) },
@@ -44,29 +59,41 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
   return NextResponse.json({ ok: true })
 })
 
-export const DELETE = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
-  const { id } = await ctx.params
-  const s = await requireDashboardSession()
-  if (isResponse(s)) return s
-  const forbidden = requireRole(s, 'admin')
-  if (forbidden) return forbidden
-  const oid = objectIdOr400(id)
-  if (!oid) return apiError('invalid_input')
-  await connectMongo()
-  const m = await Membership.findOne({ _id: oid, orgId: s.orgId })
-  if (!m) return apiError('not_found')
-  if (String(m.userId) === s.userId) {
-    return apiError('forbidden', "you can't remove yourself")
-  }
-  // Don't allow removing the last owner
-  if (m.role === 'owner') {
-    const owners = await Membership.countDocuments({ orgId: s.orgId, role: 'owner' })
-    if (owners <= 1) return apiError('forbidden', 'cannot remove the only owner')
-  }
-  await m.deleteOne()
-  await recordAudit(s, {
-    action: 'member.remove',
-    resource: { type: 'Membership', id: String(m._id) },
-  })
-  return NextResponse.json({ ok: true })
-})
+export const DELETE = withErrors(
+  async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+    const { id } = await ctx.params
+    const s = await requireDashboardSession()
+    if (isResponse(s)) return s
+    const forbidden = requireRole(s, 'admin')
+    if (forbidden) return forbidden
+    const oid = objectIdOr400(id)
+    if (!oid) return apiError('invalid_input')
+    await connectMongo()
+    const m = await Membership.findOne({ _id: oid, orgId: s.orgId })
+    if (!m) return apiError('not_found')
+    if (String(m.userId) === s.userId) {
+      return apiError('forbidden', "you can't remove yourself")
+    }
+    // Don't allow removing the last owner
+    if (m.role === 'owner') {
+      const owners = await Membership.countDocuments({ orgId: s.orgId, role: 'owner' })
+      if (owners <= 1) return apiError('forbidden', 'cannot remove the only owner')
+    }
+    const [org, user] = await Promise.all([
+      Org.findById(s.orgId).lean(),
+      User.findById(m.userId).lean(),
+    ])
+    if (org?.clerkOrgId && user?.clerkId) {
+      await removeClerkOrganizationMembership({
+        clerkOrgId: org.clerkOrgId,
+        clerkUserId: user.clerkId,
+      })
+    }
+    await m.deleteOne()
+    await recordAudit(s, {
+      action: 'member.remove',
+      resource: { type: 'Membership', id: String(m._id) },
+    })
+    return NextResponse.json({ ok: true })
+  },
+)

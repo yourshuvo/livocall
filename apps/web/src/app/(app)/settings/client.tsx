@@ -113,7 +113,7 @@ const SETTINGS_NAV: Array<{ href: string; label: string; icon: IconName }> = [
 ]
 
 const SETTINGS_LINKS = [
-  { href: '/settings/members', label: 'Members' },
+  { href: '/settings/members', label: 'Workspace invites' },
   { href: '/settings/audit', label: 'Audit log' },
   { href: '/settings/indexes', label: 'Index checks' },
 ]

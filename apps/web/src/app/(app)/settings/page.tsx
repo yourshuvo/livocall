@@ -13,10 +13,10 @@ export const dynamic = 'force-dynamic'
 
 function SettingsHeader({ description }: { description: string }) {
   return (
-    <div className="border-b border-line/70 px-6 py-5">
-      <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-fg-faint">Account</p>
-      <h1 className="mt-1 text-[20px] font-semibold tracking-tight text-fg">Settings</h1>
-      <p className="mt-1 text-[13px] text-fg-muted">{description}</p>
+    <div className="border-line/70 border-b px-6 py-5">
+      <p className="text-fg-faint font-mono text-[10.5px] uppercase tracking-[0.14em]">Account</p>
+      <h1 className="text-fg mt-1 text-[20px] font-semibold tracking-tight">Settings</h1>
+      <p className="text-fg-muted mt-1 text-[13px]">{description}</p>
     </div>
   )
 }
@@ -49,10 +49,10 @@ export default async function SettingsPage() {
     return (
       <>
         <TopBar title="Settings" searchPlaceholder="Search settings..." />
-        <div className="flex-1 overflow-y-auto bg-bg">
+        <div className="bg-bg flex-1 overflow-y-auto">
           <SettingsHeader description="Workspace, compliance, API keys, webhooks." />
-          <div className="px-6 py-6 text-[13px] text-fg-muted">
-            Couldn’t load workspace. Check your MongoDB connection.
+          <div className="text-fg-muted px-6 py-6 text-[13px]">
+            Could not load workspace. Check your MongoDB connection.
           </div>
         </div>
       </>
@@ -62,7 +62,7 @@ export default async function SettingsPage() {
   return (
     <>
       <TopBar title="Settings" searchPlaceholder="Search settings..." />
-      <div className="flex-1 overflow-y-auto bg-bg">
+      <div className="bg-bg flex-1 overflow-y-auto">
         <SettingsHeader description="Workspace, compliance, API keys, webhooks. Saved per workspace." />
         <div className="px-6 py-6">
           <SettingsClient

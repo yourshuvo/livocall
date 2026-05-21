@@ -3,6 +3,7 @@ import { connectMongo, isMongoConfigured } from '@/lib/db'
 import { Org } from '@/models/Org'
 import { Membership } from '@/models/Membership'
 import { User } from '@/models/User'
+import { ensureClerkOrganization, ensureClerkOrganizationMembership } from '@/lib/clerk-orgs'
 
 export type Session = {
   userId: string | null
@@ -16,7 +17,9 @@ export type Session = {
 
 type Role = 'owner' | 'admin' | 'agent'
 
-type ClerkDashboardUser = Awaited<ReturnType<Awaited<ReturnType<typeof clerkClient>>['users']['getUser']>>
+type ClerkDashboardUser = Awaited<
+  ReturnType<Awaited<ReturnType<typeof clerkClient>>['users']['getUser']>
+>
 
 function slugify(s: string) {
   return (
@@ -37,7 +40,9 @@ function primaryEmail(clerkUser: ClerkDashboardUser) {
 }
 
 function displayName(clerkUser: ClerkDashboardUser) {
-  return clerkUser.fullName || clerkUser.firstName || primaryEmail(clerkUser).split('@')[0] || 'User'
+  return (
+    clerkUser.fullName || clerkUser.firstName || primaryEmail(clerkUser).split('@')[0] || 'User'
+  )
 }
 
 async function uniqueOrgSlug(name: string) {
@@ -66,7 +71,15 @@ export async function ensureDashboardUser(): Promise<Session> {
   const name = displayName(clerkUser)
 
   if (!isMongoConfigured()) {
-    return { userId: a.userId, orgId: null, clerkId: a.userId, email, name, role: 'owner', locale: 'en' }
+    return {
+      userId: a.userId,
+      orgId: null,
+      clerkId: a.userId,
+      email,
+      name,
+      role: 'owner',
+      locale: 'en',
+    }
   }
 
   await connectMongo()
@@ -103,6 +116,16 @@ export async function ensureDashboardUser(): Promise<Session> {
       role: 'owner',
       acceptedAt: new Date(),
     })
+    try {
+      const clerkOrgId = await ensureClerkOrganization(org, a.userId)
+      await ensureClerkOrganizationMembership({
+        clerkOrgId,
+        clerkUserId: a.userId,
+        role: 'owner',
+      })
+    } catch {
+      // The dashboard can still boot if Clerk organization sync is temporarily unavailable.
+    }
   } else {
     user.email = email || user.email
     user.name = user.name || name
