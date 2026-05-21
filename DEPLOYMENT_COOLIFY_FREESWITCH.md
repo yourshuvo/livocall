@@ -19,7 +19,7 @@ apps/web/.env.example Web environment template
 services/voice/.env.example Voice environment template
 ```
 
-The web app is upgraded to Next.js 16 and uses Node 23 in its Dockerfile.
+The web app is upgraded to Next.js 16 and uses Node 24 in its Dockerfile.
 
 ## 2. DNS
 
@@ -128,13 +128,13 @@ Domain: https://app.yourdomain.com
 The web Dockerfile uses:
 
 ```txt
-node:23-alpine
-npm install --legacy-peer-deps --no-audit --no-fund
+node:24-alpine
+npm ci --legacy-peer-deps --no-audit --no-fund
 npm run build
 npm start
 ```
 
-The runtime stage copies only production dependencies, `.next`, and `public`, so the final image does not include the full source tree or development dependencies.
+The runtime stage strips Next.js build-only cache files and copies only production dependencies, `.next`, and `public`, so the final image does not include the full source tree or development dependencies.
 
 Set environment variables from:
 
@@ -643,17 +643,17 @@ In the dashboard:
 Coolify may cache an old Dockerfile or UI override. Confirm the final Dockerfile log shows:
 
 ```txt
-FROM node:23-alpine
+FROM node:24-alpine
 ```
 
-If it shows `node:20-alpine`, update the Dockerfile in the repo and remove any pasted Dockerfile override in Coolify.
+If it shows `node:20-alpine` or `node:23-alpine`, update the Dockerfile in the repo and remove any pasted Dockerfile override in Coolify.
 
 ### Web Build Fails at `npm install`
 
 The web Dockerfile must include:
 
 ```dockerfile
-RUN npm install --legacy-peer-deps --no-audit --no-fund
+RUN npm ci --legacy-peer-deps --no-audit --no-fund
 ```
 
 ### Web Says Voice Unavailable

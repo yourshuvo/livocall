@@ -1,6 +1,6 @@
 [variables]
-NIXPACKS_NODE_VERSION = "23"
-NODE_VERSION = "23"
+NIXPACKS_NODE_VERSION = "24"
+NODE_VERSION = "24"
 NIXPACKS_NODE_PACKAGE_MANAGER = "pnpm"
 PNPM_HOME = "/root/.local/share/pnpm"
 
