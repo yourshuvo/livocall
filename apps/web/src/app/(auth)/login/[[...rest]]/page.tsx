@@ -1,4 +1,5 @@
 import { SignIn } from '@clerk/nextjs'
+import { clerkAuthPageAppearance } from '@/lib/clerk-appearance'
 
 export const metadata = { title: 'Sign in - LivoCall' }
 
@@ -21,6 +22,7 @@ export default async function LoginPage({
       routing="path"
       forceRedirectUrl={redirectUrl}
       signUpUrl="/signup"
+      appearance={clerkAuthPageAppearance}
     />
   )
 }

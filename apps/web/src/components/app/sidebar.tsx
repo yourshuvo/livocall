@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { UserButton } from '@clerk/nextjs'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn'
 import { api } from '@/lib/api-fetch'
 import { useToast } from '@/components/ui/toast'
 import { BrandIcon, Wordmark } from '@/components/wordmark'
+import { clerkSidebarUserButtonAppearance } from '@/lib/clerk-appearance'
 
 export interface WorkspaceSummary {
   orgId: string
@@ -88,13 +89,13 @@ export function Sidebar({
       <MobileNav role={role} creditsPaisa={creditsPaisa} />
       <aside
         className={cn(
-          'hidden h-dvh shrink-0 flex-col border-r border-line bg-bg transition-[width] md:flex',
+          'border-line bg-bg hidden h-dvh shrink-0 flex-col border-r transition-[width] md:flex',
           collapsed ? 'w-[64px]' : 'w-[248px]',
         )}
       >
         {/* Top: brand row */}
         <div className="flex h-16 items-center justify-between px-3">
-          <Link href="/overview" className="flex min-w-0 items-center gap-2 text-fg">
+          <Link href="/overview" className="text-fg flex min-w-0 items-center gap-2">
             {!collapsed ? (
               <Wordmark className="h-11 max-w-[196px]" />
             ) : (
@@ -106,7 +107,7 @@ export function Sidebar({
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-expanded={!collapsed}
             onClick={() => setCollapsed((v) => !v)}
-            className="grid size-6 place-items-center rounded-[4px] text-fg-faint transition hover:bg-bg-muted hover:text-fg"
+            className="text-fg-faint hover:bg-bg-muted hover:text-fg grid size-6 place-items-center rounded-[4px] transition"
           >
             <Icon name="panel-left" size="sm" />
           </button>
@@ -146,7 +147,7 @@ export function Sidebar({
 
         {/* Account selector */}
         {!collapsed && (
-          <div className="border-t border-line px-2 pb-2 pt-2">
+          <div className="border-line border-t px-2 pb-2 pt-2">
             <AccountSelector email={email} />
           </div>
         )}
@@ -173,7 +174,7 @@ function MobileNav({ role, creditsPaisa }: { role: string; creditsPaisa: number 
   const gridClass = items.length >= 5 ? 'grid-cols-5' : 'grid-cols-4'
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 px-2 pb-[env(safe-area-inset-bottom)] pt-1.5 backdrop-blur md:hidden">
+    <nav className="border-line bg-bg/95 fixed inset-x-0 bottom-0 z-40 border-t px-2 pb-[env(safe-area-inset-bottom)] pt-1.5 backdrop-blur md:hidden">
       <ul className={cn('grid gap-1', gridClass)}>
         {items.slice(0, 5).map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -183,7 +184,9 @@ function MobileNav({ role, creditsPaisa }: { role: string; creditsPaisa: number 
                 href={item.href}
                 className={cn(
                   'flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md text-[10.5px] transition',
-                  active ? 'bg-bg-muted text-fg' : 'text-fg-muted hover:bg-bg-muted/60 hover:text-fg',
+                  active
+                    ? 'bg-bg-muted text-fg'
+                    : 'text-fg-muted hover:bg-bg-muted/60 hover:text-fg',
                 )}
               >
                 <Icon name={item.icon} size="sm" />
@@ -213,7 +216,7 @@ function NavGroup({
   return (
     <div className="mb-3">
       {!collapsed && (
-        <p className="px-2 pb-1 pt-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-fg-faint">
+        <p className="text-fg-faint px-2 pb-1 pt-2 text-[10.5px] font-medium uppercase tracking-[0.08em]">
           {section.label}
         </p>
       )}
@@ -228,7 +231,7 @@ function NavGroup({
                   'group flex items-center gap-2 rounded-[5px] px-2 py-1.5 text-[13px] transition-colors',
                   collapsed && 'justify-center',
                   active
-                    ? 'bg-bg-muted font-medium text-fg'
+                    ? 'bg-bg-muted text-fg font-medium'
                     : 'text-fg-muted hover:bg-bg-muted/60 hover:text-fg',
                 )}
                 title={collapsed ? it.label : undefined}
@@ -241,7 +244,7 @@ function NavGroup({
                 />
                 {!collapsed && <span className="flex-1 truncate">{it.label}</span>}
                 {!collapsed && it.badge && (
-                  <span className="rounded-[3px] bg-bg-inset px-1.5 py-0.5 text-[10px] font-medium text-fg-muted">
+                  <span className="bg-bg-inset text-fg-muted rounded-[3px] px-1.5 py-0.5 text-[10px] font-medium">
                     {it.badge}
                   </span>
                 )}
@@ -266,9 +269,35 @@ function WorkspaceSwitcher({
   role: string
 }) {
   const router = useRouter()
+  const containerRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [switching, setSwitching] = useState(false)
   const { toast } = useToast()
+  const normalizedMemberships = useMemo(
+    () => normalizeMemberships(memberships, { orgId, orgName, role }),
+    [memberships, orgId, orgName, role],
+  )
+
+  useEffect(() => {
+    if (!open) return
+
+    function onPointerDown(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
 
   async function onSwitch(targetId: string) {
     if (targetId === orgId) {
@@ -288,62 +317,123 @@ function WorkspaceSwitcher({
     }
   }
 
-  const initials = orgName.slice(0, 1).toUpperCase()
-  const truncated = orgName.length > 14 ? `${orgName.slice(0, 14)}...` : orgName
+  const displayName = cleanWorkspaceName(orgName)
+  const activeRole = formatRole(role)
+  const workspaceCount = normalizedMemberships.length
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         type="button"
-        aria-label="Switch workspace"
+        aria-label={`Switch workspace, current workspace ${displayName}`}
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="group flex w-full items-center gap-2 rounded-[6px] px-1.5 py-1.5 text-left transition hover:bg-bg-muted"
+        className={cn(
+          'border-line bg-bg-subtle/70 shadow-inner-line group flex w-full items-center gap-2 rounded-[6px] border px-2 py-2 text-left transition',
+          open ? 'border-fg/25 bg-bg-muted/80' : 'hover:border-fg/20 hover:bg-bg-muted/70',
+        )}
       >
-        <span className="grid size-6 shrink-0 place-items-center rounded-[5px] bg-gradient-to-br from-sky-400 to-sky-600 text-[10px] font-semibold leading-none text-white">
-          {initials}
+        <span className="border-line bg-bg text-fg-muted group-hover:text-fg grid size-8 shrink-0 place-items-center rounded-[6px] border transition">
+          <Icon name="building" size="sm" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[12.5px] font-medium text-fg">
-            {truncated} Workspace
+          <span className="text-fg block truncate text-[12.5px] font-semibold leading-4">
+            {displayName}
           </span>
-          <span className="block truncate text-[10.5px] uppercase tracking-[0.06em] text-fg-faint">
-            {role}
+          <span className="text-fg-faint mt-0.5 block truncate text-[10.5px]">
+            Workspace - {activeRole}
           </span>
         </span>
         <Icon
           name="chevron-up-down"
           size="xs"
-          className="shrink-0 text-fg-faint transition group-hover:text-fg-muted"
+          className={cn(
+            'text-fg-faint group-hover:text-fg-muted shrink-0 transition',
+            open && 'text-fg-muted',
+          )}
         />
       </button>
-      {open && memberships.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-[6px] border border-line bg-bg shadow-pop">
+      {open && (
+        <div className="border-line bg-bg shadow-pop absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-[6px] border">
+          <div className="border-line bg-bg-subtle/50 flex items-center justify-between border-b px-2.5 py-2">
+            <span className="text-fg-muted text-[11px] font-medium">Workspaces</span>
+            <span className="bg-bg text-fg-faint rounded-[3px] px-1.5 py-0.5 text-[10px]">
+              {workspaceCount}
+            </span>
+          </div>
           <ul className="max-h-64 overflow-y-auto py-1">
-            {memberships.map((m) => (
-              <li key={m.orgId}>
-                <button
-                  type="button"
-                  disabled={switching}
-                  onClick={() => onSwitch(m.orgId)}
-                  className={cn(
-                    'flex w-full items-center gap-2 px-2 py-1.5 text-left text-[12.5px]',
-                    m.orgId === orgId ? 'bg-bg-muted text-fg' : 'text-fg hover:bg-bg-muted/60',
-                  )}
-                >
-                  <span className="grid size-6 place-items-center rounded-[5px] bg-gradient-to-br from-sky-400 to-sky-600 text-[10px] font-semibold text-white">
-                    {m.orgName.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{m.orgName}</span>
-                  <span className="text-[10px] uppercase tracking-[0.08em] text-fg-faint">
-                    {m.role}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {normalizedMemberships.map((m) => {
+              const active = m.orgId === orgId
+              return (
+                <li key={m.orgId}>
+                  <button
+                    type="button"
+                    disabled={switching}
+                    onClick={() => onSwitch(m.orgId)}
+                    className={cn(
+                      'flex w-full items-center gap-2 px-2 py-2 text-left text-[12.5px] transition disabled:cursor-wait disabled:opacity-60',
+                      active ? 'bg-bg-muted text-fg' : 'text-fg hover:bg-bg-muted/60',
+                    )}
+                  >
+                    <span className="border-line bg-bg text-fg-muted grid size-7 shrink-0 place-items-center rounded-[5px] border text-[10px] font-semibold">
+                      {workspaceInitials(m.orgName)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        {cleanWorkspaceName(m.orgName)}
+                      </span>
+                      <span className="text-fg-faint block truncate text-[10.5px]">
+                        {formatRole(m.role)}
+                      </span>
+                    </span>
+                    {active && <Icon name="check" size="xs" className="text-fg shrink-0" />}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
     </div>
+  )
+}
+
+function normalizeMemberships(memberships: WorkspaceSummary[], current: WorkspaceSummary) {
+  const byId = new Map<string, WorkspaceSummary>()
+  for (const membership of [current, ...memberships]) {
+    if (!membership.orgId) continue
+    byId.set(membership.orgId, {
+      ...membership,
+      orgName: membership.orgName || 'Workspace',
+      role: membership.role || 'agent',
+    })
+  }
+  return Array.from(byId.values()).sort((a, b) => {
+    if (a.orgId === current.orgId) return -1
+    if (b.orgId === current.orgId) return 1
+    return cleanWorkspaceName(a.orgName).localeCompare(cleanWorkspaceName(b.orgName))
+  })
+}
+
+function cleanWorkspaceName(name: string) {
+  return name.trim() || 'Workspace'
+}
+
+function workspaceInitials(name: string) {
+  const cleaned = cleanWorkspaceName(name)
+  const words = cleaned.split(/\s+/).filter(Boolean)
+  const initials =
+    words.length > 1 ? `${words[0]?.[0] ?? ''}${words[1]?.[0] ?? ''}` : cleaned.slice(0, 2)
+  return initials.toUpperCase()
+}
+
+function formatRole(role: string) {
+  return (
+    role
+      .split(/[-_\s]+/)
+      .filter(Boolean)
+      .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`)
+      .join(' ') || 'Member'
   )
 }
 
@@ -376,22 +466,22 @@ function BalanceWarningCard({ initialCreditsPaisa }: { initialCreditsPaisa: numb
   }).format(credits / 100)
   if (credits > LOW_BALANCE_PAISA) return null
   return (
-    <div className="rounded-[6px] border border-status-warn/35 bg-status-warn-soft/60 p-2.5">
+    <div className="border-status-warn/35 bg-status-warn-soft/60 rounded-[6px] border p-2.5">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-fg">
+        <span className="text-fg inline-flex items-center gap-1.5 text-[11px] font-semibold">
           <Icon name="wallet" size="xs" className="text-status-warn" />
           Low balance
         </span>
       </div>
       <dl className="space-y-0.5 text-[11px] leading-tight">
-        <div className="flex items-center justify-between text-fg-muted">
+        <div className="text-fg-muted flex items-center justify-between">
           <dt>Balance:</dt>
-          <dd className="font-medium text-fg">{bdt}</dd>
+          <dd className="text-fg font-medium">{bdt}</dd>
         </div>
       </dl>
       <Link
         href="/billing"
-        className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-[5px] bg-fg px-2 py-1.5 text-[11.5px] font-medium text-fg-inverse transition hover:bg-fg-strong"
+        className="bg-fg text-fg-inverse hover:bg-fg-strong mt-2 inline-flex w-full items-center justify-center gap-1 rounded-[5px] px-2 py-1.5 text-[11.5px] font-medium transition"
       >
         <Icon name="arrow-up-right" size="xs" />
         Top up balance
@@ -403,15 +493,23 @@ function BalanceWarningCard({ initialCreditsPaisa }: { initialCreditsPaisa: numb
 function AccountSelector({ email }: { email: string }) {
   const display = email || 'account@livocall.com'
   return (
-    <div
-      className="group flex w-full items-center gap-2 rounded-[5px] border border-line bg-bg px-2 py-1.5 text-left transition hover:bg-bg-muted"
-    >
-      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-[10px] font-semibold text-white">
-        {display.charAt(0).toUpperCase()}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[12px] text-fg">{display}</span>
-      <UserButton />
-      <Icon name="chevron-up-down" size="xs" className="shrink-0 text-fg-faint" />
+    <div className="border-line bg-bg-subtle/60 shadow-inner-line rounded-[6px] border p-1">
+      <UserButton
+        showName
+        afterSwitchSessionUrl="/overview"
+        userProfileMode="modal"
+        appearance={clerkSidebarUserButtonAppearance}
+        fallback={<AccountFallback display={display} />}
+      />
+    </div>
+  )
+}
+
+function AccountFallback({ display }: { display: string }) {
+  return (
+    <div className="flex h-9 w-full items-center gap-2 rounded-[5px] px-2">
+      <span className="bg-line size-6 shrink-0 rounded-full" />
+      <span className="text-fg min-w-0 flex-1 truncate text-[12px] font-medium">{display}</span>
     </div>
   )
 }

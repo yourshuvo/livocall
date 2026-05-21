@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { cookies } from 'next/headers'
 import { ClerkProvider, Show, UserButton } from '@clerk/nextjs'
 import { getLocaleFromCookie, type Locale } from '@/lib/i18n'
+import { clerkAppearance } from '@/lib/clerk-appearance'
 import './globals.css'
 
 const title = 'LivoCall - AI voice agents for Bangladesh'
@@ -61,12 +62,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang={locale}>
-      <body className="min-h-screen bg-bg text-fg antialiased">
+      <body className="bg-bg text-fg min-h-screen antialiased">
         <ClerkProvider
           signInUrl="/login"
           signUpUrl="/signup"
           signInForceRedirectUrl="/overview"
           signUpForceRedirectUrl="/overview"
+          appearance={clerkAppearance}
         >
           <header className="sr-only">
             <Show when="signed-in">
