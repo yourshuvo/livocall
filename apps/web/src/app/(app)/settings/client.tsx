@@ -1,4 +1,5 @@
 'use client'
+import type { ReactNode } from 'react'
 import { useState, useTransition } from 'react'
 import { Card, CardBody, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,9 +8,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Icon } from '@/components/ui/icon'
+import { Icon, type IconName } from '@/components/ui/icon'
 import { api } from '@/lib/api-fetch'
 import { useToast } from '@/components/ui/toast'
+import { cn } from '@/lib/cn'
 
 interface Org {
   id: string
@@ -102,6 +104,23 @@ const SCOPES = [
   '*',
 ]
 
+const SETTINGS_NAV: Array<{ href: string; label: string; icon: IconName }> = [
+  { href: '#profile', label: 'Profile', icon: 'settings' },
+  { href: '#workspace', label: 'Workspace', icon: 'building' },
+  { href: '#api', label: 'API keys', icon: 'cpu' },
+  { href: '#secrets', label: 'Secrets vault', icon: 'shield' },
+  { href: '#webhooks', label: 'Webhooks', icon: 'plug' },
+]
+
+const SETTINGS_LINKS = [
+  { href: '/settings/members', label: 'Members' },
+  { href: '/settings/audit', label: 'Audit log' },
+  { href: '/settings/indexes', label: 'Index checks' },
+]
+
+const selectClass =
+  'mt-2 h-10 w-full rounded border border-line bg-bg-subtle px-3 text-sm text-fg focus:border-fg/40 focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60'
+
 export function SettingsClient({
   initialOrg,
   profile,
@@ -117,14 +136,100 @@ export function SettingsClient({
   initialSecrets: Secret[]
   canAdmin: boolean
 }) {
+  const activeKeys = initialKeys.filter((key) => !key.revokedAt).length
+  const activeHooks = initialHooks.filter((hook) => hook.active).length
+  const activeSecrets = initialSecrets.filter((secret) => !secret.revokedAt).length
+
   return (
-    <div className="space-y-8">
-      <ProfilePanel initial={profile} />
-      <OrgForm initial={initialOrg} canAdmin={canAdmin} />
-      <ApiKeysPanel initial={initialKeys} canAdmin={canAdmin} />
-      <SecretsPanel initial={initialSecrets} canAdmin={canAdmin} />
-      <WebhooksPanel initial={initialHooks} canAdmin={canAdmin} />
+    <div className="grid gap-6 xl:grid-cols-[230px_minmax(0,1fr)]">
+      <SettingsRail
+        canAdmin={canAdmin}
+        org={initialOrg}
+        stats={[
+          { label: 'Keys', value: activeKeys },
+          { label: 'Secrets', value: activeSecrets },
+          { label: 'Hooks', value: activeHooks },
+        ]}
+      />
+
+      <div className="min-w-0 space-y-5">
+        <ProfilePanel initial={profile} />
+        <OrgForm initial={initialOrg} canAdmin={canAdmin} />
+        <ApiKeysPanel initial={initialKeys} canAdmin={canAdmin} />
+        <SecretsPanel initial={initialSecrets} canAdmin={canAdmin} />
+        <WebhooksPanel initial={initialHooks} canAdmin={canAdmin} />
+      </div>
     </div>
+  )
+}
+
+function SettingsRail({
+  canAdmin,
+  org,
+  stats,
+}: {
+  canAdmin: boolean
+  org: Org
+  stats: Array<{ label: string; value: number }>
+}) {
+  return (
+    <aside className="xl:sticky xl:top-6 xl:self-start">
+      <Card className="overflow-hidden">
+        <div className="border-line border-b p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-fg-faint font-mono text-[10px] uppercase tracking-[0.14em]">
+                Current workspace
+              </p>
+              <p className="text-fg mt-1 truncate text-[13.5px] font-semibold">{org.name}</p>
+              <p className="text-fg-faint truncate font-mono text-[11px]">/{org.slug}</p>
+            </div>
+            <Badge variant={canAdmin ? 'live' : 'outline'}>
+              {canAdmin ? 'admin' : 'read only'}
+            </Badge>
+          </div>
+        </div>
+
+        <nav className="p-2" aria-label="Settings sections">
+          {SETTINGS_NAV.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="text-fg-muted hover:bg-bg-muted hover:text-fg flex items-center gap-2 rounded-[5px] px-2 py-2 text-[12.5px] font-medium transition"
+            >
+              <Icon name={item.icon} size="xs" className="text-fg-faint" />
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            </a>
+          ))}
+        </nav>
+
+        <div className="border-line bg-bg-subtle/50 grid grid-cols-3 border-y">
+          {stats.map((stat) => (
+            <div key={stat.label} className="border-line border-r p-3 last:border-r-0">
+              <p className="font-display text-fg text-[18px] font-medium leading-none">
+                {stat.value}
+              </p>
+              <p className="text-fg-faint mt-1 font-mono text-[9.5px] uppercase tracking-[0.12em]">
+                {stat.label}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-1 p-2">
+          {SETTINGS_LINKS.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              className="text-fg-muted hover:bg-bg-muted hover:text-fg flex items-center justify-between rounded-[5px] px-2 py-1.5 text-[12.5px] transition"
+            >
+              {link.label}
+              <Icon name="chevron-right" size="xs" className="text-fg-faint" />
+            </a>
+          ))}
+        </div>
+      </Card>
+    </aside>
   )
 }
 
@@ -136,9 +241,7 @@ function ProfilePanel({ initial }: { initial: Profile }) {
   function save() {
     start(async () => {
       try {
-        await api.patch('/api/settings/profile', {
-          name,
-        })
+        await api.patch('/api/settings/profile', { name })
         toast('Profile saved', 'success')
       } catch (e) {
         toast((e as Error).message, 'error')
@@ -147,31 +250,26 @@ function ProfilePanel({ initial }: { initial: Profile }) {
   }
 
   return (
-    <Card id="profile">
-      <div className="border-b border-line p-5">
-        <div className="flex items-center gap-2">
-          <span className="grid size-7 place-items-center rounded-md border border-line bg-bg-subtle text-fg">
-            <Icon name="settings" size="sm" />
-          </span>
-          <CardTitle>Profile</CardTitle>
-        </div>
-        <CardDescription>Update your dashboard name. Sign-in security is managed by Clerk.</CardDescription>
-      </div>
+    <Card id="profile" className="scroll-mt-24 overflow-hidden">
+      <PanelHeader
+        icon="settings"
+        title="Profile"
+        description="Update the display name shown inside LivoCall. Account security is managed by Clerk."
+      />
       <CardBody className="grid gap-4 md:grid-cols-2">
-        <div>
-          <Label>Email</Label>
+        <Field label="Email" description="Used by Clerk for sign-in and recovery.">
           <Input className="mt-2" value={initial.email} disabled />
-        </div>
-        <div>
-          <Label>Name</Label>
+        </Field>
+        <Field label="Name" description="Visible in audit logs and team member lists.">
           <Input className="mt-2" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="md:col-span-2 flex justify-end">
-          <Button size="sm" onClick={save} disabled={pending}>
-            Save profile
-          </Button>
-        </div>
+        </Field>
       </CardBody>
+      <ActionFooter>
+        <Button size="sm" onClick={save} disabled={pending}>
+          <Icon name="check" size="xs" />
+          Save profile
+        </Button>
+      </ActionFooter>
     </Card>
   )
 }
@@ -179,12 +277,10 @@ function ProfilePanel({ initial }: { initial: Profile }) {
 function OrgForm({ initial, canAdmin }: { initial: Org; canAdmin: boolean }) {
   const [name, setName] = useState(initial.name)
   const [disclosure, setDisclosure] = useState(initial.btrcDisclosure)
-  const [disclosureAudioUrl, setDisclosureAudioUrl] = useState(
-    initial.btrcDisclosureAudioUrl ?? '',
+  const [disclosureAudioUrl, setDisclosureAudioUrl] = useState(initial.btrcDisclosureAudioUrl ?? '')
+  const [recordingConsent, setRecordingConsent] = useState<'required' | 'optional' | 'disabled'>(
+    initial.recordingConsent ?? 'optional',
   )
-  const [recordingConsent, setRecordingConsent] = useState<
-    'required' | 'optional' | 'disabled'
-  >(initial.recordingConsent ?? 'optional')
   const [dailyCap, setDailyCap] = useState(
     String(Math.round((initial.dailySpendCapPaisa ?? 0) / 100)),
   )
@@ -195,7 +291,9 @@ function OrgForm({ initial, canAdmin }: { initial: Org; canAdmin: boolean }) {
   const [detectOptOutSpeech, setDetectOptOutSpeech] = useState(
     initial.compliance?.detectOptOutSpeech ?? true,
   )
-  const [retentionDays, setRetentionDays] = useState(String(initial.compliance?.retentionDays ?? 365))
+  const [retentionDays, setRetentionDays] = useState(
+    String(initial.compliance?.retentionDays ?? 365),
+  )
   const [auditRetentionDays, setAuditRetentionDays] = useState(
     String(initial.compliance?.auditLogRetentionDays ?? 730),
   )
@@ -214,10 +312,7 @@ function OrgForm({ initial, canAdmin }: { initial: Org; canAdmin: boolean }) {
           btrcDisclosureAudioUrl: disclosureAudioUrl || '',
           recordingConsent,
           dailySpendCapPaisa: Math.max(0, Math.round(Number(dailyCap) || 0) * 100),
-          monthlySpendCapPaisa: Math.max(
-            0,
-            Math.round(Number(monthlyCap) || 0) * 100,
-          ),
+          monthlySpendCapPaisa: Math.max(0, Math.round(Number(monthlyCap) || 0) * 100),
           compliance: {
             piiRedaction,
             detectOptOutSpeech,
@@ -234,144 +329,162 @@ function OrgForm({ initial, canAdmin }: { initial: Org; canAdmin: boolean }) {
   }
 
   return (
-    <Card id="workspace">
-      <div className="border-b border-line p-5">
-        <div className="flex items-center gap-2">
-          <span className="grid size-7 place-items-center rounded-md border border-line bg-bg-subtle text-fg">
-            <Icon name="building" size="sm" />
-          </span>
-          <CardTitle>Workspace</CardTitle>
-        </div>
-        <CardDescription>
-          The business name on invoices and outbound disclosures. BTRC disclosure is played at the
-          start of every outbound call.
-        </CardDescription>
-      </div>
-      <CardBody className="grid gap-4 md:grid-cols-2">
-        <div>
-          <Label>Business name</Label>
-          <Input
-            className="mt-2"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={!canAdmin}
-          />
-        </div>
-        <div>
-          <Label>Slug</Label>
-          <Input className="mt-2 font-mono text-xs" value={initial.slug} disabled />
-        </div>
-        <div className="md:col-span-2">
-          <Label>BTRC disclosure (script)</Label>
-          <Textarea
-            rows={3}
-            className="mt-2"
-            value={disclosure}
-            onChange={(e) => setDisclosure(e.target.value)}
-            placeholder="This is an automated call from {Business Name}. Press 9 to opt out…"
-            disabled={!canAdmin}
-          />
-          <p className="mt-1 text-[12px] text-fg-muted">
-            Synthesized or read aloud at the start of every outbound call.
-          </p>
-        </div>
-        <div className="md:col-span-2">
-          <Label>BTRC disclosure audio URL</Label>
-          <Input
-            className="mt-2"
-            type="url"
-            value={disclosureAudioUrl}
-            onChange={(e) => setDisclosureAudioUrl(e.target.value)}
-            placeholder="https://…/disclosure-bn.wav (optional pre-recorded)"
-            disabled={!canAdmin}
-          />
-          <p className="mt-1 text-[12px] text-fg-muted">
-            Optional. When set, FreeSWITCH plays this file before audio-forks to the tier.
-          </p>
-        </div>
-        <div className="md:col-span-2">
-          <Label>Recording consent</Label>
-          <select
-            className="mt-2 h-10 w-full rounded-md border border-line bg-bg px-2 text-[13px]"
-            value={recordingConsent}
-            onChange={(e) =>
-              setRecordingConsent(
-                e.target.value as 'required' | 'optional' | 'disabled',
-              )
-            }
-            disabled={!canAdmin}
-          >
-            <option value="required">Required — play consent prompt, then record</option>
-            <option value="optional">Optional — record without prompt (default)</option>
-            <option value="disabled">Disabled — never record calls</option>
-          </select>
-        </div>
-        <div>
-          <Label>Daily spend cap (BDT)</Label>
-          <Input
-            className="mt-2"
-            type="number"
-            min={0}
-            value={dailyCap}
-            onChange={(e) => setDailyCap(e.target.value)}
-            placeholder="0 = no cap"
-            disabled={!canAdmin}
-          />
-          <p className="mt-1 text-[12px] text-fg-muted">
-            New calls are blocked once usage for the UTC day reaches this amount.
-          </p>
-        </div>
-        <div>
-          <Label>Monthly spend cap (BDT)</Label>
-          <Input
-            className="mt-2"
-            type="number"
-            min={0}
-            value={monthlyCap}
-            onChange={(e) => setMonthlyCap(e.target.value)}
-            placeholder="0 = no cap"
-            disabled={!canAdmin}
-          />
-          <p className="mt-1 text-[12px] text-fg-muted">
-            Resets at the start of every UTC month.
-          </p>
-        </div>
-        <div className="md:col-span-2 grid gap-4 rounded-md border border-line bg-bg-subtle p-4 md:grid-cols-2">
-          <label className="flex items-center gap-2 text-[13px] text-fg">
-            <Switch checked={piiRedaction} onChange={setPiiRedaction} disabled={!canAdmin} />
-            Redact PII in transcripts and exports
-          </label>
-          <label className="flex items-center gap-2 text-[13px] text-fg">
-            <Switch
+    <Card id="workspace" className="scroll-mt-24 overflow-hidden">
+      <PanelHeader
+        icon="building"
+        title="Workspace"
+        description="Business identity, consent prompts, spend caps, and retention rules saved per workspace."
+      />
+
+      <CardBody className="space-y-6">
+        <SettingsGroup
+          title="Identity"
+          description="Shown on invoices and internal workspace menus."
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Business name">
+              <Input
+                className="mt-2"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={!canAdmin}
+              />
+            </Field>
+            <Field label="Workspace slug">
+              <Input className="mt-2 font-mono text-xs" value={initial.slug} disabled />
+            </Field>
+          </div>
+        </SettingsGroup>
+
+        <SettingsGroup
+          title="Outbound disclosure"
+          description="Played or read before outbound calls connect to the voice tier."
+        >
+          <div className="grid gap-4">
+            <Field label="BTRC disclosure script">
+              <Textarea
+                rows={4}
+                className="mt-2"
+                value={disclosure}
+                onChange={(e) => setDisclosure(e.target.value)}
+                placeholder="This is an automated call from {Business Name}. Press 9 to opt out..."
+                disabled={!canAdmin}
+              />
+            </Field>
+            <Field label="Disclosure audio URL" description="Optional pre-recorded WAV/MP3 file.">
+              <Input
+                className="mt-2"
+                type="url"
+                value={disclosureAudioUrl}
+                onChange={(e) => setDisclosureAudioUrl(e.target.value)}
+                placeholder="https://example.com/disclosure-bn.wav"
+                disabled={!canAdmin}
+              />
+            </Field>
+            <Field label="Recording consent">
+              <select
+                className={selectClass}
+                value={recordingConsent}
+                onChange={(e) =>
+                  setRecordingConsent(e.target.value as 'required' | 'optional' | 'disabled')
+                }
+                disabled={!canAdmin}
+              >
+                <option value="required">Required - play consent prompt, then record</option>
+                <option value="optional">Optional - record without prompt</option>
+                <option value="disabled">Disabled - never record calls</option>
+              </select>
+            </Field>
+          </div>
+        </SettingsGroup>
+
+        <SettingsGroup title="Spend guardrails" description="Use 0 when a cap should be disabled.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Daily spend cap (BDT)">
+              <Input
+                className="mt-2"
+                type="number"
+                min={0}
+                value={dailyCap}
+                onChange={(e) => setDailyCap(e.target.value)}
+                placeholder="0 = no cap"
+                disabled={!canAdmin}
+              />
+            </Field>
+            <Field label="Monthly spend cap (BDT)">
+              <Input
+                className="mt-2"
+                type="number"
+                min={0}
+                value={monthlyCap}
+                onChange={(e) => setMonthlyCap(e.target.value)}
+                placeholder="0 = no cap"
+                disabled={!canAdmin}
+              />
+            </Field>
+          </div>
+        </SettingsGroup>
+
+        <SettingsGroup
+          title="Compliance controls"
+          description="Transcript handling and export permissions for this workspace."
+        >
+          <div className="border-line overflow-hidden rounded-md border">
+            <ToggleRow
+              title="Redact PII"
+              description="Hide sensitive details in transcripts and exports."
+              checked={piiRedaction}
+              onChange={setPiiRedaction}
+              disabled={!canAdmin}
+            />
+            <ToggleRow
+              title="Detect opt-out speech"
+              description="Add callers to DNC when they verbally opt out."
               checked={detectOptOutSpeech}
               onChange={setDetectOptOutSpeech}
               disabled={!canAdmin}
             />
-            Detect opt-out speech and add callers to DNC
-          </label>
-          <div>
-            <Label>Call retention days</Label>
-            <Input className="mt-2" type="number" min={1} value={retentionDays} onChange={(e) => setRetentionDays(e.target.value)} disabled={!canAdmin} />
-          </div>
-          <div>
-            <Label>Audit retention days</Label>
-            <Input className="mt-2" type="number" min={1} value={auditRetentionDays} onChange={(e) => setAuditRetentionDays(e.target.value)} disabled={!canAdmin} />
-          </div>
-          <label className="flex items-center gap-2 text-[13px] text-fg md:col-span-2">
-            <Switch
+            <ToggleRow
+              title="Agent role exports"
+              description="Allow agent users to export calls and transcripts."
               checked={agentRoleCanExport}
               onChange={setAgentRoleCanExport}
               disabled={!canAdmin}
             />
-            Allow agent role to export calls and transcripts
-          </label>
-        </div>
-        <div className="md:col-span-2 flex justify-end">
-          <Button size="sm" onClick={save} disabled={!canAdmin || pending}>
-            Save changes
-          </Button>
-        </div>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <Field label="Call retention days">
+              <Input
+                className="mt-2"
+                type="number"
+                min={1}
+                value={retentionDays}
+                onChange={(e) => setRetentionDays(e.target.value)}
+                disabled={!canAdmin}
+              />
+            </Field>
+            <Field label="Audit retention days">
+              <Input
+                className="mt-2"
+                type="number"
+                min={1}
+                value={auditRetentionDays}
+                onChange={(e) => setAuditRetentionDays(e.target.value)}
+                disabled={!canAdmin}
+              />
+            </Field>
+          </div>
+        </SettingsGroup>
       </CardBody>
+
+      <ActionFooter
+        note={!canAdmin ? 'Only owners and admins can edit workspace settings.' : undefined}
+      >
+        <Button size="sm" onClick={save} disabled={!canAdmin || pending}>
+          <Icon name="check" size="xs" />
+          Save workspace
+        </Button>
+      </ActionFooter>
     </Card>
   )
 }
@@ -390,18 +503,18 @@ function ApiKeysPanel({ initial, canAdmin }: { initial: ApiKey[]; canAdmin: bool
     setKeys(j.apiKeys)
   }
 
-  function toggleScope(s: string) {
-    setScopes((xs) => (xs.includes(s) ? xs.filter((x) => x !== s) : [...xs, s]))
+  function toggleScope(scope: string) {
+    setScopes((xs) => (xs.includes(scope) ? xs.filter((x) => x !== scope) : [...xs, scope]))
   }
 
   function create() {
     start(async () => {
       try {
-        const k = await api.post<ApiKey>('/api/settings/api-keys', { name, scopes })
-        setNewlyCreated(k)
+        const key = await api.post<ApiKey>('/api/settings/api-keys', { name, scopes })
+        setNewlyCreated(key)
         setName('')
         setCreating(false)
-        toast('API key created — copy the secret now', 'success')
+        toast('API key created - copy the secret now', 'success')
         await refresh()
       } catch (e) {
         toast((e as Error).message, 'error')
@@ -423,112 +536,106 @@ function ApiKeysPanel({ initial, canAdmin }: { initial: ApiKey[]; canAdmin: bool
   }
 
   return (
-    <Card id="api">
-      <div className="flex items-start justify-between border-b border-line p-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-md border border-line bg-bg-subtle text-fg">
-              <Icon name="cpu" size="sm" />
-            </span>
-            <CardTitle>API keys</CardTitle>
-          </div>
-          <CardDescription>Programmatic access to the public REST API.</CardDescription>
-        </div>
-        {canAdmin && (
-          <Button size="sm" onClick={() => setCreating((v) => !v)}>
-            {creating ? 'Cancel' : 'New key'}
-          </Button>
-        )}
-      </div>
-      <CardBody className="space-y-4">
-        {newlyCreated && newlyCreated.plaintext && (
-          <div className="rounded-md border border-status-live/40 bg-status-live/5 p-3">
-            <p className="text-[12.5px] font-medium text-fg">
-              Copy this secret now — it won’t be shown again.
-            </p>
-            <p className="mt-1 break-all font-mono text-[12px] text-fg">
-              {newlyCreated.plaintext}
-            </p>
+    <Card id="api" className="scroll-mt-24 overflow-hidden">
+      <PanelHeader
+        icon="cpu"
+        title="API keys"
+        description="Programmatic access for integrations and private automations."
+        action={
+          canAdmin ? (
             <Button
               size="sm"
-              variant="ghost"
-              className="mt-2"
-              onClick={() => setNewlyCreated(null)}
+              variant={creating ? 'secondary' : 'primary'}
+              onClick={() => setCreating((v) => !v)}
             >
-              I’ve saved it
+              <Icon name={creating ? 'x' : 'plus'} size="xs" />
+              {creating ? 'Cancel' : 'New key'}
             </Button>
-          </div>
+          ) : null
+        }
+      />
+
+      <CardBody className="space-y-4">
+        {newlyCreated?.plaintext && (
+          <SecretNotice
+            title="Copy this API secret now. It will not be shown again."
+            value={newlyCreated.plaintext}
+            onDismiss={() => setNewlyCreated(null)}
+          />
         )}
 
         {creating && (
-          <div className="rounded-md border border-line p-3">
-            <Label>Key name</Label>
-            <Input
-              className="mt-2"
-              placeholder="CRM integration"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <div className="mt-3">
-              <Label>Scopes</Label>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {SCOPES.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => toggleScope(s)}
-                    className={
-                      'rounded-full border px-2 py-0.5 font-mono text-[11px] ' +
-                      (scopes.includes(s)
-                        ? 'border-fg/40 bg-fg/5 text-fg'
-                        : 'border-line text-fg-muted hover:border-fg/30')
-                    }
+          <CreationPanel>
+            <Field label="Key name">
+              <Input
+                className="mt-2"
+                placeholder="CRM integration"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+            <Field label="Scopes" description="Select only the permissions this integration needs.">
+              <ChipGrid>
+                {SCOPES.map((scope) => (
+                  <ChoiceChip
+                    key={scope}
+                    active={scopes.includes(scope)}
+                    onClick={() => toggleScope(scope)}
                   >
-                    {s}
-                  </button>
+                    {scope}
+                  </ChoiceChip>
                 ))}
-              </div>
-            </div>
-            <div className="mt-3 flex justify-end">
+              </ChipGrid>
+            </Field>
+            <div className="flex justify-end">
               <Button
                 size="sm"
                 onClick={create}
                 disabled={!name.trim() || scopes.length === 0 || pending}
               >
+                <Icon name="zap" size="xs" />
                 Generate key
               </Button>
             </div>
-          </div>
+          </CreationPanel>
         )}
 
         {keys.length === 0 ? (
-          <p className="text-[13px] text-fg-muted">
-            No API keys yet. Create one to use the REST API.
-          </p>
+          <EmptyState
+            icon="cpu"
+            title="No API keys"
+            body="Create a key when an external service needs REST API access."
+          />
         ) : (
-          <ul className="divide-y divide-line">
-            {keys.map((k) => (
-              <li key={k.id} className="flex flex-wrap items-center gap-3 py-2.5">
-                <span className="font-display text-[13px] font-medium text-fg">{k.name}</span>
-                <span className="font-mono text-[11.5px] text-fg-faint">{k.prefix}…</span>
-                <div className="flex flex-wrap gap-1">
-                  {k.scopes.map((s) => (
-                    <Badge key={s} variant="outline" className="font-mono text-[10.5px]">
-                      {s}
-                    </Badge>
-                  ))}
+          <ul className="border-line overflow-hidden rounded-md border">
+            {keys.map((key) => (
+              <li
+                key={key.id}
+                className="border-line grid gap-3 border-b p-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-fg truncate text-[13px] font-semibold">{key.name}</p>
+                    <span className="text-fg-faint font-mono text-[11.5px]">{key.prefix}...</span>
+                    {key.revokedAt && <Badge variant="outline">revoked</Badge>}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {key.scopes.map((scope) => (
+                      <Badge key={scope} variant="outline" className="font-mono text-[10.5px]">
+                        {scope}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-fg-muted mt-2 text-[11.5px]">
+                    {key.lastUsedAt ? `Last used ${formatDate(key.lastUsedAt)}` : 'Never used'}
+                  </p>
                 </div>
-                {k.revokedAt ? (
-                  <Badge variant="outline">revoked</Badge>
-                ) : (
-                  <span className="flex-1 text-right text-[11.5px] text-fg-muted">
-                    {k.lastUsedAt ? `used ${new Date(k.lastUsedAt).toLocaleString()}` : 'unused'}
-                  </span>
-                )}
-                {!k.revokedAt && canAdmin && (
-                  <Button size="sm" variant="ghost" onClick={() => revoke(k.id)}>
-                    Revoke
-                  </Button>
+                {!key.revokedAt && canAdmin && (
+                  <div className="flex items-start justify-end">
+                    <Button size="sm" variant="ghost" onClick={() => revoke(key.id)}>
+                      Revoke
+                    </Button>
+                  </div>
                 )}
               </li>
             ))}
@@ -584,38 +691,41 @@ function SecretsPanel({ initial, canAdmin }: { initial: Secret[]; canAdmin: bool
   }
 
   return (
-    <Card id="secrets">
-      <div className="flex items-start justify-between border-b border-line p-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-md border border-line bg-bg-subtle text-fg">
-              <Icon name="shield" size="sm" />
-            </span>
-            <CardTitle>Secrets vault</CardTitle>
-          </div>
-          <CardDescription>
-            Encrypted storage for tool/API auth values with rotation, audit, and revocation metadata.
-          </CardDescription>
-        </div>
-        {canAdmin && (
-          <Button size="sm" onClick={() => setCreating((v) => !v)}>
-            {creating ? 'Cancel' : 'New secret'}
-          </Button>
-        )}
-      </div>
+    <Card id="secrets" className="scroll-mt-24 overflow-hidden">
+      <PanelHeader
+        icon="shield"
+        title="Secrets vault"
+        description="Encrypted tool/API auth values with rotation, audit, and revocation metadata."
+        action={
+          canAdmin ? (
+            <Button
+              size="sm"
+              variant={creating ? 'secondary' : 'primary'}
+              onClick={() => setCreating((v) => !v)}
+            >
+              <Icon name={creating ? 'x' : 'plus'} size="xs" />
+              {creating ? 'Cancel' : 'New secret'}
+            </Button>
+          ) : null
+        }
+      />
+
       <CardBody className="space-y-4">
         {creating && (
-          <div className="grid gap-3 rounded-md border border-line p-3 md:grid-cols-2">
-            <div>
-              <Label>Name</Label>
-              <Input className="mt-2 font-mono text-xs" placeholder="paystation.live" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div>
-              <Label>Kind</Label>
+          <CreationPanel className="grid gap-4 md:grid-cols-2">
+            <Field label="Name">
+              <Input
+                className="mt-2 font-mono text-xs"
+                placeholder="paystation.live"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+            <Field label="Kind">
               <select
                 value={kind}
                 onChange={(e) => setKind(e.target.value)}
-                className="mt-2 h-10 w-full rounded border border-line bg-bg-subtle px-3 text-sm"
+                className={selectClass}
               >
                 <option value="api_key">API key</option>
                 <option value="bearer_token">Bearer token</option>
@@ -623,44 +733,67 @@ function SecretsPanel({ initial, canAdmin }: { initial: Secret[]; canAdmin: bool
                 <option value="webhook_secret">Webhook secret</option>
                 <option value="custom">Custom</option>
               </select>
-            </div>
-            <div>
-              <Label>Provider</Label>
-              <Input className="mt-2" placeholder="PayStation, Shopify, CRM..." value={provider} onChange={(e) => setProvider(e.target.value)} />
-            </div>
-            <div>
-              <Label>Secret value</Label>
-              <Input className="mt-2 font-mono text-xs" type="password" value={value} onChange={(e) => setValue(e.target.value)} />
-            </div>
-            <div className="md:col-span-2 flex justify-end">
+            </Field>
+            <Field label="Provider">
+              <Input
+                className="mt-2"
+                placeholder="PayStation, Shopify, CRM..."
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
+              />
+            </Field>
+            <Field label="Secret value">
+              <Input
+                className="mt-2 font-mono text-xs"
+                type="password"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+              />
+            </Field>
+            <div className="flex justify-end md:col-span-2">
               <Button size="sm" disabled={pending || !name || !value} onClick={save}>
+                <Icon name="shield-check" size="xs" />
                 Save encrypted secret
               </Button>
             </div>
-          </div>
+          </CreationPanel>
         )}
+
         {secrets.length === 0 ? (
-          <p className="text-[13px] text-fg-muted">No secrets stored yet.</p>
+          <EmptyState
+            icon="shield"
+            title="No secrets"
+            body="Store provider credentials here before attaching them to tools."
+          />
         ) : (
-          <ul className="divide-y divide-line">
-            {secrets.map((s) => (
-              <li key={s.id} className="flex flex-wrap items-center gap-3 py-2.5">
-                <span className="font-display text-[13px] font-medium text-fg">{s.name}</span>
-                <Badge variant="outline">{s.kind}</Badge>
-                {s.provider && <span className="text-[12px] text-fg-muted">{s.provider}</span>}
-                <span className="font-mono text-[11.5px] text-fg-faint">fp:{s.fingerprint}</span>
-                <span className="text-[11.5px] text-fg-muted">v{s.version}</span>
-                {s.revokedAt ? (
-                  <Badge variant="outline">revoked</Badge>
-                ) : (
-                  <span className="flex-1 text-right text-[11.5px] text-fg-muted">
-                    rotated {s.rotatedAt ? new Date(s.rotatedAt).toLocaleString() : '—'}
-                  </span>
-                )}
-                {!s.revokedAt && canAdmin && (
-                  <Button size="sm" variant="ghost" onClick={() => revoke(s.id)}>
-                    Revoke
-                  </Button>
+          <ul className="border-line overflow-hidden rounded-md border">
+            {secrets.map((secret) => (
+              <li
+                key={secret.id}
+                className="border-line grid gap-3 border-b p-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-fg truncate text-[13px] font-semibold">{secret.name}</p>
+                    <Badge variant="outline">{secret.kind}</Badge>
+                    {secret.revokedAt && <Badge variant="outline">revoked</Badge>}
+                  </div>
+                  <p className="text-fg-muted mt-1 text-[12px]">
+                    {secret.provider || 'No provider'} - version {secret.version}
+                  </p>
+                  <p className="text-fg-faint mt-1 truncate font-mono text-[11.5px]">
+                    fp:{secret.fingerprint}
+                  </p>
+                  <p className="text-fg-muted mt-1 text-[11.5px]">
+                    Rotated {secret.rotatedAt ? formatDate(secret.rotatedAt) : 'never'}
+                  </p>
+                </div>
+                {!secret.revokedAt && canAdmin && (
+                  <div className="flex items-start justify-end">
+                    <Button size="sm" variant="ghost" onClick={() => revoke(secret.id)}>
+                      Revoke
+                    </Button>
+                  </div>
                 )}
               </li>
             ))}
@@ -686,24 +819,24 @@ function WebhooksPanel({ initial, canAdmin }: { initial: Webhook[]; canAdmin: bo
     setHooks(j.webhooks)
   }
 
-  function toggleEvent(e: string) {
-    setEvents((xs) => (xs.includes(e) ? xs.filter((x) => x !== e) : [...xs, e]))
+  function toggleEvent(event: string) {
+    setEvents((xs) => (xs.includes(event) ? xs.filter((x) => x !== event) : [...xs, event]))
   }
 
   function create() {
     start(async () => {
       try {
-        const h = await api.post<Webhook>('/api/settings/webhooks', {
+        const hook = await api.post<Webhook>('/api/settings/webhooks', {
           url,
           events,
           description: desc,
           active: true,
         })
-        setNewlyCreated(h)
+        setNewlyCreated(hook)
         setUrl('')
         setDesc('')
         setCreating(false)
-        toast('Webhook created — copy the signing secret now', 'success')
+        toast('Webhook created - copy the signing secret now', 'success')
         await refresh()
       } catch (e) {
         toast((e as Error).message, 'error')
@@ -711,10 +844,10 @@ function WebhooksPanel({ initial, canAdmin }: { initial: Webhook[]; canAdmin: bo
     })
   }
 
-  function toggleActive(h: Webhook) {
+  function toggleActive(hook: Webhook) {
     start(async () => {
       try {
-        await api.patch(`/api/settings/webhooks/${h.id}`, { active: !h.active })
+        await api.patch(`/api/settings/webhooks/${hook.id}`, { active: !hook.active })
         await refresh()
       } catch (e) {
         toast((e as Error).message, 'error')
@@ -736,128 +869,121 @@ function WebhooksPanel({ initial, canAdmin }: { initial: Webhook[]; canAdmin: bo
   }
 
   return (
-    <Card id="webhooks">
-      <div className="flex items-start justify-between border-b border-line p-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-md border border-line bg-bg-subtle text-fg">
-              <Icon name="plug" size="sm" />
-            </span>
-            <CardTitle>Webhooks</CardTitle>
-          </div>
-          <CardDescription>
-            HMAC-signed POSTs to your URL for call + account events. Retried with exponential
-            backoff.
-          </CardDescription>
-        </div>
-        {canAdmin && (
-          <Button size="sm" onClick={() => setCreating((v) => !v)}>
-            {creating ? 'Cancel' : 'New webhook'}
-          </Button>
-        )}
-      </div>
-      <CardBody className="space-y-4">
-        {newlyCreated && newlyCreated.secret && (
-          <div className="rounded-md border border-status-live/40 bg-status-live/5 p-3">
-            <p className="text-[12.5px] font-medium text-fg">
-              Copy this signing secret — it won’t be shown again.
-            </p>
-            <p className="mt-1 break-all font-mono text-[12px] text-fg">{newlyCreated.secret}</p>
+    <Card id="webhooks" className="scroll-mt-24 overflow-hidden">
+      <PanelHeader
+        icon="plug"
+        title="Webhooks"
+        description="HMAC-signed POSTs for call, agent, campaign, and billing events."
+        action={
+          canAdmin ? (
             <Button
               size="sm"
-              variant="ghost"
-              className="mt-2"
-              onClick={() => setNewlyCreated(null)}
+              variant={creating ? 'secondary' : 'primary'}
+              onClick={() => setCreating((v) => !v)}
             >
-              I’ve saved it
+              <Icon name={creating ? 'x' : 'plus'} size="xs" />
+              {creating ? 'Cancel' : 'New webhook'}
             </Button>
-          </div>
+          ) : null
+        }
+      />
+
+      <CardBody className="space-y-4">
+        {newlyCreated?.secret && (
+          <SecretNotice
+            title="Copy this signing secret now. It will not be shown again."
+            value={newlyCreated.secret}
+            onDismiss={() => setNewlyCreated(null)}
+          />
         )}
 
         {creating && (
-          <div className="rounded-md border border-line p-3 space-y-3">
-            <div>
-              <Label>URL</Label>
+          <CreationPanel>
+            <Field label="URL">
               <Input
                 className="mt-2 font-mono text-xs"
                 placeholder="https://your-app.example/livocall/webhook"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
-            </div>
-            <div>
-              <Label>Description (optional)</Label>
+            </Field>
+            <Field label="Description" description="Optional context for teammates.">
               <Input
                 className="mt-2"
                 placeholder="Post call summaries into CRM"
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
               />
-            </div>
-            <div>
-              <Label>Events</Label>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {WEBHOOK_EVENTS.map((ev) => (
-                  <button
-                    key={ev}
-                    type="button"
-                    onClick={() => toggleEvent(ev)}
-                    className={
-                      'rounded-full border px-2 py-0.5 font-mono text-[11px] ' +
-                      (events.includes(ev)
-                        ? 'border-fg/40 bg-fg/5 text-fg'
-                        : 'border-line text-fg-muted hover:border-fg/30')
-                    }
+            </Field>
+            <Field label="Events">
+              <ChipGrid>
+                {WEBHOOK_EVENTS.map((event) => (
+                  <ChoiceChip
+                    key={event}
+                    active={events.includes(event)}
+                    onClick={() => toggleEvent(event)}
                   >
-                    {ev}
-                  </button>
+                    {event}
+                  </ChoiceChip>
                 ))}
-              </div>
-            </div>
+              </ChipGrid>
+            </Field>
             <div className="flex justify-end">
               <Button
                 size="sm"
                 onClick={create}
                 disabled={!url.trim() || events.length === 0 || pending}
               >
+                <Icon name="plus" size="xs" />
                 Create webhook
               </Button>
             </div>
-          </div>
+          </CreationPanel>
         )}
 
         {hooks.length === 0 ? (
-          <p className="text-[13px] text-fg-muted">No webhooks yet.</p>
+          <EmptyState
+            icon="plug"
+            title="No webhooks"
+            body="Create a webhook to send LivoCall events to your app."
+          />
         ) : (
-          <ul className="divide-y divide-line">
-            {hooks.map((h) => (
-              <li key={h.id} className="flex flex-wrap items-center gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-[12px] text-fg">{h.url}</p>
-                  <p className="text-[11.5px] text-fg-muted">
-                    {h.events.join(', ')}
-                    {h.description ? ` · ${h.description}` : ''}
+          <ul className="border-line overflow-hidden rounded-md border">
+            {hooks.map((hook) => (
+              <li
+                key={hook.id}
+                className="border-line grid gap-3 border-b p-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-fg truncate font-mono text-[12px] font-semibold">
+                      {hook.url}
+                    </p>
+                    <Badge variant={hook.active ? 'live' : 'outline'}>
+                      {hook.active ? 'active' : 'paused'}
+                    </Badge>
+                  </div>
+                  <p className="text-fg-muted mt-1 text-[11.5px]">
+                    {hook.events.join(', ')}
+                    {hook.description ? ` - ${hook.description}` : ''}
                   </p>
-                  {h.lastDeliveryAt && (
-                    <p className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-fg-faint">
-                      last {new Date(h.lastDeliveryAt).toLocaleString()} · status{' '}
-                      {h.lastDeliveryStatus ?? '—'}
-                      {h.failureCount > 0 ? ` · ${h.failureCount} fails` : ''}
+                  {hook.lastDeliveryAt && (
+                    <p className="text-fg-faint mt-1 font-mono text-[10.5px] uppercase tracking-[0.12em]">
+                      Last {formatDate(hook.lastDeliveryAt)} - status{' '}
+                      {hook.lastDeliveryStatus ?? 'unknown'}
+                      {hook.failureCount > 0 ? ` - ${hook.failureCount} fails` : ''}
                     </p>
                   )}
                 </div>
-                <Badge variant={h.active ? 'live' : 'outline'}>
-                  {h.active ? 'active' : 'paused'}
-                </Badge>
                 {canAdmin && (
-                  <>
-                    <Button size="sm" variant="ghost" onClick={() => toggleActive(h)}>
-                      {h.active ? 'Pause' : 'Resume'}
+                  <div className="flex flex-wrap items-start justify-end gap-1.5">
+                    <Button size="sm" variant="ghost" onClick={() => toggleActive(hook)}>
+                      {hook.active ? 'Pause' : 'Resume'}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => remove(h.id)}>
+                    <Button size="sm" variant="ghost" onClick={() => remove(hook.id)}>
                       Delete
                     </Button>
-                  </>
+                  </div>
                 )}
               </li>
             ))}
@@ -866,4 +992,186 @@ function WebhooksPanel({ initial, canAdmin }: { initial: Webhook[]; canAdmin: bo
       </CardBody>
     </Card>
   )
+}
+
+function PanelHeader({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: IconName
+  title: string
+  description: string
+  action?: ReactNode
+}) {
+  return (
+    <div className="border-line bg-bg-subtle/35 flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex min-w-0 gap-3">
+        <span className="border-line bg-bg text-fg-muted shadow-card grid size-9 shrink-0 place-items-center rounded-md border">
+          <Icon name={icon} size="md" />
+        </span>
+        <div className="min-w-0">
+          <CardTitle>{title}</CardTitle>
+          <CardDescription className="max-w-2xl">{description}</CardDescription>
+        </div>
+      </div>
+      {action && <div className="flex shrink-0 justify-start sm:justify-end">{action}</div>}
+    </div>
+  )
+}
+
+function SettingsGroup({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: ReactNode
+}) {
+  return (
+    <section className="border-line border-t pt-5 first:border-t-0 first:pt-0">
+      <div className="mb-3">
+        <p className="text-fg text-[13px] font-semibold">{title}</p>
+        {description && <p className="text-fg-muted mt-0.5 text-[12px]">{description}</p>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function Field({
+  label,
+  description,
+  children,
+  className,
+}: {
+  label: string
+  description?: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={className}>
+      <Label>{label}</Label>
+      {children}
+      {description && (
+        <p className="text-fg-muted mt-1 text-[12px] leading-relaxed">{description}</p>
+      )}
+    </div>
+  )
+}
+
+function ToggleRow({
+  title,
+  description,
+  checked,
+  onChange,
+  disabled,
+}: {
+  title: string
+  description: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <label className="border-line bg-bg flex items-center justify-between gap-4 border-b px-3 py-3 last:border-b-0">
+      <span className="min-w-0">
+        <span className="text-fg block text-[12.5px] font-medium">{title}</span>
+        <span className="text-fg-muted mt-0.5 block text-[11.5px]">{description}</span>
+      </span>
+      <Switch checked={checked} onChange={onChange} disabled={disabled} />
+    </label>
+  )
+}
+
+function ActionFooter({ children, note }: { children: ReactNode; note?: string }) {
+  return (
+    <div className="border-line bg-bg-subtle/35 flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-fg-muted text-[12px]">{note}</p>
+      <div className="flex justify-end">{children}</div>
+    </div>
+  )
+}
+
+function CreationPanel({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('border-line bg-bg-subtle/45 rounded-md border p-4', className)}>
+      {children}
+    </div>
+  )
+}
+
+function ChipGrid({ children }: { children: ReactNode }) {
+  return <div className="mt-2 flex flex-wrap gap-1.5">{children}</div>
+}
+
+function ChoiceChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-full border px-2 py-0.5 font-mono text-[11px] transition',
+        active
+          ? 'border-fg/40 bg-fg/5 text-fg'
+          : 'border-line bg-bg text-fg-muted hover:border-fg/30 hover:text-fg',
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function SecretNotice({
+  title,
+  value,
+  onDismiss,
+}: {
+  title: string
+  value: string
+  onDismiss: () => void
+}) {
+  return (
+    <div className="border-status-live/40 bg-status-live/5 rounded-md border p-3">
+      <div className="flex items-start gap-2">
+        <Icon name="shield-check" size="sm" className="text-status-live mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-fg text-[12.5px] font-medium">{title}</p>
+          <p className="border-status-live/20 bg-bg text-fg mt-1 break-all rounded border px-2 py-1.5 font-mono text-[12px]">
+            {value}
+          </p>
+        </div>
+      </div>
+      <Button size="sm" variant="ghost" className="mt-2" onClick={onDismiss}>
+        I saved it
+      </Button>
+    </div>
+  )
+}
+
+function EmptyState({ icon, title, body }: { icon: IconName; title: string; body: string }) {
+  return (
+    <div className="border-line bg-bg-subtle/40 rounded-md border border-dashed px-4 py-8 text-center">
+      <span className="border-line bg-bg text-fg-faint mx-auto grid size-9 place-items-center rounded-md border">
+        <Icon name={icon} size="sm" />
+      </span>
+      <p className="text-fg mt-3 text-[13px] font-medium">{title}</p>
+      <p className="text-fg-muted mx-auto mt-1 max-w-md text-[12px]">{body}</p>
+    </div>
+  )
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString()
 }

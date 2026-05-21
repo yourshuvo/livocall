@@ -39,8 +39,15 @@ export const clerkAuthPageAppearance = {
     ...clerkAppearance.elements,
     card: 'w-full border border-line bg-bg shadow-card',
     cardBox: 'w-full shadow-none',
+    rootBox: 'mx-auto w-full max-w-[420px]',
+  },
+} as const
+
+export const clerkSignupPageAppearance = {
+  ...clerkAuthPageAppearance,
+  elements: {
+    ...clerkAuthPageAppearance.elements,
     footer: 'hidden',
-    rootBox: 'w-full',
   },
 } as const
 
@@ -59,5 +66,20 @@ export const clerkSidebarUserButtonAppearance = {
       'flex h-9 w-full items-center justify-start gap-2 rounded-[5px] px-2 text-left transition hover:bg-bg-muted focus:shadow-ring-accent',
     userPreviewMainIdentifier: 'text-fg',
     userPreviewSecondaryIdentifier: 'text-fg-muted',
+  },
+} as const
+
+export const clerkLocalization = {
+  signIn: {
+    start: {
+      title: 'Sign in to LivoCall',
+      subtitle: 'Continue to your voice agent workspace.',
+    },
+  },
+  signUp: {
+    start: {
+      title: 'Create your LivoCall account',
+      subtitle: 'Start your workspace for agents, campaigns, and call monitoring.',
+    },
   },
 } as const

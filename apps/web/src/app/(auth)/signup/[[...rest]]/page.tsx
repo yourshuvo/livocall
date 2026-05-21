@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { SignUp } from '@clerk/nextjs'
 import { Icon } from '@/components/ui/icon'
-import { clerkAuthPageAppearance } from '@/lib/clerk-appearance'
+import { clerkSignupPageAppearance } from '@/lib/clerk-appearance'
 
 export const metadata = { title: 'Create account - LivoCall' }
 
@@ -51,7 +51,7 @@ export default async function SignupPage({
           routing="path"
           forceRedirectUrl={redirectUrl}
           signInUrl="/login"
-          appearance={clerkAuthPageAppearance}
+          appearance={clerkSignupPageAppearance}
         />
       </div>
       <p className="text-fg-muted mt-6 text-[13px]">
