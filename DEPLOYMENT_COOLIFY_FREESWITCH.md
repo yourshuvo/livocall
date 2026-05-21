@@ -134,6 +134,8 @@ npm run build
 npm start
 ```
 
+The runtime stage copies only production dependencies, `.next`, and `public`, so the final image does not include the full source tree or development dependencies.
+
 Set environment variables from:
 
 ```txt
