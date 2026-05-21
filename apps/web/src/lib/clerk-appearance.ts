@@ -15,7 +15,7 @@ export const clerkAppearance = {
     card: 'border border-line bg-bg shadow-card',
     cardBox: 'shadow-none',
     footerActionLink: 'font-medium text-fg hover:text-fg-strong',
-    formButtonPrimary: 'bg-fg text-fg-inverse shadow-none hover:bg-fg-strong',
+    formButtonPrimary: 'bg-blue-600 text-white shadow-none hover:bg-blue-700',
     formFieldInput:
       'rounded border border-line bg-bg-subtle text-fg focus:border-fg/40 focus:ring-2 focus:ring-accent/20',
     formFieldLabel: 'text-fg-muted',

@@ -97,7 +97,7 @@ export default async function CallsPage({
             </a>
             <Link
               href="/agents"
-              className="bg-fg text-fg-inverse hover:bg-fg-strong inline-flex h-8 items-center gap-1.5 rounded-[5px] px-3 text-[12.5px] font-medium transition"
+              className="inline-flex h-8 items-center gap-1.5 rounded-[5px] bg-blue-600 px-3 text-[12.5px] font-medium text-white transition hover:bg-blue-700"
             >
               <Icon name="phone-out" size="xs" /> Test call
             </Link>

@@ -979,7 +979,7 @@ export function AgentEditor({
             type="button"
             onClick={publish}
             disabled={pending}
-            className="bg-fg text-fg-inverse hover:bg-fg-strong ml-1 inline-flex h-8 items-center gap-1 rounded-[5px] px-3 text-[12.5px] font-medium transition disabled:opacity-60"
+            className="ml-1 inline-flex h-8 items-center gap-1 rounded-[5px] bg-blue-600 px-3 text-[12.5px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
           >
             {status === 'live' ? 'Move to draft' : 'Publish'}
           </button>
@@ -1477,7 +1477,7 @@ export function AgentEditor({
                       className={cn(
                         'inline-flex h-7 items-center gap-1.5 rounded-[5px] border px-2.5 text-[12px] transition',
                         p === voiceProvider
-                          ? 'border-fg bg-fg text-fg-inverse'
+                          ? 'border-blue-600 bg-blue-600 text-white'
                           : 'border-line bg-bg text-fg hover:bg-bg-muted',
                       )}
                     >
@@ -1528,7 +1528,7 @@ export function AgentEditor({
                         className={cn(
                           'inline-flex h-7 items-center rounded-[5px] border px-2.5 text-[12px] transition',
                           s === voiceStyle
-                            ? 'border-fg bg-fg text-fg-inverse'
+                            ? 'border-blue-600 bg-blue-600 text-white'
                             : 'border-line bg-bg text-fg hover:bg-bg-muted',
                         )}
                       >
@@ -2174,7 +2174,7 @@ function SegTab({
       onClick={onClick}
       className={cn(
         'inline-flex h-7 items-center rounded-[4px] px-3 text-[12px] font-medium transition',
-        active ? 'bg-fg text-fg-inverse' : 'text-fg-muted hover:text-fg',
+        active ? 'bg-blue-600 text-white' : 'text-fg-muted hover:text-fg',
       )}
     >
       {children}

@@ -481,7 +481,7 @@ function BalanceWarningCard({ initialCreditsPaisa }: { initialCreditsPaisa: numb
       </dl>
       <Link
         href="/billing"
-        className="bg-fg text-fg-inverse hover:bg-fg-strong mt-2 inline-flex w-full items-center justify-center gap-1 rounded-[5px] px-2 py-1.5 text-[11.5px] font-medium transition"
+        className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-[5px] bg-blue-600 px-2 py-1.5 text-[11.5px] font-medium text-white transition hover:bg-blue-700"
       >
         <Icon name="arrow-up-right" size="xs" />
         Top up balance

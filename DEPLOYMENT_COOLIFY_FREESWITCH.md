@@ -129,8 +129,8 @@ The web Dockerfile uses:
 
 ```txt
 node:24-alpine
-npm ci --legacy-peer-deps --no-audit --no-fund
-npm run build
+pnpm install --frozen-lockfile --prod=false --store-dir /pnpm/store
+pnpm run build
 npm start
 ```
 
@@ -648,12 +648,12 @@ FROM node:24-alpine
 
 If it shows `node:20-alpine` or `node:23-alpine`, update the Dockerfile in the repo and remove any pasted Dockerfile override in Coolify.
 
-### Web Build Fails at `npm install`
+### Web Build Fails at dependency install
 
 The web Dockerfile must include:
 
 ```dockerfile
-RUN npm ci --legacy-peer-deps --no-audit --no-fund
+RUN pnpm install --frozen-lockfile --prod=false --store-dir /pnpm/store
 ```
 
 ### Web Says Voice Unavailable

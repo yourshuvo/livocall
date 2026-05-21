@@ -1,20 +1,26 @@
 FROM node:24-alpine AS deps
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH
 RUN corepack enable
-COPY package.json package-lock.json .npmrc ./
-RUN npm ci --legacy-peer-deps --no-audit --no-fund
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN --mount=type=cache,id=livocall-web-pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prod=false --store-dir /pnpm/store
 
 FROM node:24-alpine AS build
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH
+RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN pnpm run build
 RUN rm -rf .next/cache .next/dev .next/diagnostics .next/types .next/trace .next/trace-build
 
 FROM deps AS prod-deps
-RUN npm prune --omit=dev --legacy-peer-deps --no-audit --no-fund
+RUN pnpm prune --prod
 
 FROM node:24-alpine AS run
 WORKDIR /app

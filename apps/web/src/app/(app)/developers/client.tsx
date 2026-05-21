@@ -164,7 +164,7 @@ export function DevelopersClient({
             onClick={() => setTab(id)}
             className={`rounded-sm border px-3 py-1.5 text-[12.5px] transition ${
               tab === id
-                ? 'border-fg bg-fg text-fg-inverse'
+                ? 'border-blue-600 bg-blue-600 text-white'
                 : 'border-line bg-bg-subtle text-fg-muted hover:text-fg'
             }`}
           >
