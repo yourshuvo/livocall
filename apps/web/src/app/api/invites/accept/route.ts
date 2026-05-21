@@ -9,6 +9,7 @@ import { User } from '@/models/User'
 import { Org } from '@/models/Org'
 import { hashToken } from '@/lib/tokens'
 import { apiError, withErrors } from '@/lib/errors'
+import { ensureClerkOrganization, ensureClerkOrganizationMembership } from '@/lib/clerk-orgs'
 
 const Body = z.object({
   token: z.string().min(10),
@@ -25,12 +26,7 @@ export const POST = withErrors(async (req: Request) => {
   const body = Body.parse(await req.json().catch(() => ({})))
   await connectMongo()
   const invite = await Invite.findOne({ tokenHash: hashToken(body.token) })
-  if (
-    !invite ||
-    invite.acceptedAt ||
-    invite.revokedAt ||
-    invite.expiresAt.getTime() < Date.now()
-  ) {
+  if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt.getTime() < Date.now()) {
     return apiError('invalid_input', 'invite is invalid or expired')
   }
 
@@ -71,6 +67,17 @@ export const POST = withErrors(async (req: Request) => {
       invitedBy: invite.invitedBy,
       acceptedAt: new Date(),
     })
+  }
+
+  try {
+    const clerkOrgId = await ensureClerkOrganization(org, clerkId)
+    await ensureClerkOrganizationMembership({
+      clerkOrgId,
+      clerkUserId: clerkId,
+      role: invite.role,
+    })
+  } catch {
+    // Local membership remains authoritative; Clerk organization sync can retry on later admin actions.
   }
 
   invite.acceptedAt = new Date()

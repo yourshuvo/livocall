@@ -60,6 +60,19 @@ export async function updateClerkOrganizationName(org: OrgDoc | OrgLean) {
   return clerkOrgId
 }
 
+export async function getClerkOrganizationLogoUrl(org: OrgDoc | OrgLean) {
+  if (!org.clerkOrgId) return null
+  const client = await clerkClient()
+  try {
+    const clerkOrg = await client.organizations.getOrganization({ organizationId: org.clerkOrgId })
+    const imageUrl =
+      'imageUrl' in clerkOrg && typeof clerkOrg.imageUrl === 'string' ? clerkOrg.imageUrl : ''
+    return imageUrl || null
+  } catch {
+    return null
+  }
+}
+
 export async function ensureClerkOrganizationMembership({
   clerkOrgId,
   clerkUserId,

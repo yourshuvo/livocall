@@ -177,7 +177,7 @@ function SettingsRail({
       <Card className="overflow-hidden">
         <div className="border-line border-b p-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-fg-faint font-mono text-[10px] uppercase tracking-[0.14em]">
                 Current workspace
               </p>
@@ -339,7 +339,7 @@ function OrgForm({ initial, canAdmin }: { initial: Org; canAdmin: boolean }) {
       <CardBody className="space-y-6">
         <SettingsGroup
           title="Identity"
-          description="Shown on invoices and internal workspace menus."
+          description="Shown on invoices and internal workspace menus. Invite logos come from the Clerk Organization profile."
         >
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Business name">

@@ -47,7 +47,7 @@ export const PATCH = withErrors(async (req: Request) => {
   await connectMongo()
   const org = await Org.findByIdAndUpdate(s.orgId, { $set: body }, { new: true }).lean()
   if (!org) return apiError('not_found')
-  if (body.name) {
+  if (body.name !== undefined) {
     await updateClerkOrganizationName(org)
   }
   await recordAudit(s, {

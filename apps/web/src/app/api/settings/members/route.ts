@@ -12,7 +12,8 @@ import { generateToken, hashToken } from '@/lib/tokens'
 import { sendMail, appBaseUrl } from '@/lib/mailer'
 import { recordAudit } from '@/lib/audit'
 import { Org } from '@/models/Org'
-import { createClerkWorkspaceInvitation } from '@/lib/clerk-orgs'
+import { createClerkWorkspaceInvitation, getClerkOrganizationLogoUrl } from '@/lib/clerk-orgs'
+import { renderWorkspaceInviteEmail } from '@/lib/invite-email'
 
 interface MemberRow {
   id: string
@@ -121,6 +122,10 @@ export const POST = withErrors(async (req: Request) => {
     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7), // 7 days
   })
   const link = `${appBaseUrl()}/invites/${token}`
+  const [clerkLogoUrl, inviter] = await Promise.all([
+    getClerkOrganizationLogoUrl(org),
+    User.findById(s.userId).lean(),
+  ])
   let delivery: 'clerk' | 'livocall' = 'livocall'
   try {
     const clerkInvite = await createClerkWorkspaceInvitation({
@@ -134,10 +139,22 @@ export const POST = withErrors(async (req: Request) => {
     await invite.save()
     delivery = 'clerk'
   } catch {
+    const message = renderWorkspaceInviteEmail({
+      workspaceName: org.name,
+      workspaceSlug: org.slug,
+      workspaceLogoUrl: clerkLogoUrl,
+      inviterName: inviter?.name,
+      inviterEmail: inviter?.email,
+      inviteeEmail: invite.email,
+      role: body.role,
+      acceptUrl: link,
+      expiresAt: invite.expiresAt,
+    })
     await sendMail({
       to: body.email,
-      subject: "You're invited to join a LivoCall workspace",
-      text: `You've been invited to join a workspace on LivoCall as ${body.role}.\n\nAccept the invite within 7 days:\n${link}\n\nIf you didn't expect this email, you can safely ignore it.`,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
     })
   }
   await recordAudit(s, {

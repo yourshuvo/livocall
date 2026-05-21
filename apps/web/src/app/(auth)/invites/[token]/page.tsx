@@ -6,14 +6,10 @@ import { Org } from '@/models/Org'
 import { hashToken } from '@/lib/tokens'
 import { Icon } from '@/components/ui/icon'
 
-export const metadata = { title: 'Invite · LivoCall' }
+export const metadata = { title: 'Invite - LivoCall' }
 export const dynamic = 'force-dynamic'
 
-export default async function AcceptInvitePage({
-  params,
-}: {
-  params: Promise<{ token: string }>
-}) {
+export default async function AcceptInvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   if (!isMongoConfigured()) {
     return <InvalidInvite reason="Mongo is not configured." />
@@ -21,12 +17,7 @@ export default async function AcceptInvitePage({
   await connectMongo()
   const now = new Date()
   const invite = await Invite.findOne({ tokenHash: hashToken(token) }).lean()
-  if (
-    !invite ||
-    invite.acceptedAt ||
-    invite.revokedAt ||
-    invite.expiresAt < now
-  ) {
+  if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt < now) {
     return <InvalidInvite reason="This invite is invalid or has expired." />
   }
   const org = await Org.findById(invite.orgId).lean()
@@ -34,23 +25,24 @@ export default async function AcceptInvitePage({
 
   return (
     <div>
-      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-faint">
-        Invitation
-      </p>
-      <h1 className="mt-2 font-display text-[34px] font-medium leading-[1.04] tracking-tightest text-fg">
+      <p className="text-fg-faint font-mono text-[11px] uppercase tracking-[0.16em]">Invitation</p>
+      <h1 className="font-display tracking-tightest text-fg mt-2 text-[34px] font-medium leading-[1.04]">
         Join {org.name}.
       </h1>
-      <p className="mt-2 text-[13px] text-fg-muted">
-        Invited to <span className="font-mono text-fg">{invite.email}</span> as{' '}
-        <span className="font-mono text-fg">{String(invite.role)}</span>.
+      <p className="text-fg-muted mt-2 text-[13px]">
+        Invited to <span className="text-fg font-mono">{invite.email}</span> as{' '}
+        <span className="text-fg font-mono">{String(invite.role)}</span>.
       </p>
-      <div className="mt-6 rounded-xl border border-line bg-bg-subtle p-3">
+      <div className="border-line bg-bg-subtle mt-6 rounded-xl border p-3">
         {[
           { icon: 'bot', label: 'Work on shared voice agents' },
           { icon: 'book', label: 'Review knowledge sources and ingestion status' },
           { icon: 'activity', label: 'Monitor campaigns, calls, and compliance events' },
         ].map((item) => (
-          <div key={item.label} className="flex items-center gap-3 border-b border-line py-2 text-[12px] text-fg-muted last:border-b-0">
+          <div
+            key={item.label}
+            className="border-line text-fg-muted flex items-center gap-3 border-b py-2 text-[12px] last:border-b-0"
+          >
             <Icon name={item.icon as 'bot'} size="sm" square />
             <span>{item.label}</span>
           </div>
@@ -66,8 +58,8 @@ export default async function AcceptInvitePage({
 function InvalidInvite({ reason }: { reason: string }) {
   return (
     <div>
-      <h1 className="font-display text-[28px] text-fg">Invite unavailable</h1>
-      <p className="mt-2 text-[13px] text-fg-muted">{reason}</p>
+      <h1 className="font-display text-fg text-[28px]">Invite unavailable</h1>
+      <p className="text-fg-muted mt-2 text-[13px]">{reason}</p>
       <p className="mt-6">
         <Link href="/" className="text-fg underline-offset-4 hover:underline">
           Back home

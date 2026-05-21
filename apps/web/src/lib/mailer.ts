@@ -43,6 +43,7 @@ export function appBaseUrl(): string {
   return (
     process.env.APP_BASE_URL ||
     process.env.NEXT_PUBLIC_APP_BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
     'http://localhost:3000'
   ).replace(/\/$/, '')
 }
