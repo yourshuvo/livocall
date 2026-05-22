@@ -1,10 +1,10 @@
 import { cn } from '@/lib/cn'
 
 export const BRAND_WORDMARK_URL =
-  'https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779089995/file_00000000f26c71fa9ffe8fb9cb675e19_wxjm8x.png'
+  'https://user-cdn.hackclub-assets.com/019e5013-e846-7fc9-9532-7c8592ef92f9/IMG_20260522_201724.png'
 
 export const BRAND_ICON_URL =
-  'https://res.cloudinary.com/dfb3ym0jr/image/upload/v1779084797/file_0000000019fc72079de24940c9d76d56_lki6kr.png'
+  'https://user-cdn.hackclub-assets.com/019e5013-e846-7fc9-9532-7c8592ef92f9/IMG_20260522_201724.png'
 
 export function Wordmark({ className }: { className?: string }) {
   return (

@@ -22,8 +22,8 @@ const NAV_ITEMS = [
 
 const TRUST_MARKS = ['E-commerce', 'Clinics', 'Education', 'Finance', 'Logistics']
 
-const HERO_VIDEO_URL =
-  'https://player.cloudinary.com/embed/?cloud_name=dfb3ym0jr&public_id=watermark_removed_4eb7bce2-4a4f-4a96-80fd-4680079b0524_oc3asn&autoplay=true&muted=true&loop=true&controls=false'
+const HERO_IMAGE_URL =
+  'https://user-cdn.hackclub-assets.com/019e5013-92f3-78b5-bc0c-7452e33dc7f3/frosted-hero.png'
 
 const FEATURE_ASSETS = [
   {
@@ -112,13 +112,11 @@ function Hero({ locale }: { locale: Locale }) {
   return (
     <section className="relative isolate flex min-h-screen overflow-hidden border-b border-line">
       <div className="absolute inset-0 -z-20 overflow-hidden bg-bg">
-        <iframe
-          src={HERO_VIDEO_URL}
-          title="LivoCall voice agent video"
+        <img
+          src={HERO_IMAGE_URL}
+          alt=""
           aria-hidden="true"
-          tabIndex={-1}
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          className="absolute left-1/2 top-1/2 h-[120vw] min-h-[120vh] w-[213.34vh] min-w-[120vw] -translate-x-1/2 -translate-y-1/2 border-0"
+          className="absolute inset-0 h-full w-full object-cover"
         />
       </div>
       <div className="absolute inset-0 -z-10 bg-white/70" />

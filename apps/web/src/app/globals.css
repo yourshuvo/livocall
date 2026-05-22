@@ -38,3 +38,19 @@ body {
   background: rgb(var(--fg));
   color: rgb(var(--bg));
 }
+
+@keyframes brand-loading-blink {
+  0%, 100% {
+    opacity: 0.32;
+    transform: scale(0.98);
+  }
+
+  50% {
+    opacity: 0.78;
+    transform: scale(1);
+  }
+}
+
+.brand-loading-blink {
+  animation: brand-loading-blink 1.15s ease-in-out infinite;
+}
