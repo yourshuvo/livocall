@@ -16,7 +16,7 @@ export function LangSwitcher({ locale }: { locale: Locale }) {
   return (
     <div
       className={cn(
-        'inline-flex items-center rounded-md ring-1 ring-line bg-bg-subtle p-0.5 text-[11px] font-medium',
+        'inline-flex h-8 items-center rounded-full border border-white/60 bg-white/55 p-0.5 text-[11px] font-semibold shadow-card backdrop-blur transition',
         pending && 'opacity-60',
       )}
       role="group"
@@ -26,8 +26,8 @@ export function LangSwitcher({ locale }: { locale: Locale }) {
         type="button"
         onClick={() => set('en')}
         className={cn(
-          'rounded-[5px] px-2 py-1 transition-colors',
-          locale === 'en' ? 'bg-bg text-fg shadow-card' : 'text-fg-subtle hover:text-fg',
+          'h-7 rounded-full px-2.5 transition-colors',
+          locale === 'en' ? 'bg-fg text-fg-inverse shadow-sm' : 'text-fg-muted hover:text-fg',
         )}
       >
         EN
@@ -36,11 +36,11 @@ export function LangSwitcher({ locale }: { locale: Locale }) {
         type="button"
         onClick={() => set('bn')}
         className={cn(
-          'rounded-[5px] px-2 py-1 font-bangla transition-colors',
-          locale === 'bn' ? 'bg-bg text-fg shadow-card' : 'text-fg-subtle hover:text-fg',
+          'h-7 rounded-full px-2.5 transition-colors',
+          locale === 'bn' ? 'bg-fg text-fg-inverse shadow-sm' : 'text-fg-muted hover:text-fg',
         )}
       >
-        বাংলা
+        BN
       </button>
     </div>
   )

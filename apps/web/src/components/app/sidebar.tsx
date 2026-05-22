@@ -97,9 +97,9 @@ export function Sidebar({
         <div className="flex h-16 items-center justify-between px-3">
           <Link href="/overview" className="text-fg flex min-w-0 items-center gap-2">
             {!collapsed ? (
-              <Wordmark className="h-11 max-w-[196px]" />
+              <Wordmark className="h-9 max-w-[176px]" />
             ) : (
-              <BrandIcon className="size-10" />
+              <BrandIcon className="size-8" />
             )}
           </Link>
           <button

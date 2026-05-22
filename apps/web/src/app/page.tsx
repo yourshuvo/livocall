@@ -116,10 +116,9 @@ function Hero({ locale }: { locale: Locale }) {
           src={HERO_IMAGE_URL}
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-contain"
         />
       </div>
-      <div className="absolute inset-0 -z-10 bg-white/70" />
 
       <div className="mx-auto flex w-full max-w-full flex-col overflow-hidden bg-transparent pb-32">
         <AnnouncementBar />
@@ -190,11 +189,8 @@ function HomepageNav({ locale }: { locale: Locale }) {
   return (
     <div className="z-50 px-4 py-4 sm:px-6 w-full flex justify-center">
       <header className="flex w-full max-w-5xl items-center justify-between gap-4 rounded-full border border-white/50 bg-white/40 px-3 py-2 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl md:px-5">
-        <Link href="/" className="inline-flex items-center gap-2 group">
-          <BrandIcon className="size-12 shrink-0 transition-transform group-hover:scale-105" />
-          <span className="hidden sm:inline-block transition-opacity group-hover:opacity-80">
-            <Wordmark className="h-10" />
-          </span>
+        <Link href="/" className="inline-flex min-w-0 items-center group">
+          <Wordmark className="h-8 max-w-[132px] transition-opacity group-hover:opacity-85 sm:h-9 sm:max-w-[152px]" />
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex">

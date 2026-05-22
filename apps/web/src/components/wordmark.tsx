@@ -11,7 +11,7 @@ export function Wordmark({ className }: { className?: string }) {
     <img
       src={BRAND_WORDMARK_URL}
       alt="LivoCall"
-      className={cn('h-12 w-auto object-contain', className)}
+      className={cn('h-9 w-auto object-contain', className)}
     />
   )
 }
@@ -21,7 +21,7 @@ export function BrandIcon({ className }: { className?: string }) {
     <img
       src={BRAND_ICON_URL}
       alt="LivoCall"
-      className={cn('size-12 object-contain', className)}
+      className={cn('size-9 object-contain', className)}
     />
   )
 }
