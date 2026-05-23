@@ -979,7 +979,7 @@ export function AgentEditor({
             type="button"
             onClick={publish}
             disabled={pending}
-            className="ml-1 inline-flex h-8 items-center gap-1 rounded-[5px] bg-blue-600 px-3 text-[12.5px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
+            className="ml-1 inline-flex h-8 items-center gap-1 rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-3 text-[12.5px] font-medium text-fg transition hover:bg-[#ECEDEF] disabled:opacity-60"
           >
             {status === 'live' ? 'Move to draft' : 'Publish'}
           </button>
@@ -1474,11 +1474,11 @@ export function AgentEditor({
                           setVoiceStyle(first.styles[0] ?? 'conversational')
                         }
                       }}
-                      className={cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-[5px] border px-2.5 text-[12px] transition',
-                        p === voiceProvider
-                          ? 'border-blue-600 bg-blue-600 text-white'
-                          : 'border-line bg-bg text-fg hover:bg-bg-muted',
+                        className={cn(
+                          'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition',
+                          p === voiceProvider
+                            ? 'border-[#D2D4D6] bg-[#F5F5F7] text-fg'
+                            : 'border-line bg-bg text-fg hover:bg-bg-muted',
                       )}
                     >
                       {PROVIDER_LABEL[p] ?? p}
@@ -1526,9 +1526,9 @@ export function AgentEditor({
                         type="button"
                         onClick={() => setVoiceStyle(s)}
                         className={cn(
-                          'inline-flex h-7 items-center rounded-[5px] border px-2.5 text-[12px] transition',
+                          'inline-flex h-7 items-center rounded-full border px-2.5 text-[12px] transition',
                           s === voiceStyle
-                            ? 'border-blue-600 bg-blue-600 text-white'
+                            ? 'border-[#D2D4D6] bg-[#F5F5F7] text-fg'
                             : 'border-line bg-bg text-fg hover:bg-bg-muted',
                         )}
                       >
@@ -2174,7 +2174,9 @@ function SegTab({
       onClick={onClick}
       className={cn(
         'inline-flex h-7 items-center rounded-[4px] px-3 text-[12px] font-medium transition',
-        active ? 'bg-blue-600 text-white' : 'text-fg-muted hover:text-fg',
+        active
+          ? 'border border-[#D2D4D6] bg-[#F5F5F7] text-fg'
+          : 'text-fg-muted hover:text-fg',
       )}
     >
       {children}

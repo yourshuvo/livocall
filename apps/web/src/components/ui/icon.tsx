@@ -270,7 +270,7 @@ export function Icon({
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex items-center justify-center rounded-[6px] border border-line bg-bg-subtle text-fg-muted',
+        'inline-flex items-center justify-center text-fg-muted',
         tileSize[size],
         className,
       )}

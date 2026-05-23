@@ -1,12 +1,9 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Show, UserButton } from '@clerk/nextjs'
 import type { ReactNode } from 'react'
 import { LangSwitcher } from '@/components/lang-switcher'
 import { MarketingFooter } from '@/components/marketing/footer'
-import { FaqList } from '@/components/marketing/faq-list'
-import { PricingTable } from '@/components/marketing/pricing-table'
 import { BrandIcon, Wordmark } from '@/components/wordmark'
 import { Button } from '@/components/ui/button'
 import { Icon, type IconName } from '@/components/ui/icon'
@@ -25,64 +22,194 @@ const TRUST_MARKS = ['E-commerce', 'Clinics', 'Education', 'Finance', 'Logistics
 const HERO_IMAGE_URL =
   'https://user-cdn.hackclub-assets.com/019e5013-92f3-78b5-bc0c-7452e33dc7f3/frosted-hero.png'
 
-const FEATURE_ASSETS = [
+const USE_CASE_CARDS = [
   {
-    asset: '/assets/landing/gloss-agent.png',
-    title: 'AI agents',
-    body: 'Launch Bangla and English voice agents for missed calls, order checks, and support.',
+    title: 'Missed-call recovery',
+    bullets: [
+      'Call shoppers back automatically after business hours',
+      'Qualify urgency, language, budget, and product intent',
+      'Route hot leads to the right team with transcript context',
+    ],
+    link: 'Learn about recovery',
+    visual: 'review',
   },
   {
-    asset: '/assets/landing/gloss-folder.png',
-    title: 'Knowledge',
-    body: 'Attach FAQs, policies, product docs, and workflow instructions to every call.',
+    title: 'Order confirmation + dispatch',
+    bullets: [
+      'Confirm COD orders before fulfillment',
+      'Validate address, quantity, and delivery windows',
+      'Send clean outcomes to ops without manual tagging',
+    ],
+    visual: 'compact',
   },
   {
-    asset: '/assets/landing/gloss-handoff.png',
-    title: 'Human handoff',
-    body: 'Route complex buyers to the right team member with context already prepared.',
+    title: 'Issue triage + live handoff',
+    bullets: [
+      'Detect complaints and escalation language early',
+      'Summarize the call for human agents',
+      'Trigger Slack, webhook, or CRM follow-up',
+    ],
+    visual: 'thread',
   },
   {
-    asset: '/assets/landing/gloss-route.png',
-    title: 'Call routing',
-    body: 'Use numbers, campaigns, IVR keys, and escalation rules from one dashboard.',
+    title: 'Knowledge base automation',
+    bullets: [
+      'Answer policy, pricing, return, and delivery questions',
+      'Keep agents aligned to your uploaded business docs',
+      'Flag missing answers for review',
+    ],
+    link: 'Learn about knowledge',
+    visual: 'plain',
   },
   {
-    asset: '/assets/landing/gloss-shield.png',
-    title: 'Guardrails',
-    body: 'Keep DNC, opt-out, spend caps, roles, and audit trails close to the work.',
+    title: 'Scheduled campaigns',
+    bullets: [
+      'Run payment reminders, renewal calls, and appointment nudges',
+      'Review call outcomes continuously',
+      'Maintain release notes for every call flow',
+    ],
+    visual: 'release',
   },
   {
-    asset: '/assets/landing/gloss-analytics.png',
-    title: 'Revenue analytics',
-    body: 'Track recovered revenue, confirmed orders, handoffs, and cost per outcome.',
+    title: 'And many others',
+    bullets: [
+      'Clinic booking and reminders',
+      'Education admissions follow-up',
+      'Finance collection workflows',
+      'Repetitive browser task automation',
+    ],
+    visual: 'plain',
   },
 ] as const
 
-const PLAYBOOKS: Array<{
+const PRODUCT_FEATURES: Array<{
+  title: string
+  body: string
+  visual: 'roles' | 'routing' | 'org'
+}> = [
+  {
+    title: 'Custom roles and permissions',
+    body: 'Give sales, support, QA, and finance teams the right level of access to campaigns and call data.',
+    visual: 'roles',
+  },
+  {
+    title: 'Smart routing',
+    body: 'Let agents decide when to resolve, retry, transfer, or create a ticket based on the call outcome.',
+    visual: 'routing',
+  },
+  {
+    title: 'Organization-ready UI',
+    body: 'Manage workspaces, billing, team members, audit logs, and integrations from one clean console.',
+    visual: 'org',
+  },
+]
+
+const TESTIMONIALS = [
+  {
+    name: 'Nadia Rahman',
+    handle: '@shopup_ops',
+    quote:
+      'Livocall helped our team recover missed calls without hiring a night shift. The summaries are clear enough for dispatch to act immediately.',
+  },
+  {
+    name: 'Arif Hossain',
+    handle: '@growthdesk',
+    quote:
+      'We use it for COD confirmation and payment reminders. The handoff notes save our agents from repeating the same discovery questions.',
+  },
+  {
+    name: 'Tasnim Chowdhury',
+    handle: '@clinicflow',
+    quote:
+      'The Bangla voice experience feels practical. It answers routine questions and leaves our team with only the calls that need care.',
+  },
+  {
+    name: 'Rafiq Karim',
+    handle: '@finopsbd',
+    quote:
+      'Spend caps, DNC, and audit logs made it much easier to approve automation for sensitive customer workflows.',
+  },
+] as const
+
+const DEMO_TAGS = [
+  'Receptionist',
+  'Appointment Setter',
+  'Lead Qualification',
+  'Customer Service',
+  'Debt Collection',
+  'Survey',
+] as const
+
+const PROOF_METRICS = [
+  ['24/7', 'call coverage'],
+  ['87%', 'confirmed COD intent'],
+  ['6 min', 'average handoff prep saved'],
+  ['৳42', 'tracked cost per outcome'],
+] as const
+
+const WORKFLOW_STEPS: Array<{
   icon: IconName
   title: string
   body: string
-  stat: string
 }> = [
   {
-    icon: 'phone-call',
-    title: 'Missed-call recovery',
-    body: 'Call buyers back, answer common questions, qualify intent, and send hot leads to your team.',
-    stat: '24/7 coverage',
+    icon: 'book',
+    title: 'Attach knowledge',
+    body: 'Upload FAQs, policies, scripts, product details, and escalation rules before the agent makes a call.',
   },
   {
-    icon: 'shopping-bag',
-    title: 'COD confirmation',
-    body: 'Confirm address, quantity, delivery window, and order intent before dispatch.',
-    stat: '87 confirmations',
+    icon: 'bot',
+    title: 'Launch the agent',
+    body: 'Choose a voice, language, campaign audience, phone number, and runtime guardrails.',
   },
   {
-    icon: 'wallet',
-    title: 'Payment follow-up',
-    body: 'Run polite reminders for invoices, subscriptions, EMIs, renewals, and retries.',
-    stat: '42 reminders',
+    icon: 'route',
+    title: 'Route outcomes',
+    body: 'Confirm orders, retry unanswered contacts, trigger webhooks, or hand off complex conversations.',
+  },
+  {
+    icon: 'bar-chart',
+    title: 'Measure the result',
+    body: 'Review revenue recovered, cost per outcome, transcript quality, and every human follow-up.',
   },
 ]
+
+const SECURITY_CARDS: Array<{
+  icon: IconName
+  title: string
+  body: string
+}> = [
+  {
+    icon: 'shield-check',
+    title: 'Guardrails by default',
+    body: 'DNC, opt-out language, spend caps, escalation rules, and sensitive-data handling stay close to each workflow.',
+  },
+  {
+    icon: 'database',
+    title: 'Audit-ready data',
+    body: 'Every call stores transcripts, outcome tags, cost, latency, tool events, and operator actions.',
+  },
+  {
+    icon: 'building',
+    title: 'Workspace controls',
+    body: 'Use organization roles, member permissions, API keys, and billing visibility as your team grows.',
+  },
+]
+
+const FAQ_ITEMS = [
+  [
+    'Can Livocall speak Bangla and English?',
+    'Yes. Agents can be configured for Bangla, English, or mixed customer conversations, with scripts and knowledge tuned for each workflow.',
+  ],
+  [
+    'What happens when a customer needs a human?',
+    'Livocall creates a handoff summary with intent, sentiment, transcript highlights, and next action so your team can respond quickly.',
+  ],
+  [
+    'Can I connect this to my existing stack?',
+    'Use webhooks, API keys, and workspace integrations to sync calls, contacts, outcomes, and billing events.',
+  ],
+] as const
 
 const KPI_ROWS = [
   { label: 'Recovered', value: '৳18.4k', tone: 'live' },
@@ -97,12 +224,15 @@ export default async function LandingPage() {
   return (
     <main className="min-h-screen bg-bg text-fg">
       <Hero locale={locale} />
-      <FeatureAssets />
+      <UseCasesSection />
+      <ProofMetricsSection />
       <ProductSection />
-      <PlaybooksSection />
-      <PricingSection locale={locale} />
-      <FaqSection locale={locale} />
-      <FinalCta />
+      <WorkflowSection />
+      <DarkPlatformSection />
+      <SecuritySection />
+      <TrustSection />
+      <BuyerQuestionsSection />
+      <LiveDemoSection />
       <MarketingFooter locale={locale} />
     </main>
   )
@@ -116,20 +246,19 @@ function Hero({ locale }: { locale: Locale }) {
           src={HERO_IMAGE_URL}
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-contain"
+          className="absolute inset-0 h-full w-full object-cover"
         />
       </div>
 
       <div className="mx-auto flex w-full max-w-full flex-col overflow-hidden bg-transparent pb-32">
-        <AnnouncementBar />
         <HomepageNav locale={locale} />
 
         <div className="relative flex flex-1 flex-col justify-center px-4 pb-7 pt-9 text-center sm:px-8 sm:pb-9 sm:pt-12 lg:px-12">
           <Link
             href="#features"
-            className="relative z-10 mx-auto inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-white/80 px-2.5 py-1.5 text-[11px] text-fg-muted shadow-card backdrop-blur transition hover:border-fg/20 hover:text-fg"
+            className="announcement-animate relative z-10 mx-auto inline-flex max-w-full items-center gap-2 rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-2.5 py-1.5 text-[11px] text-fg backdrop-blur transition hover:bg-[#ECEDEF]"
           >
-            <span className="rounded-full bg-fg px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-fg-inverse">
+            <span className="rounded-full border border-[#D2D4D6] bg-white px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-fg">
               New
             </span>
             <span className="truncate">AI agents, campaigns, handoffs, and analytics in one place.</span>
@@ -169,28 +298,12 @@ function Hero({ locale }: { locale: Locale }) {
   )
 }
 
-function AnnouncementBar() {
-  return (
-    <div className="relative flex items-center justify-center gap-3 border-b border-white/70 bg-white/62 px-3 py-2 text-[11px] text-fg-muted sm:px-5">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="rounded-full bg-fg px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-fg-inverse shrink-0">
-          News
-        </span>
-        <span className="truncate">
-          Livocall homepage now has generated frosted assets and glossy product icons.
-        </span>
-      </div>
-      <Icon name="x" size="xs" square={false} className="absolute right-3 shrink-0 text-fg-faint sm:right-5" />
-    </div>
-  )
-}
-
 function HomepageNav({ locale }: { locale: Locale }) {
   return (
     <div className="z-50 px-4 py-4 sm:px-6 w-full flex justify-center">
       <header className="flex w-full max-w-5xl items-center justify-between gap-4 rounded-full border border-white/50 bg-white/40 px-3 py-2 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl md:px-5">
         <Link href="/" className="inline-flex min-w-0 items-center group">
-          <Wordmark className="h-8 max-w-[132px] transition-opacity group-hover:opacity-85 sm:h-9 sm:max-w-[152px]" />
+          <Wordmark className="h-6 max-w-[112px] transition-opacity group-hover:opacity-85 sm:h-7 sm:max-w-[132px]" />
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex">
@@ -198,7 +311,7 @@ function HomepageNav({ locale }: { locale: Locale }) {
             <Link
               key={item.href}
               href={item.href}
-              className="text-[13px] font-medium text-fg-muted/90 transition-all hover:text-fg hover:drop-shadow-sm"
+              className="text-[13px] font-medium text-fg-muted/90 transition-all hover:text-fg"
             >
               {item.label}
             </Link>
@@ -213,12 +326,12 @@ function HomepageNav({ locale }: { locale: Locale }) {
             <Link href="/login" className="hidden px-2 text-[13px] font-medium text-fg-muted/90 transition-all hover:text-fg sm:inline">
               Sign in
             </Link>
-            <Button asChild size="sm" className="rounded-full px-5 shadow-sm transition-transform hover:scale-105">
+            <Button asChild size="sm" className="rounded-full px-5">
               <Link href="/signup">Get Started</Link>
             </Button>
           </Show>
           <Show when="signed-in">
-            <Link href="/overview" className="hidden rounded-full bg-fg px-4 py-2 text-[13px] font-medium text-fg-inverse shadow-sm transition-transform hover:scale-105 sm:inline">
+            <Link href="/overview" className="hidden rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-4 py-2 text-[13px] font-medium text-fg transition hover:bg-[#ECEDEF] sm:inline">
               Dashboard
             </Link>
             <UserButton />
@@ -408,43 +521,184 @@ function TrustStrip() {
   )
 }
 
-function FeatureAssets() {
+function UseCasesSection() {
   return (
-    <section id="features" className="border-b border-line bg-bg">
-      <div className="mx-auto max-w-screen-xl px-6 pb-16 pt-0 md:pb-20">
-        <div className="grid gap-8 md:grid-cols-[0.85fr_1.15fr] md:items-end">
-          <div>
-            <SectionEyebrow>Generated assets</SectionEyebrow>
-            <SectionTitle>Glossy product signals, rebuilt in the current palette.</SectionTitle>
-          </div>
-          <SectionLede>
-            The homepage now uses the frosted hero artwork plus generated high-gloss 3D assets
-            inspired by your reference, with electric blue glass and subtle green reflections.
-          </SectionLede>
+    <section id="features" className="border-b border-line bg-[#f7f7f8]">
+      <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
+        <div className="max-w-3xl">
+          <h2 className="font-display text-[44px] font-semibold leading-[0.98] tracking-tight text-fg md:text-[72px]">
+            Use cases
+          </h2>
+          <p className="mt-8 max-w-xl text-[18px] leading-relaxed text-fg">
+            Use Livocall to plan and execute customer conversations, from missed-call recovery
+            to COD confirmation and human handoff.
+          </p>
         </div>
 
-        <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURE_ASSETS.map((feature) => (
+        <div className="mt-16 grid gap-5 md:grid-cols-3">
+          {USE_CASE_CARDS.map((card, index) => (
             <article
-              key={feature.title}
-              className="group rounded-[8px] border border-line bg-bg-subtle/50 p-5 transition hover:border-fg/20 hover:bg-bg hover:shadow-card-hover"
+              key={card.title}
+              className={cn(
+                'flex min-h-[300px] flex-col overflow-hidden rounded-[12px] bg-[#ececec] p-7',
+                (index === 0 || index === 2 || index === 4) && 'md:min-h-[470px]',
+              )}
             >
-              <div className="flex items-start gap-4">
-                <Image
-                  src={feature.asset}
-                  alt=""
-                  width={72}
-                  height={72}
-                  className="size-[72px] shrink-0 transition duration-300 group-hover:-translate-y-1"
-                />
-                <div>
-                  <h3 className="font-display text-[20px] font-medium tracking-tighter text-fg">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-2 text-[13px] leading-relaxed text-fg-muted">{feature.body}</p>
-                </div>
+              <div>
+                <h3 className="font-display text-[24px] font-semibold tracking-tight text-fg md:text-[27px]">
+                  {card.title}
+                </h3>
+                <ul className="mt-7 space-y-3 text-[15px] leading-snug text-fg-muted">
+                  {card.bullets.map((bullet) => (
+                    <li key={bullet} className="grid grid-cols-[14px_1fr] gap-2">
+                      <span className="text-fg-muted">-</span>
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+                {'link' in card && card.link && (
+                  <Link
+                    href="#product"
+                    className="mt-7 inline-flex items-center gap-1.5 text-[15px] font-medium text-blue-600"
+                  >
+                    {card.link}
+                    <Icon name="arrow-right" size="xs" square={false} />
+                  </Link>
+                )}
               </div>
+              <UseCaseVisual variant={card.visual} />
             </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function UseCaseVisual({ variant }: { variant: (typeof USE_CASE_CARDS)[number]['visual'] }) {
+  if (variant === 'plain') return null
+
+  return (
+    <div className="mt-auto pt-10">
+      {variant === 'review' && <ReviewMockup />}
+      {variant === 'thread' && <ThreadMockup />}
+      {variant === 'release' && <ReleaseMockup />}
+      {variant === 'compact' && <CompactOutcomeMockup />}
+    </div>
+  )
+}
+
+function ReviewMockup() {
+  return (
+    <div className="-mx-7 -mb-7 overflow-hidden rounded-t-[12px] border-t border-[#d8d8d8] bg-white">
+      <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-[10px] font-medium text-fg">
+        <span className="grid size-5 place-items-center rounded bg-[#f5f5f7] text-[10px]">1</span>
+        Shared utility:
+        <span className="rounded border border-line bg-[#f5f5f7] px-2 py-0.5 font-mono">
+          calls.ts
+        </span>
+        <span className="ml-auto text-fg-muted">0/1</span>
+      </div>
+      <div className="grid grid-cols-2 gap-px bg-line text-[10px]">
+        <div className="bg-white p-3">
+          {['- old prompt', '- no fallback', '- manual tag', '+ new guardrail'].map((line, i) => (
+            <p
+              key={line}
+              className={cn(
+                'font-mono leading-6',
+                i < 3 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600',
+              )}
+            >
+              {line}
+            </p>
+          ))}
+        </div>
+        <div className="bg-white p-3">
+          {['+ intent score', '+ handoff note', '+ webhook event', '+ audit log'].map((line) => (
+            <p key={line} className="font-mono leading-6 text-emerald-600">
+              {line}
+            </p>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ThreadMockup() {
+  return (
+    <div className="-mx-1 overflow-hidden rounded-t-[12px] border border-[#d8d8d8] bg-white">
+      <div className="h-6 bg-[#4a154b]" />
+      <div className="space-y-4 p-5 text-[12px]">
+        <p className="font-semibold text-fg">Thread <span className="font-normal text-fg-muted">#handoffs</span></p>
+        <div className="flex gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded bg-[#f5f5f7]">S</span>
+          <p><b>Sara</b> Customer asked for supervisor and refund timeline.</p>
+        </div>
+        <div className="flex gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded bg-fg text-white">L</span>
+          <p><b>Livocall</b> Routed to support owner with transcript, sentiment, and next action.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ReleaseMockup() {
+  return (
+    <div className="-mx-7 -mb-7 grid min-h-[190px] grid-cols-[0.9fr_1.1fr] overflow-hidden rounded-t-[12px] border-t border-[#d8d8d8] bg-white text-[10px]">
+      <div className="border-r border-line p-4">
+        <p className="font-semibold text-fg">Release Notes</p>
+        <ol className="mt-3 list-decimal space-y-2 pl-4 text-fg-muted">
+          <li>Merge COD confirmation flow</li>
+          <li>Add missed-call retry rules</li>
+          <li>Update handoff notes</li>
+        </ol>
+      </div>
+      <div className="p-4">
+        <div className="rounded border border-line bg-[#0f172a] p-3 text-white">
+          <p className="text-[9px] uppercase text-white/50">Program highlights</p>
+          <div className="mt-3 h-16 rounded bg-white/10" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CompactOutcomeMockup() {
+  return (
+    <div className="rounded-[12px] border border-[#d8d8d8] bg-white p-4">
+      {[
+        ['Confirmed', '87 calls', 'bg-emerald-500'],
+        ['Needs retry', '14 calls', 'bg-amber-500'],
+        ['Handoff', '6 calls', 'bg-blue-500'],
+      ].map(([label, value, color]) => (
+        <div key={label} className="flex items-center justify-between border-b border-line py-2 last:border-0">
+          <span className="flex items-center gap-2 text-[12px] font-medium text-fg">
+            <span className={cn('size-2 rounded-full', color)} />
+            {label}
+          </span>
+          <span className="text-[12px] text-fg-muted">{value}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ProofMetricsSection() {
+  return (
+    <section className="border-b border-line bg-white">
+      <div className="mx-auto max-w-screen-xl px-6 py-12">
+        <div className="grid overflow-hidden rounded-[16px] border border-line bg-[#F5F5F7] md:grid-cols-4">
+          {PROOF_METRICS.map(([value, label]) => (
+            <div key={label} className="border-b border-line p-7 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
+              <p className="font-display text-[42px] font-semibold leading-none tracking-tight text-fg">
+                {value}
+              </p>
+              <p className="mt-3 text-[13px] font-medium uppercase tracking-[0.12em] text-fg-muted">
+                {label}
+              </p>
+            </div>
           ))}
         </div>
       </div>
@@ -454,72 +708,96 @@ function FeatureAssets() {
 
 function ProductSection() {
   return (
-    <section className="border-b border-line bg-bg-subtle/45">
-      <div className="mx-auto grid max-w-screen-xl gap-10 px-6 py-16 md:grid-cols-[0.95fr_1.05fr] md:items-center md:py-24">
-        <div>
-          <SectionEyebrow>Product workspace</SectionEyebrow>
-          <SectionTitle>Everything the agent needs before, during, and after the call.</SectionTitle>
-          <SectionLede>
-            Build agents, attach knowledge, run outbound campaigns, capture outcomes, and keep
-            operators ready for the calls that need a human touch.
-          </SectionLede>
-          <div className="mt-8 grid gap-3">
-            {[
-              ['bot', 'Agent builder', 'Prompt, voice, language, tools, knowledge, and runtime settings stay in one editor.'],
-              ['phone-call', 'Live calling', 'Originate, monitor, and review calls with transcripts and outcomes tied to cost.'],
-              ['shield-check', 'Operational control', 'Use roles, DNC, audit logs, secrets, and spend caps before scaling campaigns.'],
-            ].map(([icon, title, body]) => (
-              <div key={title} className="flex gap-3 rounded-[8px] border border-line bg-bg p-4">
-                <Icon name={icon as IconName} size="lg" square />
-                <div>
-                  <h3 className="font-display text-[20px] font-medium tracking-tighter text-fg">{title}</h3>
-                  <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">{body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+    <section id="product" className="border-b border-line bg-[#f7f7f8]">
+      <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
+        <div className="max-w-2xl">
+          <p className="text-[12px] font-semibold text-blue-600">Voice operations</p>
+          <h2 className="mt-4 max-w-2xl font-display text-[36px] font-semibold leading-[1.05] tracking-tight text-fg md:text-[48px]">
+            The easy solution to multi-team calling
+          </h2>
+          <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-fg-muted">
+            Livocall has the tools you need to onboard teams, assign workspaces, and manage
+            revenue conversations without stitching together five different products.
+          </p>
+          <Link href="#playbooks" className="mt-7 inline-flex items-center gap-1.5 text-[13px] font-semibold text-fg">
+            Explore platform features
+            <Icon name="arrow-right" size="xs" square={false} />
+          </Link>
         </div>
 
-        <div className="relative">
-          <div
-            aria-hidden
-            className="absolute -inset-6 -z-10 rounded-[28px] bg-[radial-gradient(circle_at_20%_15%,rgba(34,197,94,0.18),transparent_32%),radial-gradient(circle_at_80%_80%,rgba(10,10,10,0.1),transparent_34%)]"
-          />
-          <div className="overflow-hidden rounded-[14px] border border-line bg-bg shadow-float">
-            <div className="border-b border-line bg-bg-subtle px-4 py-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-faint">
-                Agent build quality
-              </p>
-              <h3 className="mt-1 font-display text-[24px] font-medium tracking-tighter text-fg">
-                Ready for launch
-              </h3>
-            </div>
-            <div className="grid gap-px bg-line sm:grid-cols-2">
-              {[
-                ['Knowledge coverage', '92%', 'status-live'],
-                ['Prompt checks', '5/5', 'status-live'],
-                ['Handoff rules', 'Active', 'status-live'],
-                ['Spend cap', 'Protected', 'status-warn'],
-              ].map(([label, value, color]) => (
-                <div key={label} className="bg-bg p-5">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-faint">
-                    {label}
-                  </p>
-                  <p className="mt-2 font-display text-[32px] font-medium tracking-tightest text-fg">
-                    {value}
-                  </p>
-                  <span className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-fg-muted">
-                    <span
-                      className={cn(
-                        'size-1.5 rounded-full',
-                        color === 'status-live' ? 'bg-status-live' : 'bg-status-warn',
-                      )}
-                    />
-                    Checked continuously
+        <div className="mt-12 grid gap-3 lg:grid-cols-3">
+          {PRODUCT_FEATURES.map((feature) => (
+            <article key={feature.title} className="min-h-[360px] rounded-[14px] border border-line bg-white p-7 shadow-card">
+              <h3 className="text-[15px] font-semibold text-fg">{feature.title}</h3>
+              <p className="mt-4 text-[13px] leading-relaxed text-fg-muted">{feature.body}</p>
+              <ProductVisual type={feature.visual} />
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-24 grid gap-10 lg:grid-cols-[0.7fr_1.3fr] lg:items-center">
+          <div>
+            <p className="text-[12px] font-semibold text-blue-600">Billing</p>
+            <h2 className="mt-4 font-display text-[34px] font-semibold leading-[1.05] tracking-tight text-fg md:text-[44px]">
+              Subscription billing, without the headache
+            </h2>
+            <p className="mt-5 text-[15px] leading-relaxed text-fg-muted">
+              Add subscriptions to B2C or B2B workflows, unify usage data, and gate premium
+              call automation behind the right plan.
+            </p>
+            <ul className="mt-6 space-y-3 text-[13px] text-fg-muted">
+              {['Define and manage plans', 'Unify usage and billing data', 'Gate access to content'].map((item) => (
+                <li key={item} className="flex items-center gap-2">
+                  <Icon name="check" size="xs" square={false} />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <BillingMockup />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function WorkflowSection() {
+  return (
+    <section className="border-b border-line bg-white">
+      <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
+        <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+          <div>
+            <p className="text-[12px] font-semibold text-blue-600">Workflow</p>
+            <h2 className="mt-4 font-display text-[38px] font-semibold leading-[1.02] tracking-tight text-fg md:text-[58px]">
+              From raw calls to clean business outcomes.
+            </h2>
+            <p className="mt-6 max-w-md text-[15px] leading-relaxed text-fg-muted">
+              The page now gives buyers a clearer route through setup, launch, routing, and
+              measurement without relying on decorative asset cards.
+            </p>
+          </div>
+
+          <div className="grid gap-4">
+            {WORKFLOW_STEPS.map((step, index) => (
+              <article key={step.title} className="grid gap-5 rounded-[16px] border border-line bg-[#F5F5F7] p-5 sm:grid-cols-[64px_1fr]">
+                <div className="flex items-center gap-3 sm:block">
+                  <span className="grid size-12 place-items-center rounded-full border border-[#D2D4D6] bg-white">
+                    <Icon name={step.icon} size="md" square={false} />
+                  </span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted sm:mt-4 sm:block">
+                    Step {index + 1}
                   </span>
                 </div>
-              ))}
-            </div>
+                <div>
+                  <h3 className="font-display text-[25px] font-semibold tracking-tight text-fg">
+                    {step.title}
+                  </h3>
+                  <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-fg-muted">
+                    {step.body}
+                  </p>
+                </div>
+              </article>
+            ))}
           </div>
         </div>
       </div>
@@ -527,31 +805,178 @@ function ProductSection() {
   )
 }
 
-function PlaybooksSection() {
-  return (
-    <section id="playbooks" className="border-b border-line bg-bg">
-      <div className="mx-auto max-w-screen-xl px-6 py-16 md:py-24">
-        <div className="max-w-3xl">
-          <SectionEyebrow>Solutions</SectionEyebrow>
-          <SectionTitle>Start from the call outcome, then let the platform handle the flow.</SectionTitle>
-          <SectionLede>
-            The new homepage is organized around the workflows a buyer understands: recover,
-            confirm, remind, escalate, and measure.
-          </SectionLede>
+function ProductVisual({ type }: { type: (typeof PRODUCT_FEATURES)[number]['visual'] }) {
+  if (type === 'roles') {
+    return (
+      <div className="mt-12 grid place-items-center">
+        <div className="grid grid-cols-3 gap-2">
+          {['TA', 'AR', 'SH', 'QA', 'OP', 'FN', 'CS', 'AD', ''].map((label, i) => (
+            <div
+              key={`${label}-${i}`}
+              className={cn(
+                'grid size-16 place-items-center rounded-[8px] border border-line bg-[#f7f7f8] text-[12px] font-semibold text-fg-muted',
+                label === 'AD' && 'border-[#D2D4D6] bg-white text-fg',
+              )}
+            >
+              {label}
+            </div>
+          ))}
         </div>
-        <div className="mt-10 grid gap-3 md:grid-cols-3">
-          {PLAYBOOKS.map((item) => (
-            <article key={item.title} className="rounded-[8px] border border-line bg-bg-subtle/50 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <Icon name={item.icon} size="lg" square />
-                <span className="rounded-full border border-line bg-bg px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-fg-muted">
-                  {item.stat}
-                </span>
-              </div>
-              <h3 className="mt-5 font-display text-[24px] font-medium tracking-tighter text-fg">
-                {item.title}
+        <div className="mt-5 flex gap-2 text-[10px] text-fg-faint">
+          {['Product Member', 'Administrator', 'Editor', 'QA Tester'].map((role, i) => (
+            <span key={role} className={cn(i === 1 && 'font-semibold text-fg')}>{role}</span>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (type === 'routing') {
+    return (
+      <div className="mt-10 grid gap-3">
+        <div className="mx-auto grid w-fit rounded-full border border-line bg-[#f7f7f8] px-3 py-1 text-[11px] text-fg">
+          Auto route
+        </div>
+        <div className="rounded-[12px] border border-line bg-[#f7f7f8] p-5">
+          {['Resolved by AI', 'Retry tomorrow', 'Human handoff'].map((item) => (
+            <div key={item} className="flex items-center justify-between border-b border-line py-3 last:border-0">
+              <span className="text-[13px] font-medium text-fg">{item}</span>
+              <Icon name="arrow-right" size="xs" square={false} />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-10 rounded-[12px] border border-dashed border-[#D2D4D6] p-6">
+      <div className="mx-auto mb-4 w-fit rounded-full border border-line bg-white px-3 py-1 text-[11px] font-medium text-fg">
+        Livocall
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="h-12 rounded-[7px] border border-line bg-white" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BillingMockup() {
+  return (
+    <div className="overflow-hidden rounded-[16px] border border-line bg-white shadow-float">
+      <div className="flex items-center justify-between border-b border-line px-5 py-3 text-[12px]">
+        <span className="font-semibold text-fg">Acme, Inc.</span>
+        <span className="text-fg-muted">Tailor made pricing</span>
+      </div>
+      <div className="grid gap-4 p-7 sm:grid-cols-2">
+        {[
+          ['Starter Plan', '৳9', ['Custom branding', 'Mobile app integration', 'Daily backups']],
+          ['Pro Plan', '৳19', ['Everything in Starter', 'Unlimited projects', '24/7 priority support']],
+        ].map(([plan, price, items]) => (
+          <div key={plan as string} className="rounded-[10px] border border-line bg-[#f7f7f8] p-5">
+            <p className="text-[12px] font-semibold text-fg">{plan}</p>
+            <p className="mt-3 text-[28px] font-semibold text-fg">{price}<span className="text-[12px] text-fg-muted"> / month</span></p>
+            <button className="mt-5 h-8 w-full rounded-full bg-fg text-[12px] font-medium text-white">
+              Get started
+            </button>
+            <ul className="mt-5 space-y-2 text-[12px] text-fg-muted">
+              {(items as string[]).map((item) => (
+                <li key={item} className="flex gap-2">
+                  <Icon name="check" size="xs" square={false} />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DarkPlatformSection() {
+  return (
+    <section id="playbooks" className="bg-bg">
+      <div className="relative bg-[#111114] py-24 text-white md:py-32 [clip-path:polygon(0_0,18%_0,21%_6%,79%_6%,82%_0,100%_0,100%_100%,82%_100%,79%_94%,21%_94%,18%_100%,0_100%)]">
+        <div className="mx-auto grid max-w-screen-xl gap-14 px-6 md:grid-cols-2">
+          <DarkPanel
+            eyebrow="Frameworks"
+            title="Build call automation for modern teams"
+            body="Give every workflow a reusable structure: agents, knowledge, numbers, campaigns, handoffs, and analytics."
+            cta="All frameworks"
+          />
+          <DarkPanel
+            eyebrow="Integrations"
+            title="Integrate with the tools you love"
+            body="Use Livocall as the source of truth for call outcomes and sync with CRMs, Slack, webhooks, and billing."
+            cta="All integrations"
+          />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function DarkPanel({
+  eyebrow,
+  title,
+  body,
+  cta,
+}: {
+  eyebrow: string
+  title: string
+  body: string
+  cta: string
+}) {
+  return (
+    <div className="text-center">
+      <p className="text-[12px] font-semibold text-cyan-300">{eyebrow}</p>
+      <h2 className="mx-auto mt-5 max-w-md font-display text-[32px] font-semibold leading-[1.05] tracking-tight md:text-[42px]">
+        {title}
+      </h2>
+      <p className="mx-auto mt-6 max-w-md text-[14px] leading-relaxed text-white/55">{body}</p>
+      <Link href="#pricing" className="mt-8 inline-flex items-center gap-1.5 text-[12px] font-semibold text-white">
+        {cta}
+        <Icon name="arrow-right" size="xs" square={false} />
+      </Link>
+      <div className="mt-14 grid grid-cols-3 border border-white/10">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="grid h-28 place-items-center border border-white/10">
+            <span className="h-7 w-20 rounded border border-white/25" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SecuritySection() {
+  return (
+    <section className="border-b border-line bg-[#f7f7f8]">
+      <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
+        <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
+          <div>
+            <p className="text-[12px] font-semibold text-blue-600">Trust controls</p>
+            <h2 className="mt-4 max-w-2xl font-display text-[38px] font-semibold leading-[1.02] tracking-tight text-fg md:text-[56px]">
+              Built for teams that need automation and accountability.
+            </h2>
+          </div>
+          <p className="max-w-xl text-[15px] leading-relaxed text-fg-muted">
+            Voice agents touch sensitive customer conversations. Livocall keeps controls,
+            auditability, and operator review visible from the first workflow.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-4 md:grid-cols-3">
+          {SECURITY_CARDS.map((card) => (
+            <article key={card.title} className="rounded-[16px] border border-line bg-white p-6">
+              <Icon name={card.icon} size="lg" square />
+              <h3 className="mt-6 font-display text-[25px] font-semibold tracking-tight text-fg">
+                {card.title}
               </h3>
-              <p className="mt-2 text-[13px] leading-relaxed text-fg-muted">{item.body}</p>
+              <p className="mt-3 text-[14px] leading-relaxed text-fg-muted">{card.body}</p>
             </article>
           ))}
         </div>
@@ -560,81 +985,117 @@ function PlaybooksSection() {
   )
 }
 
-function PricingSection({ locale }: { locale: Locale }) {
+function TrustSection() {
   return (
-    <section id="pricing" className="border-b border-line bg-bg-subtle/45">
-      <div className="mx-auto max-w-screen-xl px-6 py-16 md:py-24">
-        <SectionEyebrow>Pricing</SectionEyebrow>
-        <SectionTitle>Pay by call volume while tracking the business result.</SectionTitle>
-        <SectionLede>
-          Keep the billing story close to the product story: minutes, outcomes, recovered value,
-          and the cost of every workflow.
-        </SectionLede>
-        <div className="mt-10">
-          <PricingTable locale={locale} />
+    <section className="border-b border-line bg-[#f7f7f8]">
+      <div className="mx-auto grid max-w-screen-xl gap-12 px-6 py-20 md:grid-cols-[0.75fr_1.25fr] md:py-28">
+        <div>
+          <h2 className="font-display text-[34px] font-semibold tracking-tight text-fg md:text-[44px]">
+            Trusted around the world
+          </h2>
+          <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-fg-muted">
+            Join the teams using Livocall to automate high-volume phone conversations while
+            keeping humans close to the moments that matter.
+          </p>
+          <Button asChild size="sm" className="mt-8 px-5">
+            <Link href="/signup">Start building for free</Link>
+          </Button>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {TESTIMONIALS.map((item) => (
+            <article key={item.handle} className="rounded-[12px] border border-line bg-white p-5 shadow-card">
+              <p className="text-[13px] leading-relaxed text-fg">{item.quote}</p>
+              <div className="mt-5 flex items-center gap-3">
+                <span className="grid size-9 place-items-center rounded-full bg-[#f5f5f7] text-[12px] font-semibold text-fg">
+                  {item.name.slice(0, 2)}
+                </span>
+                <div>
+                  <p className="text-[12px] font-semibold text-fg">{item.name}</p>
+                  <p className="text-[11px] text-fg-muted">{item.handle}</p>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       </div>
     </section>
   )
 }
 
-function FaqSection({ locale }: { locale: Locale }) {
+function BuyerQuestionsSection() {
   return (
-    <section className="border-b border-line bg-bg">
-      <div className="mx-auto grid max-w-screen-xl gap-10 px-6 py-16 md:grid-cols-[0.8fr_1.2fr] md:py-24">
+    <section className="border-b border-line bg-white">
+      <div className="mx-auto grid max-w-screen-xl gap-12 px-6 py-20 md:grid-cols-[0.75fr_1.25fr] md:py-28">
         <div>
-          <SectionEyebrow>Questions</SectionEyebrow>
-          <SectionTitle>What business buyers ask before launch.</SectionTitle>
-          <SectionLede>
-            The answers stay focused on setup, guardrails, call quality, and proving ROI.
-          </SectionLede>
-        </div>
-        <FaqList locale={locale} />
-      </div>
-    </section>
-  )
-}
-
-function FinalCta() {
-  return (
-    <section className="border-b border-line bg-bg">
-      <div className="mx-auto flex max-w-screen-xl flex-col items-start gap-7 px-6 py-16 md:flex-row md:items-end md:justify-between md:py-24">
-        <div>
-          <SectionEyebrow>Ready when you are</SectionEyebrow>
-          <h2 className="mt-4 max-w-3xl font-display text-[38px] font-medium leading-[1.02] tracking-tightest text-fg md:text-[58px]">
-            Put AI voice agents on missed calls, COD orders, and payment follow-up.
+          <p className="text-[12px] font-semibold text-blue-600">Questions</p>
+          <h2 className="mt-4 font-display text-[38px] font-semibold leading-[1.02] tracking-tight text-fg md:text-[54px]">
+            A few details buyers ask before launch.
           </h2>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Button asChild size="lg" className="rounded-full">
-            <Link href="/signup">
-              Start building
-              <Icon name="arrow-right" size="sm" square={false} />
-            </Link>
-          </Button>
-          <Button asChild size="lg" variant="secondary" className="rounded-full">
-            <a href="mailto:hello@livocall.ai">Talk to a human</a>
-          </Button>
+
+        <div className="divide-y divide-line rounded-[16px] border border-line bg-[#F5F5F7]">
+          {FAQ_ITEMS.map(([question, answer]) => (
+            <article key={question} className="grid gap-4 p-6 md:grid-cols-[0.8fr_1.2fr]">
+              <h3 className="font-display text-[22px] font-semibold tracking-tight text-fg">
+                {question}
+              </h3>
+              <p className="text-[14px] leading-relaxed text-fg-muted">{answer}</p>
+            </article>
+          ))}
         </div>
       </div>
     </section>
   )
 }
 
-function SectionEyebrow({ children }: { children: ReactNode }) {
+function LiveDemoSection() {
   return (
-    <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-faint">{children}</p>
+    <section id="pricing" className="border-b border-line bg-white">
+      <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
+        <h2 className="mx-auto max-w-2xl text-center font-serif text-[60px] font-normal leading-[0.9] tracking-tight text-fg md:text-[112px]">
+          Try Our<br />Live Demo
+        </h2>
+
+        <div className="mt-20 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-[10px] border border-[#D2D4D6] bg-white p-8">
+            <div className="grid min-h-[430px] place-items-center">
+              <div className="live-demo-orb relative size-56 overflow-hidden rounded-full bg-[radial-gradient(circle_at_30%_20%,#7dd3fc,transparent_34%),radial-gradient(circle_at_70%_30%,#f5d0fe,transparent_32%),radial-gradient(circle_at_45%_65%,#2563eb,transparent_36%),radial-gradient(circle_at_72%_72%,#67e8f9,transparent_34%)] opacity-90" />
+            </div>
+            <div className="mx-auto grid max-w-lg grid-cols-2 gap-2 text-center text-[12px] font-semibold sm:grid-cols-3">
+              {DEMO_TAGS.map((tag) => (
+                <span key={tag} className="rounded-[6px] bg-[#F5F5F7] px-3 py-2 text-fg">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[10px] bg-[#f1f1f7] p-8 md:p-12">
+            <h3 className="max-w-lg font-display text-[28px] font-medium leading-[1.05] tracking-tight text-[#001238] md:text-[36px]">
+              Receive a live call from our agent and discover how our AI caller transforms
+              customer conversations.
+            </h3>
+            <DemoField label="Use Case" value="Select your use case" icon="chevron-up-down" />
+            <DemoField label="Name" value="Your Name" />
+            <DemoField label="Phone Number" value="+15551234567" />
+            <Button asChild size="lg" className="mt-16 px-6">
+              <Link href="/signup">Start demo</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
-function SectionTitle({ children }: { children: ReactNode }) {
+function DemoField({ label, value, icon }: { label: string; value: string; icon?: IconName }) {
   return (
-    <h2 className="mt-4 max-w-3xl font-display text-[34px] font-medium leading-[1.04] tracking-tightest text-fg md:text-[48px]">
-      {children}
-    </h2>
+    <div className="mt-10 border-b border-[#c6cad0] pb-4">
+      <p className="text-[12px] font-semibold text-blue-600">{label}</p>
+      <div className="mt-6 flex items-center justify-between gap-4 text-[20px] font-medium text-[#001238]">
+        <span>{value}</span>
+        {icon && <Icon name={icon} size="xs" square={false} />}
+      </div>
+    </div>
   )
-}
-
-function SectionLede({ children }: { children: ReactNode }) {
-  return <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-fg-muted">{children}</p>
 }

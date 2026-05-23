@@ -16,7 +16,7 @@ export function LangSwitcher({ locale }: { locale: Locale }) {
   return (
     <div
       className={cn(
-        'inline-flex h-8 items-center rounded-full border border-white/60 bg-white/55 p-0.5 text-[11px] font-semibold shadow-card backdrop-blur transition',
+        'inline-flex h-8 items-center rounded-full border border-[#D2D4D6] bg-[#F5F5F7] p-0.5 text-[11px] font-semibold backdrop-blur transition',
         pending && 'opacity-60',
       )}
       role="group"
@@ -27,7 +27,7 @@ export function LangSwitcher({ locale }: { locale: Locale }) {
         onClick={() => set('en')}
         className={cn(
           'h-7 rounded-full px-2.5 transition-colors',
-          locale === 'en' ? 'bg-fg text-fg-inverse shadow-sm' : 'text-fg-muted hover:text-fg',
+          locale === 'en' ? 'border border-[#D2D4D6] bg-white text-fg' : 'text-fg-muted hover:text-fg',
         )}
       >
         EN
@@ -37,7 +37,7 @@ export function LangSwitcher({ locale }: { locale: Locale }) {
         onClick={() => set('bn')}
         className={cn(
           'h-7 rounded-full px-2.5 transition-colors',
-          locale === 'bn' ? 'bg-fg text-fg-inverse shadow-sm' : 'text-fg-muted hover:text-fg',
+          locale === 'bn' ? 'border border-[#D2D4D6] bg-white text-fg' : 'text-fg-muted hover:text-fg',
         )}
       >
         BN

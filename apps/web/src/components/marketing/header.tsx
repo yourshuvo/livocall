@@ -18,11 +18,11 @@ export function MarketingHeader({ locale }: { locale: Locale }) {
     <header className="sticky top-0 z-40 border-b border-line/70 bg-bg/85 backdrop-blur-xl">
       <div className="mx-auto flex h-[72px] max-w-screen-xl items-center justify-between gap-4 px-6">
         <div className="flex min-w-0 flex-1 items-center gap-4">
-          <Link href="/" className="group inline-flex shrink-0 items-center gap-2 rounded-full border border-line bg-bg px-4 py-2 shadow-sm transition hover:border-fg/20">
-            <Wordmark />
+          <Link href="/" className="group inline-flex shrink-0 items-center gap-2 rounded-full border border-line bg-bg px-3 py-1.5 transition hover:border-fg/20">
+            <Wordmark className="h-7 max-w-[132px]" />
           </Link>
 
-          <nav className="hidden items-center gap-1 rounded-2xl border border-line bg-bg-subtle/80 p-1 shadow-sm lg:flex">
+          <nav className="hidden items-center gap-1 rounded-2xl border border-line bg-bg-subtle/80 p-1 lg:flex">
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.href}
@@ -62,7 +62,7 @@ export function MarketingHeader({ locale }: { locale: Locale }) {
           <Show when="signed-in">
             <Link
               href="/overview"
-              className="hidden rounded-full bg-fg px-4 py-2 text-[13px] text-fg-inverse transition hover:bg-fg-strong sm:inline"
+              className="hidden rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-4 py-2 text-[13px] text-fg transition hover:bg-[#ECEDEF] sm:inline"
             >
               Dashboard
             </Link>

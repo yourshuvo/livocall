@@ -7,7 +7,7 @@ import { Icon, type IconName } from '@/components/ui/icon'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api-fetch'
 import { useToast } from '@/components/ui/toast'
-import { BrandIcon, Wordmark } from '@/components/wordmark'
+import { Wordmark } from '@/components/wordmark'
 import { clerkSidebarUserButtonAppearance } from '@/lib/clerk-appearance'
 
 export interface WorkspaceSummary {
@@ -96,11 +96,12 @@ export function Sidebar({
         {/* Top: brand row */}
         <div className="flex h-16 items-center justify-between px-3">
           <Link href="/overview" className="text-fg flex min-w-0 items-center gap-2">
-            {!collapsed ? (
-              <Wordmark className="h-9 max-w-[176px]" />
-            ) : (
-              <BrandIcon className="size-8" />
-            )}
+            <Wordmark
+              className={cn(
+                'transition-[height,max-width]',
+                collapsed ? 'h-6 max-w-[40px]' : 'h-8 max-w-[156px]',
+              )}
+            />
           </Link>
           <button
             type="button"
@@ -481,7 +482,7 @@ function BalanceWarningCard({ initialCreditsPaisa }: { initialCreditsPaisa: numb
       </dl>
       <Link
         href="/billing"
-        className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-[5px] bg-blue-600 px-2 py-1.5 text-[11.5px] font-medium text-white transition hover:bg-blue-700"
+        className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-2 py-1.5 text-[11.5px] font-medium text-fg transition hover:bg-[#ECEDEF]"
       >
         <Icon name="arrow-up-right" size="xs" />
         Top up balance
