@@ -174,6 +174,56 @@ const WORKFLOW_STEPS: Array<{
   },
 ]
 
+const INDUSTRY_PLAYBOOKS: Array<{
+  icon: IconName
+  industry: string
+  trigger: string
+  task: string
+  outcome: string
+  integrations: string[]
+}> = [
+  {
+    icon: 'shopping-bag',
+    industry: 'E-commerce',
+    trigger: 'Missed calls, COD orders, abandoned checkout, and delivery questions.',
+    task: 'Confirm intent, address, quantity, payment preference, and escalation needs.',
+    outcome: 'Cleaner dispatch queues and fewer wasted fulfillment attempts.',
+    integrations: ['Shopify', 'WooCommerce', 'Slack'],
+  },
+  {
+    icon: 'stethoscope',
+    industry: 'Clinics',
+    trigger: 'Appointment requests, no-shows, reminder calls, and routine patient questions.',
+    task: 'Collect preferred times, confirm visit type, and hand off urgent cases.',
+    outcome: 'More booked appointments with less front-desk repetition.',
+    integrations: ['Calendar', 'Sheets', 'Webhook'],
+  },
+  {
+    icon: 'graduation',
+    industry: 'Education',
+    trigger: 'Admissions leads, tuition follow-ups, course questions, and event reminders.',
+    task: 'Qualify program interest, language preference, budget, and next-step readiness.',
+    outcome: 'Faster lead response and clearer counselor handoff notes.',
+    integrations: ['CRM', 'Email', 'Slack'],
+  },
+  {
+    icon: 'wallet',
+    industry: 'Finance',
+    trigger: 'Payment reminders, EMI follow-up, document collection, and renewal calls.',
+    task: 'Confirm identity-safe details, log promise-to-pay status, and route disputes.',
+    outcome: 'Trackable collections workflows with audit-ready call outcomes.',
+    integrations: ['Webhook', 'CRM', 'Ledger'],
+  },
+  {
+    icon: 'route',
+    industry: 'Logistics',
+    trigger: 'Delivery reschedules, failed delivery attempts, address checks, and rider callbacks.',
+    task: 'Validate delivery instructions and send structured updates to operations.',
+    outcome: 'Reduced failed attempts and faster exception resolution.',
+    integrations: ['Dispatch', 'Sheets', 'API'],
+  },
+]
+
 const SECURITY_CARDS: Array<{
   icon: IconName
   title: string
@@ -225,6 +275,7 @@ export default async function LandingPage() {
     <main className="min-h-screen bg-bg text-fg">
       <Hero locale={locale} />
       <UseCasesSection />
+      <IndustryPlaybooksSection />
       <ProofMetricsSection />
       <ProductSection />
       <WorkflowSection />
@@ -256,7 +307,7 @@ function Hero({ locale }: { locale: Locale }) {
         <div className="relative flex flex-1 flex-col justify-center px-4 pb-7 pt-9 text-center sm:px-8 sm:pb-9 sm:pt-12 lg:px-12">
           <Link
             href="#features"
-            className="announcement-animate relative z-10 mx-auto inline-flex max-w-full items-center gap-2 rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-2.5 py-1.5 text-[11px] text-fg backdrop-blur transition hover:bg-[#ECEDEF]"
+            className="announcement-animate hero-reveal relative z-10 mx-auto inline-flex max-w-full items-center gap-2 rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-2.5 py-1.5 text-[11px] text-fg backdrop-blur transition hover:bg-[#ECEDEF]"
           >
             <span className="rounded-full border border-[#D2D4D6] bg-white px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-fg">
               New
@@ -265,15 +316,15 @@ function Hero({ locale }: { locale: Locale }) {
             <Icon name="arrow-right" size="xs" square={false} className="shrink-0" />
           </Link>
 
-          <h1 className="relative z-10 mx-auto mt-6 max-w-4xl font-display text-[42px] font-medium leading-[0.95] tracking-tightest text-fg sm:text-[56px] lg:text-[72px]">
+          <h1 className="hero-reveal hero-reveal-2 relative z-10 mx-auto mt-6 max-w-4xl font-display text-[42px] font-medium leading-[0.95] tracking-tightest text-fg sm:text-[56px] lg:text-[72px]">
             The next-gen voice agent platform for revenue teams.
           </h1>
-          <p className="relative z-10 mx-auto mt-5 max-w-2xl text-[14.5px] leading-relaxed text-fg-muted sm:text-[16px]">
+          <p className="hero-reveal hero-reveal-3 relative z-10 mx-auto mt-5 max-w-2xl text-[14.5px] leading-relaxed text-fg-muted sm:text-[16px]">
             Livocall combines AI voice agents, Bangla-ready call flows, campaign automation,
             knowledge, and handoff controls in a single polished workspace.
           </p>
 
-          <div className="relative z-10 mt-7 flex flex-wrap items-center justify-center gap-3">
+          <div className="hero-reveal hero-reveal-4 relative z-10 mt-7 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="rounded-full px-5">
               <Link href="/signup">
                 Book a demo
@@ -525,7 +576,7 @@ function UseCasesSection() {
   return (
     <section id="features" className="border-b border-line bg-[#f7f7f8]">
       <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
-        <div className="max-w-3xl">
+        <div className="landing-reveal max-w-3xl">
           <h2 className="font-display text-[44px] font-semibold leading-[0.98] tracking-tight text-fg md:text-[72px]">
             Use cases
           </h2>
@@ -535,12 +586,12 @@ function UseCasesSection() {
           </p>
         </div>
 
-        <div className="mt-16 grid gap-5 md:grid-cols-3">
+        <div className="landing-stagger mt-16 grid gap-5 md:grid-cols-3">
           {USE_CASE_CARDS.map((card, index) => (
             <article
               key={card.title}
               className={cn(
-                'flex min-h-[300px] flex-col overflow-hidden rounded-[12px] bg-[#ececec] p-7',
+                'landing-motion-card flex min-h-[300px] flex-col overflow-hidden rounded-[12px] bg-[#ececec] p-7',
                 (index === 0 || index === 2 || index === 4) && 'md:min-h-[470px]',
               )}
             >
@@ -590,7 +641,7 @@ function UseCaseVisual({ variant }: { variant: (typeof USE_CASE_CARDS)[number]['
 
 function ReviewMockup() {
   return (
-    <div className="-mx-7 -mb-7 overflow-hidden rounded-t-[12px] border-t border-[#d8d8d8] bg-white">
+    <div className="mockup-float -mx-7 -mb-7 overflow-hidden rounded-t-[12px] border-t border-[#d8d8d8] bg-white">
       <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-[10px] font-medium text-fg">
         <span className="grid size-5 place-items-center rounded bg-[#f5f5f7] text-[10px]">1</span>
         Shared utility:
@@ -627,7 +678,7 @@ function ReviewMockup() {
 
 function ThreadMockup() {
   return (
-    <div className="-mx-1 overflow-hidden rounded-t-[12px] border border-[#d8d8d8] bg-white">
+    <div className="mockup-float -mx-1 overflow-hidden rounded-t-[12px] border border-[#d8d8d8] bg-white">
       <div className="h-6 bg-[#4a154b]" />
       <div className="space-y-4 p-5 text-[12px]">
         <p className="font-semibold text-fg">Thread <span className="font-normal text-fg-muted">#handoffs</span></p>
@@ -646,7 +697,7 @@ function ThreadMockup() {
 
 function ReleaseMockup() {
   return (
-    <div className="-mx-7 -mb-7 grid min-h-[190px] grid-cols-[0.9fr_1.1fr] overflow-hidden rounded-t-[12px] border-t border-[#d8d8d8] bg-white text-[10px]">
+    <div className="mockup-float -mx-7 -mb-7 grid min-h-[190px] grid-cols-[0.9fr_1.1fr] overflow-hidden rounded-t-[12px] border-t border-[#d8d8d8] bg-white text-[10px]">
       <div className="border-r border-line p-4">
         <p className="font-semibold text-fg">Release Notes</p>
         <ol className="mt-3 list-decimal space-y-2 pl-4 text-fg-muted">
@@ -667,7 +718,7 @@ function ReleaseMockup() {
 
 function CompactOutcomeMockup() {
   return (
-    <div className="rounded-[12px] border border-[#d8d8d8] bg-white p-4">
+    <div className="mockup-float rounded-[12px] border border-[#d8d8d8] bg-white p-4">
       {[
         ['Confirmed', '87 calls', 'bg-emerald-500'],
         ['Needs retry', '14 calls', 'bg-amber-500'],
@@ -675,7 +726,7 @@ function CompactOutcomeMockup() {
       ].map(([label, value, color]) => (
         <div key={label} className="flex items-center justify-between border-b border-line py-2 last:border-0">
           <span className="flex items-center gap-2 text-[12px] font-medium text-fg">
-            <span className={cn('size-2 rounded-full', color)} />
+            <span className={cn('mockup-pulse size-2 rounded-full', color)} />
             {label}
           </span>
           <span className="text-[12px] text-fg-muted">{value}</span>
@@ -685,11 +736,200 @@ function CompactOutcomeMockup() {
   )
 }
 
+function IndustryPlaybooksSection() {
+  return (
+    <section id="playbooks" className="border-b border-line bg-[#f7f7f8]">
+      <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
+        <div className="landing-reveal max-w-3xl">
+          <p className="text-[12px] font-semibold text-blue-600">Industry playbooks</p>
+          <h2 className="mt-4 font-display text-[38px] font-semibold leading-[1.02] tracking-tight text-fg md:text-[58px]">
+            Call flows shaped around the work your team already does.
+          </h2>
+          <p className="mt-6 max-w-xl text-[15px] leading-relaxed text-fg-muted">
+            Each playbook starts from a real trigger, gives the agent a focused job, and returns
+            a clean business outcome your team can act on.
+          </p>
+        </div>
+
+        <div className="landing-stagger mt-14 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {INDUSTRY_PLAYBOOKS.map((playbook) => (
+            <article
+              key={playbook.industry}
+              className="landing-motion-card flex min-h-[560px] flex-col overflow-hidden rounded-[12px] border border-[#D2D4D6] bg-[#F5F5F7] p-7 md:min-h-[600px]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <Icon name={playbook.icon} size="lg" square={false} className="text-fg" />
+                <span className="rounded-full border border-[#D2D4D6] bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-fg-muted">
+                  Playbook
+                </span>
+              </div>
+
+              <div className="relative z-10">
+                <h3 className="mt-7 font-display text-[28px] font-semibold tracking-tight text-fg">
+                  {playbook.industry}
+                </h3>
+                <ul className="mt-6 space-y-3 text-[13.5px] leading-snug text-fg-muted">
+                  {[
+                    ['Trigger', playbook.trigger],
+                    ['Agent task', playbook.task],
+                    ['Outcome', playbook.outcome],
+                  ].map(([label, body]) => (
+                    <li key={label} className="grid grid-cols-[76px_1fr] gap-3">
+                      <span className="font-semibold text-fg">{label}</span>
+                      <span>{body}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="pt-6">
+                <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-fg-faint">
+                  Connects with
+                </p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {playbook.integrations.map((integration) => (
+                    <span
+                      key={integration}
+                      className="rounded-full border border-[#D2D4D6] bg-white px-2.5 py-1 text-[11px] font-medium text-fg"
+                    >
+                      {integration}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <PlaybookCreativeVisual industry={playbook.industry} />
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function PlaybookCreativeVisual({ industry }: { industry: string }) {
+  if (industry === 'E-commerce') {
+    return (
+      <div className="-mx-7 -mb-7 mt-auto h-[196px] overflow-hidden rounded-t-[12px] border-t border-[#D2D4D6] bg-white">
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <span className="text-[12px] font-semibold text-fg">COD confirmation queue</span>
+          <span className="rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-2 py-0.5 text-[10px] text-fg-muted">
+            87 confirmed
+          </span>
+        </div>
+        <div className="grid grid-cols-[1fr_auto] gap-4 p-4">
+          <div className="space-y-2">
+            {['Address matched', 'Quantity verified', 'Dispatch note sent'].map((item) => (
+              <div
+                key={item}
+                className="mockup-glow-row rounded-[8px] border border-[#D2D4D6] bg-[#F5F5F7] px-3 py-2 text-[11px] text-fg"
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+          <div className="grid place-items-center rounded-[12px] border border-[#D2D4D6] bg-[#eff6ff] px-5">
+            <span className="font-display text-[40px] font-semibold tracking-tight text-blue-600">87</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (industry === 'Clinics') {
+    return (
+      <div className="-mx-7 -mb-7 mt-auto h-[196px] overflow-hidden rounded-t-[12px] border-t border-[#D2D4D6] bg-white p-4">
+        <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-fg-muted">
+          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => (
+            <span key={`${day}-${index}`}>{day}</span>
+          ))}
+          {Array.from({ length: 14 }).map((_, index) => (
+            <span
+              key={index}
+              className={cn(
+                'grid aspect-square place-items-center rounded-[6px] bg-[#F5F5F7]',
+                [3, 9].includes(index) && 'mockup-pulse bg-blue-600 text-white',
+              )}
+            >
+              {index + 1}
+            </span>
+          ))}
+        </div>
+        <div className="mt-4 rounded-[9px] border border-[#D2D4D6] bg-[#F5F5F7] px-3 py-2 text-[11px] text-fg">
+          Tomorrow at 4:30 PM
+        </div>
+      </div>
+    )
+  }
+
+  if (industry === 'Education') {
+    return (
+      <div className="-mx-7 -mb-7 mt-auto flex h-[196px] flex-col justify-center overflow-hidden rounded-t-[12px] border-t border-[#D2D4D6] bg-white p-5">
+        {[
+          ['Inquiry', '142', 'w-[84%]'],
+          ['Qualified', '84', 'w-[62%]'],
+          ['Counselor note', '31', 'w-[38%]'],
+        ].map(([label, value, width]) => (
+          <div key={label} className="mb-3 last:mb-0">
+            <div className="flex justify-between text-[11px] text-fg-muted">
+              <span>{label}</span>
+              <span>{value}</span>
+            </div>
+            <div className="mt-1 h-2 rounded-full bg-[#ECEDEF]">
+              <div className={cn('mockup-bar h-full rounded-full bg-blue-600', width)} />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (industry === 'Finance') {
+    return (
+      <div className="-mx-7 -mb-7 mt-auto h-[196px] overflow-hidden rounded-t-[12px] border-t border-[#D2D4D6] bg-white p-4">
+        <div className="flex h-28 items-end gap-2">
+          {[34, 58, 44, 76, 62, 88].map((height, index) => (
+            <div
+              key={index}
+              className="mockup-bar flex-1 rounded-t-[6px] bg-blue-600"
+              style={{ height: `${height}%`, animationDelay: `${index * 90}ms` }}
+            />
+          ))}
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
+          <span className="rounded-[8px] border border-[#D2D4D6] bg-[#F5F5F7] px-3 py-2 text-fg">Promise logged</span>
+          <span className="rounded-[8px] border border-[#D2D4D6] bg-[#F5F5F7] px-3 py-2 text-fg">Audit note</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="-mx-7 -mb-7 mt-auto h-[196px] overflow-hidden rounded-t-[12px] border-t border-[#D2D4D6] bg-white p-4">
+      <div className="relative h-full rounded-[12px] bg-[#F5F5F7]">
+        <span className="absolute left-6 top-7 size-2.5 rounded-full bg-blue-600" />
+        <span className="absolute right-8 top-10 size-2.5 rounded-full bg-blue-600" />
+        <span className="absolute bottom-7 left-1/2 size-2.5 rounded-full bg-blue-600" />
+        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 320 128" aria-hidden="true">
+          <path
+            className="mockup-path"
+            d="M36 34 C112 18 162 58 240 52 C280 50 292 86 170 104"
+            fill="none"
+            stroke="#2563eb"
+            strokeDasharray="6 7"
+            strokeWidth="2"
+          />
+        </svg>
+      </div>
+    </div>
+  )
+}
+
 function ProofMetricsSection() {
   return (
     <section className="border-b border-line bg-white">
       <div className="mx-auto max-w-screen-xl px-6 py-12">
-        <div className="grid overflow-hidden rounded-[16px] border border-line bg-[#F5F5F7] md:grid-cols-4">
+        <div className="landing-stagger grid overflow-hidden rounded-[16px] border border-line bg-[#F5F5F7] md:grid-cols-4">
           {PROOF_METRICS.map(([value, label]) => (
             <div key={label} className="border-b border-line p-7 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
               <p className="font-display text-[42px] font-semibold leading-none tracking-tight text-fg">
@@ -710,7 +950,7 @@ function ProductSection() {
   return (
     <section id="product" className="border-b border-line bg-[#f7f7f8]">
       <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
-        <div className="max-w-2xl">
+        <div className="landing-reveal max-w-2xl">
           <p className="text-[12px] font-semibold text-blue-600">Voice operations</p>
           <h2 className="mt-4 max-w-2xl font-display text-[36px] font-semibold leading-[1.05] tracking-tight text-fg md:text-[48px]">
             The easy solution to multi-team calling
@@ -725,9 +965,9 @@ function ProductSection() {
           </Link>
         </div>
 
-        <div className="mt-12 grid gap-3 lg:grid-cols-3">
+        <div className="landing-stagger mt-12 grid gap-3 lg:grid-cols-3">
           {PRODUCT_FEATURES.map((feature) => (
-            <article key={feature.title} className="min-h-[360px] rounded-[14px] border border-line bg-white p-7 shadow-card">
+            <article key={feature.title} className="landing-motion-card min-h-[360px] rounded-[14px] border border-line bg-white p-7 shadow-card">
               <h3 className="text-[15px] font-semibold text-fg">{feature.title}</h3>
               <p className="mt-4 text-[13px] leading-relaxed text-fg-muted">{feature.body}</p>
               <ProductVisual type={feature.visual} />
@@ -735,7 +975,7 @@ function ProductSection() {
           ))}
         </div>
 
-        <div className="mt-24 grid gap-10 lg:grid-cols-[0.7fr_1.3fr] lg:items-center">
+        <div className="landing-reveal mt-24 grid gap-10 lg:grid-cols-[0.7fr_1.3fr] lg:items-center">
           <div>
             <p className="text-[12px] font-semibold text-blue-600">Billing</p>
             <h2 className="mt-4 font-display text-[34px] font-semibold leading-[1.05] tracking-tight text-fg md:text-[44px]">
@@ -766,7 +1006,7 @@ function WorkflowSection() {
     <section className="border-b border-line bg-white">
       <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
         <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
-          <div>
+          <div className="landing-reveal">
             <p className="text-[12px] font-semibold text-blue-600">Workflow</p>
             <h2 className="mt-4 font-display text-[38px] font-semibold leading-[1.02] tracking-tight text-fg md:text-[58px]">
               From raw calls to clean business outcomes.
@@ -777,9 +1017,9 @@ function WorkflowSection() {
             </p>
           </div>
 
-          <div className="grid gap-4">
+          <div className="landing-stagger grid gap-4">
             {WORKFLOW_STEPS.map((step, index) => (
-              <article key={step.title} className="grid gap-5 rounded-[16px] border border-line bg-[#F5F5F7] p-5 sm:grid-cols-[64px_1fr]">
+              <article key={step.title} className="landing-motion-card grid gap-5 rounded-[16px] border border-line bg-[#F5F5F7] p-5 sm:grid-cols-[64px_1fr]">
                 <div className="flex items-center gap-3 sm:block">
                   <span className="grid size-12 place-items-center rounded-full border border-[#D2D4D6] bg-white">
                     <Icon name={step.icon} size="md" square={false} />
@@ -814,7 +1054,7 @@ function ProductVisual({ type }: { type: (typeof PRODUCT_FEATURES)[number]['visu
             <div
               key={`${label}-${i}`}
               className={cn(
-                'grid size-16 place-items-center rounded-[8px] border border-line bg-[#f7f7f8] text-[12px] font-semibold text-fg-muted',
+                'tile-breathe grid size-16 place-items-center rounded-[8px] border border-line bg-[#f7f7f8] text-[12px] font-semibold text-fg-muted',
                 label === 'AD' && 'border-[#D2D4D6] bg-white text-fg',
               )}
             >
@@ -839,7 +1079,7 @@ function ProductVisual({ type }: { type: (typeof PRODUCT_FEATURES)[number]['visu
         </div>
         <div className="rounded-[12px] border border-line bg-[#f7f7f8] p-5">
           {['Resolved by AI', 'Retry tomorrow', 'Human handoff'].map((item) => (
-            <div key={item} className="flex items-center justify-between border-b border-line py-3 last:border-0">
+            <div key={item} className="mockup-glow-row flex items-center justify-between rounded-[8px] border border-transparent px-3 py-3 last:border-transparent">
               <span className="text-[13px] font-medium text-fg">{item}</span>
               <Icon name="arrow-right" size="xs" square={false} />
             </div>
@@ -856,7 +1096,7 @@ function ProductVisual({ type }: { type: (typeof PRODUCT_FEATURES)[number]['visu
       </div>
       <div className="grid grid-cols-2 gap-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-12 rounded-[7px] border border-line bg-white" />
+          <div key={i} className="tile-breathe h-12 rounded-[7px] border border-line bg-white" />
         ))}
       </div>
     </div>
@@ -865,7 +1105,7 @@ function ProductVisual({ type }: { type: (typeof PRODUCT_FEATURES)[number]['visu
 
 function BillingMockup() {
   return (
-    <div className="overflow-hidden rounded-[16px] border border-line bg-white shadow-float">
+    <div className="landing-motion-card overflow-hidden rounded-[16px] border border-line bg-white shadow-float">
       <div className="flex items-center justify-between border-b border-line px-5 py-3 text-[12px]">
         <span className="font-semibold text-fg">Acme, Inc.</span>
         <span className="text-fg-muted">Tailor made pricing</span>
@@ -898,7 +1138,7 @@ function BillingMockup() {
 
 function DarkPlatformSection() {
   return (
-    <section id="playbooks" className="bg-bg">
+    <section className="bg-bg">
       <div className="relative bg-[#111114] py-24 text-white md:py-32 [clip-path:polygon(0_0,18%_0,21%_6%,79%_6%,82%_0,100%_0,100%_100%,82%_100%,79%_94%,21%_94%,18%_100%,0_100%)]">
         <div className="mx-auto grid max-w-screen-xl gap-14 px-6 md:grid-cols-2">
           <DarkPanel
@@ -931,7 +1171,7 @@ function DarkPanel({
   cta: string
 }) {
   return (
-    <div className="text-center">
+    <div className="landing-reveal text-center">
       <p className="text-[12px] font-semibold text-cyan-300">{eyebrow}</p>
       <h2 className="mx-auto mt-5 max-w-md font-display text-[32px] font-semibold leading-[1.05] tracking-tight md:text-[42px]">
         {title}
@@ -941,10 +1181,10 @@ function DarkPanel({
         {cta}
         <Icon name="arrow-right" size="xs" square={false} />
       </Link>
-      <div className="mt-14 grid grid-cols-3 border border-white/10">
+      <div className="landing-stagger mt-14 grid grid-cols-3 border border-white/10">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="grid h-28 place-items-center border border-white/10">
-            <span className="h-7 w-20 rounded border border-white/25" />
+            <span className="tile-breathe h-7 w-20 rounded border border-white/25" />
           </div>
         ))}
       </div>
@@ -956,7 +1196,7 @@ function SecuritySection() {
   return (
     <section className="border-b border-line bg-[#f7f7f8]">
       <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
-        <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
+        <div className="landing-reveal grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
           <div>
             <p className="text-[12px] font-semibold text-blue-600">Trust controls</p>
             <h2 className="mt-4 max-w-2xl font-display text-[38px] font-semibold leading-[1.02] tracking-tight text-fg md:text-[56px]">
@@ -969,9 +1209,9 @@ function SecuritySection() {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-4 md:grid-cols-3">
+        <div className="landing-stagger mt-12 grid gap-4 md:grid-cols-3">
           {SECURITY_CARDS.map((card) => (
-            <article key={card.title} className="rounded-[16px] border border-line bg-white p-6">
+            <article key={card.title} className="landing-motion-card rounded-[16px] border border-line bg-white p-6">
               <Icon name={card.icon} size="lg" square />
               <h3 className="mt-6 font-display text-[25px] font-semibold tracking-tight text-fg">
                 {card.title}
@@ -989,7 +1229,7 @@ function TrustSection() {
   return (
     <section className="border-b border-line bg-[#f7f7f8]">
       <div className="mx-auto grid max-w-screen-xl gap-12 px-6 py-20 md:grid-cols-[0.75fr_1.25fr] md:py-28">
-        <div>
+        <div className="landing-reveal">
           <h2 className="font-display text-[34px] font-semibold tracking-tight text-fg md:text-[44px]">
             Trusted around the world
           </h2>
@@ -1001,9 +1241,9 @@ function TrustSection() {
             <Link href="/signup">Start building for free</Link>
           </Button>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="landing-stagger grid gap-4 sm:grid-cols-2">
           {TESTIMONIALS.map((item) => (
-            <article key={item.handle} className="rounded-[12px] border border-line bg-white p-5 shadow-card">
+            <article key={item.handle} className="landing-motion-card rounded-[12px] border border-line bg-white p-5 shadow-card">
               <p className="text-[13px] leading-relaxed text-fg">{item.quote}</p>
               <div className="mt-5 flex items-center gap-3">
                 <span className="grid size-9 place-items-center rounded-full bg-[#f5f5f7] text-[12px] font-semibold text-fg">
@@ -1026,14 +1266,14 @@ function BuyerQuestionsSection() {
   return (
     <section className="border-b border-line bg-white">
       <div className="mx-auto grid max-w-screen-xl gap-12 px-6 py-20 md:grid-cols-[0.75fr_1.25fr] md:py-28">
-        <div>
+        <div className="landing-reveal">
           <p className="text-[12px] font-semibold text-blue-600">Questions</p>
           <h2 className="mt-4 font-display text-[38px] font-semibold leading-[1.02] tracking-tight text-fg md:text-[54px]">
             A few details buyers ask before launch.
           </h2>
         </div>
 
-        <div className="divide-y divide-line rounded-[16px] border border-line bg-[#F5F5F7]">
+        <div className="landing-stagger divide-y divide-line rounded-[16px] border border-line bg-[#F5F5F7]">
           {FAQ_ITEMS.map(([question, answer]) => (
             <article key={question} className="grid gap-4 p-6 md:grid-cols-[0.8fr_1.2fr]">
               <h3 className="font-display text-[22px] font-semibold tracking-tight text-fg">
@@ -1052,25 +1292,25 @@ function LiveDemoSection() {
   return (
     <section id="pricing" className="border-b border-line bg-white">
       <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
-        <h2 className="mx-auto max-w-2xl text-center font-serif text-[60px] font-normal leading-[0.9] tracking-tight text-fg md:text-[112px]">
+        <h2 className="landing-reveal mx-auto max-w-2xl text-center font-serif text-[60px] font-normal leading-[0.9] tracking-tight text-fg md:text-[112px]">
           Try Our<br />Live Demo
         </h2>
 
-        <div className="mt-20 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-[10px] border border-[#D2D4D6] bg-white p-8">
+        <div className="landing-stagger mt-20 grid gap-4 lg:grid-cols-2">
+          <div className="landing-motion-card rounded-[10px] border border-[#D2D4D6] bg-white p-8">
             <div className="grid min-h-[430px] place-items-center">
               <div className="live-demo-orb relative size-56 overflow-hidden rounded-full bg-[radial-gradient(circle_at_30%_20%,#7dd3fc,transparent_34%),radial-gradient(circle_at_70%_30%,#f5d0fe,transparent_32%),radial-gradient(circle_at_45%_65%,#2563eb,transparent_36%),radial-gradient(circle_at_72%_72%,#67e8f9,transparent_34%)] opacity-90" />
             </div>
             <div className="mx-auto grid max-w-lg grid-cols-2 gap-2 text-center text-[12px] font-semibold sm:grid-cols-3">
               {DEMO_TAGS.map((tag) => (
-                <span key={tag} className="rounded-[6px] bg-[#F5F5F7] px-3 py-2 text-fg">
+                <span key={tag} className="mockup-glow-row rounded-[6px] border border-[#D2D4D6] bg-[#F5F5F7] px-3 py-2 text-fg">
                   {tag}
                 </span>
               ))}
             </div>
           </div>
 
-          <div className="rounded-[10px] bg-[#f1f1f7] p-8 md:p-12">
+          <div className="landing-motion-card rounded-[10px] border border-[#D2D4D6] bg-[#f1f1f7] p-8 md:p-12">
             <h3 className="max-w-lg font-display text-[28px] font-medium leading-[1.05] tracking-tight text-[#001238] md:text-[36px]">
               Receive a live call from our agent and discover how our AI caller transforms
               customer conversations.

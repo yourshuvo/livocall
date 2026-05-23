@@ -1,4 +1,5 @@
 import { SignIn } from '@clerk/nextjs'
+import { BrandIcon } from '@/components/wordmark'
 import { clerkAuthPageAppearance } from '@/lib/clerk-appearance'
 
 export const metadata = { title: 'Sign in - LivoCall' }
@@ -17,12 +18,22 @@ export default async function LoginPage({
 }) {
   const redirectUrl = safeRedirect(await searchParams)
   return (
-    <SignIn
-      path="/login"
-      routing="path"
-      forceRedirectUrl={redirectUrl}
-      signUpUrl="/signup"
-      appearance={clerkAuthPageAppearance}
-    />
+    <div className="w-full max-w-[330px] text-center">
+      <BrandIcon className="mx-auto size-14 sm:size-[70px]" />
+      <h1 className="mt-6 text-[18px] font-semibold tracking-tight text-fg sm:mt-8">
+        Welcome to LivoCall
+      </h1>
+      <p className="mt-3 text-[12px] font-medium text-fg-muted">Let&apos;s sign you in</p>
+
+      <div className="mt-5 sm:mt-6">
+        <SignIn
+          path="/login"
+          routing="path"
+          forceRedirectUrl={redirectUrl}
+          signUpUrl={`/signup?redirect_url=${encodeURIComponent(redirectUrl)}`}
+          appearance={clerkAuthPageAppearance}
+        />
+      </div>
+    </div>
   )
 }
