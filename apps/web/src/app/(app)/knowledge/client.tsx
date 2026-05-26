@@ -163,9 +163,7 @@ export function KnowledgeClient({ initial }: { initial: KB[] }) {
   function removeSource(id: string, ref: string) {
     startTransition(async () => {
       try {
-        const updated = await api.del<KB>(
-          `/api/knowledge/${id}/sources?ref=${encodeURIComponent(ref)}`,
-        )
+        const updated = await api.del<KB>(`/api/knowledge/${id}/sources`, { ref })
         setItems((xs) => xs.map((x) => (x.id === id ? updated : x)))
         toast('Source removed', 'success')
       } catch (e) {
@@ -370,6 +368,10 @@ function SourceRow({
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(s.ref)
+  const isInlineText =
+    s.type === 'text' &&
+    (s.storage?.provider === 'inline' || (!s.storage?.provider && !s.storage?.key))
+  const displayTitle = s.title || (isInlineText ? 'Written text source' : s.ref)
   return (
     <li className="flex items-start gap-3 px-3 py-3 text-[12.5px]">
       <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded border border-line bg-bg">
@@ -393,17 +395,17 @@ function SourceRow({
           </Badge>
           <span className="text-fg-faint">{s.ingestion?.chunkCount ?? 0} chunks</span>
         </div>
-        <p className="mt-1 truncate font-medium text-fg" title={s.title || s.ref}>
-          {s.title || (s.type === 'text' ? 'Pasted text source' : s.ref)}
+        <p className="mt-1 truncate font-medium text-fg" title={displayTitle}>
+          {displayTitle}
         </p>
         <details className="mt-1">
           <summary className="cursor-pointer text-[12px] text-fg-muted hover:text-fg">
-            View / edit added content
+            {isInlineText ? 'View / edit text' : 'View / edit reference'}
           </summary>
           {editing ? (
             <div className="mt-2 space-y-2">
-              {s.type === 'text' ? (
-                <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={5} />
+              {isInlineText ? (
+                <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={7} />
               ) : (
                 <Input value={draft} onChange={(e) => setDraft(e.target.value)} />
               )}
@@ -433,13 +435,13 @@ function SourceRow({
           ) : (
             <>
               <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border border-line bg-bg-subtle p-2 font-mono text-[11.5px] text-fg-muted">
-{s.type === 'text' ? s.ref : `Reference: ${s.ref}
-Stored as: ${s.storage?.provider || 'external'}${s.storage?.key ? ` · ${s.storage.key}` : ''}
+{isInlineText ? s.ref : `Reference: ${s.ref}
+Stored as: ${s.storage?.provider || 'external'}${s.storage?.key ? ` - ${s.storage.key}` : ''}
 Extracted characters: ${s.ingestion?.extractedChars ?? 0}
 ${s.ingestion?.error ? `Error: ${s.ingestion.error}` : ''}`}
               </pre>
               <Button size="sm" variant="ghost" className="mt-2" onClick={() => setEditing(true)}>
-                Edit source
+                {isInlineText ? 'Edit text' : 'Edit source'}
               </Button>
             </>
           )}
@@ -465,10 +467,11 @@ function SourceAdder({
   onAdd: (type: Source['type'], ref: string, done: () => void, storage?: Source['storage']) => void
   disabled?: boolean
 }) {
-  const [type, setType] = useState<Source['type']>('url')
+  const [type, setType] = useState<Source['type']>('text')
   const [ref, setRef] = useState('')
   const [uploading, setUploading] = useState(false)
   const { toast } = useToast()
+  const isText = type === 'text'
 
   async function upload(file: File | undefined) {
     if (!file) return
@@ -491,13 +494,56 @@ function SourceAdder({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <div className="grid gap-2 md:grid-cols-[140px_1fr_auto]">
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value as Source['type'])}
+          className="h-10 rounded border border-line bg-bg-subtle px-3 text-sm"
+        >
+          <option value="text">Text</option>
+          <option value="url">URL</option>
+          <option value="website">Website</option>
+          <option value="pdf">PDF</option>
+          <option value="docx">DOCX</option>
+        </select>
+        {isText ? (
+          <Textarea
+            placeholder="Write FAQs, pricing, delivery rules, refund policy, handoff notes..."
+            rows={7}
+            value={ref}
+            onChange={(e) => setRef(e.target.value)}
+          />
+        ) : (
+          <Input
+            placeholder={type === 'url' || type === 'website' ? 'https://...' : 'https://.../file'}
+            value={ref}
+            onChange={(e) => setRef(e.target.value)}
+          />
+        )}
+        <Button
+          size="sm"
+          onClick={() =>
+            onAdd(
+              type,
+              ref,
+              () => {
+                setRef('')
+              },
+              isText ? { provider: 'inline', key: '' } : undefined,
+            )
+          }
+          disabled={disabled || !ref.trim()}
+        >
+          {isText ? 'Save text' : 'Add source'}
+        </Button>
+      </div>
       <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-dashed border-line bg-bg-subtle px-3 py-3 text-[12.5px] text-fg-muted transition hover:border-fg/30">
         <span>
           Upload PDF, TXT, Markdown, or DOCX file
           <span className="block text-[11px] text-fg-faint">Stored privately and ingested by the KB worker.</span>
         </span>
-        <span className="rounded bg-bg px-2 py-1 text-fg">{uploading ? 'Uploading…' : 'Choose file'}</span>
+        <span className="rounded bg-bg px-2 py-1 text-fg">{uploading ? 'Uploading...' : 'Choose file'}</span>
         <input
           type="file"
           accept=".pdf,.txt,.md,.docx,application/pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -506,44 +552,6 @@ function SourceAdder({
           onChange={(e) => void upload(e.target.files?.[0])}
         />
       </label>
-      <div className="grid gap-2 md:grid-cols-[120px_1fr_auto]">
-      <select
-        value={type}
-        onChange={(e) => setType(e.target.value as Source['type'])}
-        className="h-10 rounded border border-line bg-bg-subtle px-3 text-sm"
-      >
-        <option value="url">URL</option>
-        <option value="website">Website</option>
-        <option value="pdf">PDF</option>
-        <option value="docx">DOCX</option>
-        <option value="text">Text</option>
-      </select>
-      {type === 'text' ? (
-        <Textarea
-          placeholder="Paste text content…"
-          rows={2}
-          value={ref}
-          onChange={(e) => setRef(e.target.value)}
-        />
-      ) : (
-        <Input
-          placeholder={type === 'url' || type === 'website' ? 'https://…' : 'https://…/file'}
-          value={ref}
-          onChange={(e) => setRef(e.target.value)}
-        />
-      )}
-      <Button
-        size="sm"
-        onClick={() =>
-          onAdd(type, ref, () => {
-            setRef('')
-          })
-        }
-        disabled={disabled || !ref.trim()}
-      >
-        Add source
-      </Button>
-      </div>
     </div>
   )
 }

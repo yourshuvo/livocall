@@ -1,6 +1,12 @@
 import { getObjectBuffer } from '@/lib/object-storage'
 
 export type KnowledgeSourceType = 'url' | 'pdf' | 'docx' | 'text' | 'website'
+export type KnowledgeSourceStorageProvider = 'local' | 's3' | 'external' | 'inline'
+
+export interface KnowledgeSourceStorage {
+  provider?: KnowledgeSourceStorageProvider
+  key?: string
+}
 
 export interface ExtractionResult {
   status: 'ready' | 'failed'
@@ -63,10 +69,36 @@ async function extractFile(type: KnowledgeSourceType, ref: string): Promise<Extr
   }
 }
 
+function inlineTextTitle(ref: string): string {
+  const firstLine = ref
+    .split(/\r?\n/)
+    .map((line) => normalize(line))
+    .find(Boolean)
+  if (!firstLine) return 'Written text source'
+  return firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine
+}
+
+async function extractInlineText(ref: string): Promise<ExtractionResult> {
+  try {
+    const text = normalize(ref)
+    if (!text) throw new Error('no readable text found')
+    return { status: 'ready', title: inlineTextTitle(ref), text, chunkCount: chunks(text) }
+  } catch (e) {
+    return { status: 'failed', text: '', chunkCount: 0, error: (e as Error).message }
+  }
+}
+
 export async function extractKnowledgeSource(
   type: KnowledgeSourceType,
   ref: string,
+  storage?: KnowledgeSourceStorage,
 ): Promise<ExtractionResult> {
   if (type === 'url' || type === 'website') return extractWebsite(ref)
+  if (
+    type === 'text' &&
+    (storage?.provider === 'inline' || (!storage?.provider && !storage?.key))
+  ) {
+    return extractInlineText(ref)
+  }
   return extractFile(type, ref)
 }

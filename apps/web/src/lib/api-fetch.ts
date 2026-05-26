@@ -40,5 +40,5 @@ export const api = {
   get: <T>(url: string) => request<T>('GET', url),
   post: <T>(url: string, body?: JsonValue) => request<T>('POST', url, body),
   patch: <T>(url: string, body?: JsonValue) => request<T>('PATCH', url, body),
-  del: <T = { ok: boolean }>(url: string) => request<T>('DELETE', url),
+  del: <T = { ok: boolean }>(url: string, body?: JsonValue) => request<T>('DELETE', url, body),
 }

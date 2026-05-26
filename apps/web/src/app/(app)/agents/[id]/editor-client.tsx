@@ -123,6 +123,13 @@ interface BrowserTestStartResult {
   outputSampleRate: number
 }
 
+interface LlmTestResult {
+  response: string
+  model: string
+  latencyMs: number
+  aiPowered: boolean
+}
+
 interface BrowserAudioSession {
   stream?: MediaStream
   context?: AudioContext
@@ -596,6 +603,9 @@ export function AgentEditor({
   const [testPanel, setTestPanel] = useState<'audio' | 'llm' | 'json'>('audio')
   const [toE164, setToE164] = useState('')
   const [fromE164, setFromE164] = useState(numbers[0]?.e164 ?? '')
+  const [llmInput, setLlmInput] = useState('Hi, I want to know your pricing.')
+  const [llmTesting, setLlmTesting] = useState(false)
+  const [llmResult, setLlmResult] = useState<LlmTestResult | null>(null)
   const [toolTesting, setToolTesting] = useState<number | null>(null)
   const [toolResults, setToolResults] = useState<Record<number, string>>({})
   const browserAudioRef = useRef<BrowserAudioSession | null>(null)
@@ -949,6 +959,31 @@ export function AgentEditor({
     })
   }
 
+  async function runLlmTest() {
+    const message = llmInput.trim()
+    if (!message) {
+      toast('Enter a caller message to test', 'error')
+      return
+    }
+    if (isDirty) {
+      const ok = await save()
+      if (!ok) return
+    }
+    stopBrowserTest(false)
+    setLlmTesting(true)
+    setLlmResult(null)
+    try {
+      const result = await api.post<LlmTestResult>(`/api/agents/${initial.id}/llm-test`, {
+        message,
+      })
+      setLlmResult(result)
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setLlmTesting(false)
+    }
+  }
+
   async function testTool(index: number) {
     if (isDirty) {
       const ok = await save()
@@ -1232,7 +1267,7 @@ export function AgentEditor({
       </div>
 
       {/* Body — 3 columns */}
-      <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)_120px] lg:overflow-hidden">
+      <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)_minmax(220px,260px)] lg:overflow-hidden">
         {/* LEFT — prompt editor */}
         <div className="bg-bg flex min-w-0 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -2143,69 +2178,148 @@ export function AgentEditor({
               onClick={() => setTestPanel('json')}
             />
           </div>
-          <div className="flex flex-1 flex-col items-center justify-between gap-3 px-3 py-4">
-            <div className="border-line bg-bg shadow-card grid size-16 place-items-center rounded-full border">
-              <Icon
-                name={testMode === 'browser' ? 'mic' : 'phone-out'}
-                size="lg"
-                className={cn(
-                  browserTestStatus === 'live' && testMode === 'browser'
-                    ? 'text-status-live'
-                    : 'text-fg-muted',
-                )}
-              />
-            </div>
-            <div className="border-line bg-bg grid w-full grid-cols-2 rounded-[5px] border p-0.5">
+          {testPanel === 'audio' && (
+            <div className="flex flex-1 flex-col items-center justify-between gap-3 px-3 py-4">
+              <div className="border-line bg-bg shadow-card grid size-16 place-items-center rounded-full border">
+                <Icon
+                  name={testMode === 'browser' ? 'mic' : 'phone-out'}
+                  size="lg"
+                  className={cn(
+                    browserTestStatus === 'live' && testMode === 'browser'
+                      ? 'text-status-live'
+                      : 'text-fg-muted',
+                  )}
+                />
+              </div>
+              <div className="border-line bg-bg grid w-full grid-cols-2 rounded-[5px] border p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setTestMode('browser')}
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center gap-1 rounded-[4px] text-[11.5px] font-medium transition',
+                    testMode === 'browser'
+                      ? 'bg-[#F5F5F7] text-fg shadow-card'
+                      : 'text-fg-muted hover:text-fg',
+                  )}
+                >
+                  <Icon name="globe" size="xs" /> Browser
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTestMode('call')}
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center gap-1 rounded-[4px] text-[11.5px] font-medium transition',
+                    testMode === 'call'
+                      ? 'bg-[#F5F5F7] text-fg shadow-card'
+                      : 'text-fg-muted hover:text-fg',
+                  )}
+                >
+                  <Icon name="phone-out" size="xs" /> Call
+                </button>
+              </div>
+              <p className="text-fg-muted text-center text-[11px] leading-snug">
+                {testMode === 'browser'
+                  ? browserTestStatus === 'live'
+                    ? `Webcall live${browserTestCallId ? ` - ${browserTestCallId.slice(-6)}` : ''}. Transfer is not supported.`
+                    : 'Runs in this browser with no phone call. Transfer is not supported on Webcall.'
+                  : 'Place a real outbound test call to a selected phone number.'}
+              </p>
               <button
                 type="button"
-                onClick={() => setTestMode('browser')}
-                className={cn(
-                  'inline-flex h-7 items-center justify-center gap-1 rounded-[4px] text-[11.5px] font-medium transition',
-                  testMode === 'browser'
-                    ? 'bg-[#F5F5F7] text-fg shadow-card'
-                    : 'text-fg-muted hover:text-fg',
-                )}
+                onClick={() =>
+                  testMode === 'browser' ? void runBrowserTest() : setTestOpen(true)
+                }
+                disabled={browserTestStatus === 'connecting'}
+                className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[5px] border px-2 text-[12.5px] font-medium transition"
               >
-                <Icon name="globe" size="xs" /> Browser
-              </button>
-              <button
-                type="button"
-                onClick={() => setTestMode('call')}
-                className={cn(
-                  'inline-flex h-7 items-center justify-center gap-1 rounded-[4px] text-[11.5px] font-medium transition',
-                  testMode === 'call'
-                    ? 'bg-[#F5F5F7] text-fg shadow-card'
-                    : 'text-fg-muted hover:text-fg',
-                )}
-              >
-                <Icon name="phone-out" size="xs" /> Call
+                <PlayIcon />{' '}
+                {testMode === 'browser'
+                  ? browserTestStatus === 'connecting'
+                    ? 'Connecting'
+                    : browserTestStatus === 'live'
+                      ? 'Stop Test'
+                      : 'Run Test'
+                  : 'Test Call'}
               </button>
             </div>
-            <p className="text-fg-muted text-center text-[11px] leading-snug">
-              {testMode === 'browser'
-                ? browserTestStatus === 'live'
-                  ? `Webcall live${browserTestCallId ? ` - ${browserTestCallId.slice(-6)}` : ''}. Transfer is not supported.`
-                  : 'Runs in this browser with no phone call. Transfer is not supported on Webcall.'
-                : 'Place a real outbound test call to a selected phone number.'}
-            </p>
-            <button
-              type="button"
-              onClick={() =>
-                testMode === 'browser' ? void runBrowserTest() : setTestOpen(true)
-              }
-              disabled={browserTestStatus === 'connecting'}
-              className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[5px] border px-2 text-[12.5px] font-medium transition"
-            >
-              <PlayIcon />{' '}
-              {testMode === 'browser'
-                ? browserTestStatus === 'connecting'
-                  ? 'Connecting'
-                  : browserTestStatus === 'live'
-                    ? 'Stop Test'
-                    : 'Run Test'
-                : 'Test Call'}
-            </button>
-          </div>
+          )}
+
+          {testPanel === 'llm' && (
+            <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 py-4">
+              <div className="flex items-center gap-2">
+                <span className="border-line bg-bg shadow-card grid size-9 place-items-center rounded-full border">
+                  <Icon name="cpu" size="sm" className="text-fg-muted" />
+                </span>
+                <span className="min-w-0">
+                  <span className="text-fg block text-[12.5px] font-medium">LLM turn test</span>
+                  <span className="text-fg-muted block truncate text-[10.5px]">
+                    {modelShortLabel}
+                  </span>
+                </span>
+              </div>
+              <div>
+                <p className="text-fg-muted mb-1 text-[11px] font-medium">Caller message</p>
+                <Textarea
+                  rows={5}
+                  value={llmInput}
+                  onChange={(e) => setLlmInput(e.target.value)}
+                  placeholder="Write one caller turn..."
+                  className="text-[12px] leading-snug"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void runLlmTest()}
+                disabled={llmTesting || !llmInput.trim()}
+                className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[5px] border px-2 text-[12.5px] font-medium transition disabled:opacity-50"
+              >
+                <PlayIcon /> {llmTesting ? 'Testing' : 'Run LLM'}
+              </button>
+              <div className="border-line bg-bg min-h-0 flex-1 overflow-auto rounded-[5px] border p-3">
+                {llmResult ? (
+                  <div className="space-y-2">
+                    <div className="text-fg-muted flex items-center justify-between gap-2 text-[10.5px]">
+                      <span className="truncate">{llmResult.model}</span>
+                      <span>{llmResult.latencyMs}ms</span>
+                    </div>
+                    {!llmResult.aiPowered && (
+                      <p className="text-status-warn text-[11px]">
+                        Gemini key is not configured.
+                      </p>
+                    )}
+                    <p className="text-fg whitespace-pre-wrap text-[12.5px] leading-relaxed">
+                      {llmResult.response}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-fg-muted text-[11px] leading-snug">
+                    Test one caller message against the saved prompt and guardrails.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {testPanel === 'json' && (
+            <div className="min-h-0 flex-1 overflow-auto px-3 py-4">
+              <pre className="border-line bg-bg text-fg-muted min-h-full overflow-auto rounded-[5px] border p-3 font-mono text-[10.5px] leading-relaxed">
+                {JSON.stringify(
+                  {
+                    name,
+                    tier,
+                    model,
+                    language,
+                    voice: { provider: voiceProvider, voiceId, style: voiceStyle },
+                    prompt: { system: systemPrompt, firstMessage, guardrails },
+                    runtimeSettings,
+                    outcomeConfig,
+                  },
+                  null,
+                  2,
+                )}
+              </pre>
+            </div>
+          )}
         </aside>
       </div>
 

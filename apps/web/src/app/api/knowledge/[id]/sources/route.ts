@@ -13,21 +13,56 @@ import { kbToJson } from '@/lib/serialize'
 import { extractKnowledgeSource } from '@/lib/knowledge-ingest'
 import { calculateKnowledgeQuality } from '@/lib/knowledge-quality'
 
+const SourceType = z.enum(['url', 'website', 'pdf', 'docx', 'text'])
+const SourceRef = z.string().min(1).max(40000)
+const StorageProvider = z.enum(['local', 's3', 'external', 'inline'])
+const Storage = z
+  .object({
+    provider: StorageProvider.optional(),
+    key: z.string().optional(),
+  })
+  .optional()
+
+type SourceTypeValue = z.infer<typeof SourceType>
+type StorageProviderValue = z.infer<typeof StorageProvider>
+type SourceStorage = { provider?: StorageProviderValue; key: string }
+type IncomingStorage =
+  | {
+      provider?: StorageProviderValue | null
+      key?: string | null
+    }
+  | null
+  | undefined
+
 const Body = z.object({
-  type: z.enum(['url', 'website', 'pdf', 'docx', 'text']),
-  ref: z.string().min(1).max(2000),
-  storage: z
-    .object({
-      provider: z.enum(['local', 's3', 'external', 'inline']).optional(),
-      key: z.string().optional(),
-    })
-    .optional(),
+  type: SourceType,
+  ref: SourceRef,
+  storage: Storage,
 })
 
 const PatchBody = z.object({
-  originalRef: z.string().min(1).max(2000),
-  ref: z.string().min(1).max(2000),
+  originalRef: SourceRef,
+  ref: SourceRef,
 })
+
+const DeleteBody = z.object({
+  ref: SourceRef,
+})
+
+function defaultStorageFor(type: SourceTypeValue): SourceStorage {
+  return {
+    provider: type === 'text' ? 'inline' : type === 'url' || type === 'website' ? 'external' : 'local',
+    key: '',
+  }
+}
+
+function normalizeStorageFor(type: SourceTypeValue, storage: IncomingStorage): SourceStorage {
+  const fallback = defaultStorageFor(type)
+  return {
+    provider: storage?.provider ?? fallback.provider,
+    key: storage?.key ?? fallback.key,
+  }
+}
 
 export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params
@@ -36,7 +71,8 @@ export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id:
   const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   const body = Body.parse(await req.json().catch(() => ({})))
-  const extraction = await extractKnowledgeSource(body.type, body.ref)
+  const storage = normalizeStorageFor(body.type, body.storage)
+  const extraction = await extractKnowledgeSource(body.type, body.ref, storage)
   await connectMongo()
   const updated = await KnowledgeBase.findOneAndUpdate(
     { _id: oid, orgId: s.orgId },
@@ -45,10 +81,7 @@ export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id:
         sources: {
           ...body,
           title: extraction.title ?? '',
-          storage: body.storage ?? {
-            provider: body.type === 'text' ? 'inline' : body.type === 'url' || body.type === 'website' ? 'external' : 'local',
-            key: '',
-          },
+          storage,
           ingestion: {
             status: extraction.status,
             chunkCount: extraction.chunkCount,
@@ -78,12 +111,18 @@ export const DELETE = withErrors(async (req: Request, ctx: { params: Promise<{ i
   const oid = objectIdOr400(id)
   if (!oid) return apiError('invalid_input')
   const url = new URL(req.url)
-  const ref = url.searchParams.get('ref')
-  if (!ref) return apiError('invalid_input', 'pass ?ref=… to identify the source')
+  const queryRef = url.searchParams.get('ref')
+  let bodyRef: string | undefined
+  if (queryRef === null) {
+    const parsedBody = DeleteBody.safeParse(await req.json().catch(() => ({})))
+    if (parsedBody.success) bodyRef = parsedBody.data.ref
+  }
+  const parsedRef = SourceRef.safeParse(queryRef ?? bodyRef)
+  if (!parsedRef.success) return apiError('invalid_input', 'pass ref to identify the source')
   await connectMongo()
   const updated = await KnowledgeBase.findOneAndUpdate(
     { _id: oid, orgId: s.orgId },
-    { $pull: { sources: { ref } } },
+    { $pull: { sources: { ref: parsedRef.data } } },
     { new: true },
   ).lean()
   if (!updated) return apiError('not_found')
@@ -107,13 +146,12 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
   if (!kb) return apiError('not_found')
   const source = kb.sources.find((src) => src.ref === body.originalRef)
   if (!source) return apiError('not_found', 'source not found')
-  const extraction = await extractKnowledgeSource(source.type, body.ref)
+  const sourceType = SourceType.parse(source.type)
+  const storage = normalizeStorageFor(sourceType, source.storage)
+  const extraction = await extractKnowledgeSource(sourceType, body.ref, storage)
   source.ref = body.ref
   source.title = extraction.title ?? source.title ?? ''
-  source.storage = source.storage ?? {
-    provider: source.type === 'text' ? 'inline' : source.type === 'url' || source.type === 'website' ? 'external' : 'local',
-    key: '',
-  }
+  source.storage = storage
   source.ingestion = {
     status: extraction.status,
     chunkCount: extraction.chunkCount,
