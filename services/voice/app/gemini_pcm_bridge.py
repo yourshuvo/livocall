@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from time import perf_counter_ns
 from typing import Any
 
@@ -26,9 +27,11 @@ from app.audio_codec import (
     split_pcmu_20ms,
 )
 from app.db import get_db
+from app.persistence import TranscriptBuffer
 from app.settings import settings
 from app.tiers._common import echo_until_close, fetch_agent_for_call
 from app.warm_sessions import warm_sessions
+from app.web_client import post_voice_event
 
 log = structlog.get_logger()
 
@@ -71,6 +74,17 @@ class PcmuLatency:
             log.warning("gemini_pcm.latency_persist_failed", call_id=self.call_id, error=str(exc))
 
 
+@dataclass(frozen=True, slots=True)
+class ToolResponse:
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptUpdate:
+    role: str
+    text: str
+
+
 class GeminiPcmBridge:
     async def run(
         self,
@@ -109,6 +123,7 @@ class GeminiPcmBridge:
         input_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=2)
         barge_in = asyncio.Event()
         latency = PcmuLatency(call_id)
+        transcript = TranscriptBuffer(call_id)
         latency.mark("bridge_connected")
 
         try:
@@ -129,9 +144,13 @@ class GeminiPcmBridge:
                     _send_caller_audio(session, types, input_queue, barge_in, call_id, latency)
                 )
                 receiver = asyncio.create_task(
-                    _receive_model_audio(session, ws, barge_in, call_id, agent, latency)
+                    _receive_model_audio(
+                        session, ws, barge_in, call_id, agent, latency, transcript
+                    )
                 )
-                reader = asyncio.create_task(_read_pcmside_audio(ws, input_queue, barge_in, call_id, latency))
+                reader = asyncio.create_task(
+                    _read_pcmside_audio(ws, input_queue, barge_in, call_id, latency)
+                )
                 done, pending = await asyncio.wait(
                     {sender, receiver, reader}, return_when=asyncio.FIRST_COMPLETED
                 )
@@ -151,6 +170,7 @@ class GeminiPcmBridge:
                 log.exception("gemini_pcm.error", call_id=call_id, error=str(exc))
                 await echo_until_close(ws)
         finally:
+            await transcript.flush()
             await latency.persist()
             await warm_sessions.cleanup(call_id)
 
@@ -158,6 +178,8 @@ class GeminiPcmBridge:
 def _live_config(types: Any, system_prompt: str, voice: str, agent: dict[str, Any]) -> dict[str, Any]:
     config: dict[str, Any] = {
         "response_modalities": ["AUDIO"],
+        "input_audio_transcription": {},
+        "output_audio_transcription": {},
         "system_instruction": system_prompt,
         "temperature": settings.gemini_live_temperature,
         "max_output_tokens": settings.gemini_live_max_tokens,
@@ -238,24 +260,74 @@ async def _receive_model_audio(
     call_id: str,
     agent: dict[str, Any],
     latency: PcmuLatency,
+    transcript: TranscriptBuffer,
 ) -> None:
-    async for item in _iter_model_output(session, agent, call_id):
-        if isinstance(item, dict):
-            await session.send_tool_response(function_responses=[item])
-            continue
-        audio = item
-        latency.mark("first_model_audio")
-        if barge_in.is_set():
-            continue
-        for pcm24_chunk in split_pcm16_24k_20ms(audio):
+    publish_tasks: set[asyncio.Task[None]] = set()
+
+    def on_publish_done(task: asyncio.Task[None]) -> None:
+        publish_tasks.discard(task)
+        with suppress(asyncio.CancelledError):
+            exc = task.exception()
+            if exc is not None:
+                log.warning("gemini_pcm.transcript_publish_failed", call_id=call_id, error=str(exc))
+
+    try:
+        async for item in _iter_model_output(session, agent, call_id):
+            if isinstance(item, ToolResponse):
+                await session.send_tool_response(function_responses=[item.payload])
+                continue
+            if isinstance(item, TranscriptUpdate):
+                task = asyncio.create_task(
+                    _publish_transcript(transcript, call_id, item.role, item.text)
+                )
+                publish_tasks.add(task)
+                task.add_done_callback(on_publish_done)
+                continue
+            audio = item
+            latency.mark("first_model_audio")
             if barge_in.is_set():
-                break
-            await ws.send_bytes(pcm16_24k_to_pcmu(pcm24_chunk))
-            latency.mark("first_fs_audio_send")
+                continue
+            for pcm24_chunk in split_pcm16_24k_20ms(audio):
+                if barge_in.is_set():
+                    break
+                await ws.send_bytes(pcm16_24k_to_pcmu(pcm24_chunk))
+                latency.mark("first_fs_audio_send")
+    finally:
+        if publish_tasks:
+            await asyncio.gather(*publish_tasks, return_exceptions=True)
     log.info("gemini_pcm.receiver_done", call_id=call_id)
 
 
-async def _iter_model_output(session: Any, agent: dict[str, Any], call_id: str) -> AsyncIterator[bytes | dict[str, Any]]:
+async def _publish_transcript(
+    transcript: TranscriptBuffer,
+    call_id: str,
+    role: str,
+    text: str,
+) -> None:
+    text = text.strip()
+    if not text:
+        return
+    at = datetime.now(UTC)
+    posted = await post_voice_event(
+        {
+            "type": "call.transcript",
+            "callId": call_id,
+            "role": role,
+            "text": text,
+            "at": at.isoformat(),
+        }
+    )
+    if not posted:
+        await transcript.add(role, text)
+        await transcript.flush()
+
+
+async def _iter_model_output(
+    session: Any,
+    agent: dict[str, Any],
+    call_id: str,
+) -> AsyncIterator[bytes | ToolResponse | TranscriptUpdate]:
+    output_transcript_chunks: list[str] = []
     async for response in session.receive():
         tool_call = getattr(response, "tool_call", None)
         calls = getattr(tool_call, "function_calls", None) or []
@@ -264,8 +336,25 @@ async def _iter_model_output(session: Any, agent: dict[str, Any], call_id: str) 
             args = getattr(call, "args", None) or {}
             call_id_part = str(getattr(call, "id", "") or name)
             result = await execute_agent_tool(agent, call_id=call_id, name=name, arguments=dict(args))
-            yield {"id": call_id_part, "name": name, "response": result}
+            yield ToolResponse({"id": call_id_part, "name": name, "response": result})
         content = getattr(response, "server_content", None)
+        input_text = _transcription_text(getattr(content, "input_transcription", None))
+        if input_text:
+            yield TranscriptUpdate("user", input_text)
+        output_text = _transcription_text(
+            getattr(content, "output_transcription", None), strip=False
+        )
+        if output_text:
+            output_transcript_chunks.append(output_text)
+        if getattr(content, "interrupted", False):
+            output_transcript_chunks.clear()
+            log.info("gemini_pcm.interrupted", call_id=call_id)
+        if output_transcript_chunks and (
+            getattr(content, "turn_complete", False)
+            or getattr(content, "generation_complete", False)
+        ):
+            yield TranscriptUpdate("agent", _join_transcript_chunks(output_transcript_chunks))
+            output_transcript_chunks.clear()
         turn = getattr(content, "model_turn", None)
         parts = getattr(turn, "parts", None) or []
         for part in parts:
@@ -273,3 +362,19 @@ async def _iter_model_output(session: Any, agent: dict[str, Any], call_id: str) 
             data = getattr(inline_data, "data", None)
             if isinstance(data, bytes):
                 yield data
+    if output_transcript_chunks:
+        yield TranscriptUpdate("agent", _join_transcript_chunks(output_transcript_chunks))
+
+
+def _transcription_text(value: Any, *, strip: bool = True) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        text = str(value.get("text") or "")
+    else:
+        text = str(getattr(value, "text", "") or "")
+    return text.strip() if strip else text
+
+
+def _join_transcript_chunks(chunks: list[str]) -> str:
+    return "".join(chunks).strip()

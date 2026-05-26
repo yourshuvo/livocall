@@ -8,6 +8,7 @@ const sourceSchema = new Schema(
       required: true,
     },
     ref: { type: String, required: true },
+    content: { type: String, default: '' },
     title: { type: String, default: '' },
     storage: {
       provider: { type: String, enum: ['local', 's3', 'external', 'inline'] },

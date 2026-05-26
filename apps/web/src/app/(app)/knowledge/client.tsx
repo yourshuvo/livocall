@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/toast'
 interface Source {
   type: 'url' | 'website' | 'pdf' | 'docx' | 'text'
   ref: string
+  content?: string
   title?: string
   ingestion?: {
     status?: 'queued' | 'extracting' | 'ready' | 'failed'
@@ -172,16 +173,16 @@ export function KnowledgeClient({ initial }: { initial: KB[] }) {
     })
   }
 
-  function updateSource(id: string, originalRef: string, ref: string) {
-    if (!ref.trim()) return
+  function updateSource(id: string, originalRef: string, content: string) {
+    if (!content.trim()) return
     startTransition(async () => {
       try {
         const updated = await api.patch<KB>(`/api/knowledge/${id}/sources`, {
           originalRef,
-          ref: ref.trim(),
+          content: content.trim(),
         })
         setItems((xs) => xs.map((x) => (x.id === id ? updated : x)))
-        toast('Source updated and re-ingested', 'success')
+        toast('Text updated and re-ingested', 'success')
       } catch (e) {
         toast((e as Error).message, 'error')
       }
@@ -240,7 +241,7 @@ export function KnowledgeClient({ initial }: { initial: KB[] }) {
           </CardBody>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4">
           {items.map((kb) => (
             <Card key={kb.id} className="overflow-hidden">
               <div className="flex items-start justify-between border-b border-line p-5">
@@ -262,18 +263,20 @@ export function KnowledgeClient({ initial }: { initial: KB[] }) {
                   </Button>
                 </div>
               </div>
-              <CardBody className="space-y-4">
+              <CardBody className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="space-y-4">
+                  <SourceAdder
+                    onAdd={(type, ref, done, storage) => addSource(kb.id, type, ref, done, storage)}
+                    disabled={pending}
+                  />
+                  <SourceList
+                    sources={kb.sources}
+                    onRemove={(ref) => removeSource(kb.id, ref)}
+                    onUpdate={(originalRef, ref) => updateSource(kb.id, originalRef, ref)}
+                    disabled={pending}
+                  />
+                </div>
                 <QualityScore quality={kb.quality ?? calculateClientQuality(kb)} />
-                <SourceList
-                  sources={kb.sources}
-                  onRemove={(ref) => removeSource(kb.id, ref)}
-                  onUpdate={(originalRef, ref) => updateSource(kb.id, originalRef, ref)}
-                  disabled={pending}
-                />
-                <SourceAdder
-                  onAdd={(type, ref, done, storage) => addSource(kb.id, type, ref, done, storage)}
-                  disabled={pending}
-                />
               </CardBody>
             </Card>
           ))}
@@ -333,7 +336,7 @@ function SourceList({
 }: {
   sources: Source[]
   onRemove: (ref: string) => void
-  onUpdate: (originalRef: string, ref: string) => void
+  onUpdate: (originalRef: string, content: string) => void
   disabled?: boolean
 }) {
   if (sources.length === 0)
@@ -363,15 +366,21 @@ function SourceRow({
 }: {
   source: Source
   onRemove: (ref: string) => void
-  onUpdate: (originalRef: string, ref: string) => void
+  onUpdate: (originalRef: string, content: string) => void
   disabled?: boolean
 }) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(s.ref)
   const isInlineText =
     s.type === 'text' &&
     (s.storage?.provider === 'inline' || (!s.storage?.provider && !s.storage?.key))
+  const editableText = isInlineText ? s.ref : s.content || ''
+  const [draft, setDraft] = useState(editableText)
   const displayTitle = s.title || (isInlineText ? 'Written text source' : s.ref)
+  const fallbackPreview = `No saved text for this older source yet.
+Reference: ${s.ref}
+Stored as: ${s.storage?.provider || 'external'}${s.storage?.key ? ` - ${s.storage.key}` : ''}
+Extracted characters: ${s.ingestion?.extractedChars ?? 0}
+${s.ingestion?.error ? `Error: ${s.ingestion.error}` : ''}`
   return (
     <li className="flex items-start gap-3 px-3 py-3 text-[12.5px]">
       <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded border border-line bg-bg">
@@ -400,15 +409,11 @@ function SourceRow({
         </p>
         <details className="mt-1">
           <summary className="cursor-pointer text-[12px] text-fg-muted hover:text-fg">
-            {isInlineText ? 'View / edit text' : 'View / edit reference'}
+            View / edit text
           </summary>
           {editing ? (
             <div className="mt-2 space-y-2">
-              {isInlineText ? (
-                <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={7} />
-              ) : (
-                <Input value={draft} onChange={(e) => setDraft(e.target.value)} />
-              )}
+              <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={7} />
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -424,7 +429,7 @@ function SourceRow({
                   size="sm"
                   variant="ghost"
                   onClick={() => {
-                    setDraft(s.ref)
+                    setDraft(editableText)
                     setEditing(false)
                   }}
                 >
@@ -435,13 +440,18 @@ function SourceRow({
           ) : (
             <>
               <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border border-line bg-bg-subtle p-2 font-mono text-[11.5px] text-fg-muted">
-{isInlineText ? s.ref : `Reference: ${s.ref}
-Stored as: ${s.storage?.provider || 'external'}${s.storage?.key ? ` - ${s.storage.key}` : ''}
-Extracted characters: ${s.ingestion?.extractedChars ?? 0}
-${s.ingestion?.error ? `Error: ${s.ingestion.error}` : ''}`}
+{editableText || fallbackPreview}
               </pre>
-              <Button size="sm" variant="ghost" className="mt-2" onClick={() => setEditing(true)}>
-                {isInlineText ? 'Edit text' : 'Edit source'}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="mt-2"
+                onClick={() => {
+                  setDraft(editableText)
+                  setEditing(true)
+                }}
+              >
+                Edit text
               </Button>
             </>
           )}

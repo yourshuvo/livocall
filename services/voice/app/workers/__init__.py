@@ -6,7 +6,22 @@ on Settings so each can be disabled independently in dev / CI.
 
 from __future__ import annotations
 
-from app.workers.campaign_dialer import CampaignDialer
-from app.workers.kb_ingestion import KbIngestor
+from typing import TYPE_CHECKING
 
 __all__ = ["CampaignDialer", "KbIngestor"]
+
+if TYPE_CHECKING:
+    from app.workers.campaign_dialer import CampaignDialer
+    from app.workers.kb_ingestion import KbIngestor
+
+
+def __getattr__(name: str):
+    if name == "CampaignDialer":
+        from app.workers.campaign_dialer import CampaignDialer
+
+        return CampaignDialer
+    if name == "KbIngestor":
+        from app.workers.kb_ingestion import KbIngestor
+
+        return KbIngestor
+    raise AttributeError(name)

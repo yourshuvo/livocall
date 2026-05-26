@@ -42,8 +42,12 @@ const Body = z.object({
 
 const PatchBody = z.object({
   originalRef: SourceRef,
-  ref: SourceRef,
+  ref: SourceRef.optional(),
+  content: SourceRef.optional(),
 })
+  .refine((body) => body.ref !== undefined || body.content !== undefined, {
+    message: 'pass ref or content to update the source',
+  })
 
 const DeleteBody = z.object({
   ref: SourceRef,
@@ -81,6 +85,7 @@ export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id:
         sources: {
           ...body,
           title: extraction.title ?? '',
+          content: extraction.text,
           storage,
           ingestion: {
             status: extraction.status,
@@ -148,8 +153,15 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
   if (!source) return apiError('not_found', 'source not found')
   const sourceType = SourceType.parse(source.type)
   const storage = normalizeStorageFor(sourceType, source.storage)
-  const extraction = await extractKnowledgeSource(sourceType, body.ref, storage)
-  source.ref = body.ref
+  const isContentEdit = body.content !== undefined
+  const nextText = body.content ?? body.ref ?? ''
+  const extraction = isContentEdit
+    ? await extractKnowledgeSource('text', nextText, { provider: 'inline', key: '' })
+    : await extractKnowledgeSource(sourceType, nextText, storage)
+  if (!isContentEdit || (sourceType === 'text' && storage.provider === 'inline')) {
+    source.ref = nextText
+  }
+  source.content = extraction.text
   source.title = extraction.title ?? source.title ?? ''
   source.storage = storage
   source.ingestion = {

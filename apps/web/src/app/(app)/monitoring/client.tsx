@@ -17,6 +17,8 @@ import { api } from '@/lib/api-fetch'
 import { fmtDate, fmtDuration, fmtPhoneE164 } from '@/lib/format'
 import { useToast } from '@/components/ui/toast'
 
+const LIVE_REFRESH_MS = 2000
+
 export interface MonitoringCall {
   id: string
   agentId: string | null
@@ -65,7 +67,8 @@ export function MonitoringClient({
         // Keep the current snapshot visible if polling fails.
       }
     }
-    const timer = window.setInterval(refresh, 5000)
+    refresh()
+    const timer = window.setInterval(refresh, LIVE_REFRESH_MS)
     return () => {
       cancelled = true
       window.clearInterval(timer)
@@ -119,10 +122,15 @@ export function MonitoringClient({
             ) : (
               calls.map((call) => {
                 const latest = call.transcript[call.transcript.length - 1]
+                const recentTranscript = call.transcript.slice(-4)
                 const startedAt = call.startedAt ? new Date(call.startedAt) : null
                 const elapsedSec = startedAt
                   ? Math.max(0, Math.round((now - startedAt.getTime()) / 1000))
                   : 0
+                const latestAt = latest?.at ? new Date(latest.at) : null
+                const latestAgeSec = latestAt
+                  ? Math.max(0, Math.round((now - latestAt.getTime()) / 1000))
+                  : null
                 return (
                   <div key={call.id} className="border-line bg-bg-subtle rounded-lg border p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -174,14 +182,49 @@ export function MonitoringClient({
                       </div>
                     </div>
                     <div className="border-line bg-bg mt-3 rounded border p-3">
-                      <p className="text-fg-faint font-mono text-[10.5px] uppercase tracking-[0.12em]">
-                        Latest transcript
-                      </p>
-                      <p className="text-fg mt-1 text-[13px]">
-                        {latest
-                          ? `${latest.role}: ${latest.text}`
-                          : 'Waiting for transcript chunks...'}
-                      </p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-fg-faint font-mono text-[10.5px] uppercase tracking-[0.12em]">
+                          Live transcript
+                        </p>
+                        <span className="text-fg-faint font-mono text-[10.5px] uppercase tracking-[0.12em]">
+                          {latestAgeSec == null ? 'listening' : `${latestAgeSec}s ago`}
+                        </span>
+                      </div>
+                      {recentTranscript.length === 0 ? (
+                        <p className="text-fg-muted mt-2 text-[13px]">
+                          Waiting for transcript chunks...
+                        </p>
+                      ) : (
+                        <ul className="mt-2 space-y-2">
+                          {recentTranscript.map((turn, i) => (
+                            <li
+                              key={`${turn.at || 'pending'}-${i}`}
+                              className="grid grid-cols-[4.75rem_minmax(0,1fr)] gap-2"
+                            >
+                              <span
+                                className={[
+                                  'mt-0.5 h-5 rounded border px-1.5 text-center font-mono text-[10px] uppercase tracking-[0.08em]',
+                                  turn.role === 'agent'
+                                    ? 'border-status-live/40 text-status-live'
+                                    : turn.role === 'user'
+                                      ? 'border-line text-fg'
+                                      : 'border-line text-fg-muted',
+                                ].join(' ')}
+                              >
+                                {turn.role}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-fg text-[13px] leading-relaxed">{turn.text}</p>
+                                {turn.at && (
+                                  <p className="text-fg-faint mt-0.5 font-mono text-[10.5px] uppercase tracking-[0.12em]">
+                                    {new Date(turn.at).toLocaleTimeString()}
+                                  </p>
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </div>
                 )
