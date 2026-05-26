@@ -113,6 +113,26 @@ interface NumberOption {
   providerName: string
 }
 
+type TestRunMode = 'browser' | 'call'
+type BrowserTestStatus = 'idle' | 'connecting' | 'live'
+
+interface BrowserTestStartResult {
+  callId: string
+  wsUrl: string
+  inputSampleRate: number
+  outputSampleRate: number
+}
+
+interface BrowserAudioSession {
+  stream?: MediaStream
+  context?: AudioContext
+  source?: MediaStreamAudioSourceNode
+  processor?: ScriptProcessorNode
+  socket?: WebSocket
+  playbackTime: number
+  outputSampleRate: number
+}
+
 /* ----------------------------- Engine catalog ----------------------------- */
 
 interface EngineInfo {
@@ -569,12 +589,16 @@ export function AgentEditor({
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const [tab, setTab] = useState<'create' | 'simulation'>('create')
   const [testOpen, setTestOpen] = useState(false)
+  const [testMode, setTestMode] = useState<TestRunMode>('browser')
+  const [browserTestStatus, setBrowserTestStatus] = useState<BrowserTestStatus>('idle')
+  const [browserTestCallId, setBrowserTestCallId] = useState('')
   const [builderOpen, setBuilderOpen] = useState(false)
   const [testPanel, setTestPanel] = useState<'audio' | 'llm' | 'json'>('audio')
   const [toE164, setToE164] = useState('')
   const [fromE164, setFromE164] = useState(numbers[0]?.e164 ?? '')
   const [toolTesting, setToolTesting] = useState<number | null>(null)
   const [toolResults, setToolResults] = useState<Record<number, string>>({})
+  const browserAudioRef = useRef<BrowserAudioSession | null>(null)
 
   // Open accordions (matches the Retell screenshot defaults)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -796,11 +820,120 @@ export function AgentEditor({
     })
   }
 
+  function stopBrowserTest(showToast = false) {
+    const session = browserAudioRef.current
+    browserAudioRef.current = null
+    closeBrowserAudioSession(session)
+    setBrowserTestStatus('idle')
+    setBrowserTestCallId('')
+    if (showToast) toast('Browser test stopped', 'success')
+  }
+
+  async function runBrowserTest() {
+    if (browserTestStatus === 'live') {
+      stopBrowserTest(true)
+      return
+    }
+    if (browserTestStatus === 'connecting') return
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      toast('Browser microphone access is not available in this browser', 'error')
+      return
+    }
+    if (typeof AudioContext === 'undefined') {
+      toast('Browser audio is not available in this browser', 'error')
+      return
+    }
+    if (isDirty) {
+      const ok = await save()
+      if (!ok) return
+    }
+
+    const audioSession: BrowserAudioSession = { playbackTime: 0, outputSampleRate: 16000 }
+    setBrowserTestStatus('connecting')
+    setTab('simulation')
+    setTestPanel('audio')
+
+    try {
+      const session = await api.post<BrowserTestStartResult>(
+        `/api/agents/${initial.id}/browser-test`,
+        {},
+      )
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
+      audioSession.stream = stream
+      const context = new AudioContext()
+      audioSession.context = context
+      await context.resume()
+      const socket = new WebSocket(session.wsUrl)
+      audioSession.socket = socket
+      socket.binaryType = 'arraybuffer'
+      await waitForSocketOpen(socket)
+
+      const source = context.createMediaStreamSource(stream)
+      const processor = context.createScriptProcessor(4096, 1, 1)
+      const inputSampleRate = session.inputSampleRate || 16000
+      audioSession.source = source
+      audioSession.processor = processor
+      audioSession.outputSampleRate = session.outputSampleRate || 16000
+
+      processor.onaudioprocess = (event) => {
+        if (socket.readyState !== WebSocket.OPEN) return
+        const input = event.inputBuffer.getChannelData(0)
+        const resampled = resampleFloat32(input, context.sampleRate, inputSampleRate)
+        const pcm = floatTo16BitPcm(resampled)
+        if (pcm.byteLength > 0) socket.send(pcm)
+      }
+      source.connect(processor)
+      processor.connect(context.destination)
+
+      socket.onmessage = (event) => {
+        if (typeof event.data === 'string') return
+        if (event.data instanceof ArrayBuffer) {
+          playPcmChunk(audioSession, event.data)
+          return
+        }
+        if (event.data instanceof Blob) {
+          void event.data.arrayBuffer().then((buffer) => playPcmChunk(audioSession, buffer))
+        }
+      }
+      socket.onclose = () => {
+        if (browserAudioRef.current !== audioSession) return
+        browserAudioRef.current = null
+        closeBrowserAudioSession(audioSession, false)
+        setBrowserTestStatus('idle')
+        setBrowserTestCallId('')
+      }
+      socket.onerror = () => {
+        if (browserAudioRef.current !== audioSession) return
+        toast('Browser test disconnected', 'error')
+        stopBrowserTest(false)
+      }
+
+      closeBrowserAudioSession(browserAudioRef.current)
+      browserAudioRef.current = audioSession
+      setBrowserTestStatus('live')
+      setBrowserTestCallId(session.callId)
+      setTestOpen(false)
+      toast('Browser test connected in this tab', 'success')
+    } catch (e) {
+      closeBrowserAudioSession(audioSession)
+      setBrowserTestStatus('idle')
+      setBrowserTestCallId('')
+      toast((e as Error).message || 'Could not start browser test', 'error')
+    }
+  }
+
   function runTestCall() {
     if (!/^\+\d{8,15}$/.test(toE164)) {
       toast('Enter a valid E.164 number (e.g. +8801711000000)', 'error')
       return
     }
+    stopBrowserTest(false)
     start(async () => {
       try {
         await api.post(`/api/agents/${initial.id}/test-call`, {
@@ -884,6 +1017,13 @@ export function AgentEditor({
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveDeps])
+
+  useEffect(() => {
+    return () => {
+      closeBrowserAudioSession(browserAudioRef.current)
+      browserAudioRef.current = null
+    }
+  }, [])
 
   const engineDef = ENGINE_OPTIONS.find((e) => e.k === tier) ?? ENGINE_OPTIONS[0]
   const languageOptions = languageOptionsForTier(tier)
@@ -2005,23 +2145,71 @@ export function AgentEditor({
           </div>
           <div className="flex flex-1 flex-col items-center justify-between gap-3 px-3 py-4">
             <div className="border-line bg-bg shadow-card grid size-16 place-items-center rounded-full border">
-              <Icon name="mic" size="lg" className="text-fg-muted" />
+              <Icon
+                name={testMode === 'browser' ? 'mic' : 'phone-out'}
+                size="lg"
+                className={cn(
+                  browserTestStatus === 'live' && testMode === 'browser'
+                    ? 'text-status-live'
+                    : 'text-fg-muted',
+                )}
+              />
+            </div>
+            <div className="border-line bg-bg grid w-full grid-cols-2 rounded-[5px] border p-0.5">
+              <button
+                type="button"
+                onClick={() => setTestMode('browser')}
+                className={cn(
+                  'inline-flex h-7 items-center justify-center gap-1 rounded-[4px] text-[11.5px] font-medium transition',
+                  testMode === 'browser'
+                    ? 'bg-[#F5F5F7] text-fg shadow-card'
+                    : 'text-fg-muted hover:text-fg',
+                )}
+              >
+                <Icon name="globe" size="xs" /> Browser
+              </button>
+              <button
+                type="button"
+                onClick={() => setTestMode('call')}
+                className={cn(
+                  'inline-flex h-7 items-center justify-center gap-1 rounded-[4px] text-[11.5px] font-medium transition',
+                  testMode === 'call'
+                    ? 'bg-[#F5F5F7] text-fg shadow-card'
+                    : 'text-fg-muted hover:text-fg',
+                )}
+              >
+                <Icon name="phone-out" size="xs" /> Call
+              </button>
             </div>
             <p className="text-fg-muted text-center text-[11px] leading-snug">
-              Please note call transfer is not supported on Webcall.
+              {testMode === 'browser'
+                ? browserTestStatus === 'live'
+                  ? `Webcall live${browserTestCallId ? ` - ${browserTestCallId.slice(-6)}` : ''}. Transfer is not supported.`
+                  : 'Runs in this browser with no phone call. Transfer is not supported on Webcall.'
+                : 'Place a real outbound test call to a selected phone number.'}
             </p>
             <button
               type="button"
-              onClick={() => setTestOpen(true)}
+              onClick={() =>
+                testMode === 'browser' ? void runBrowserTest() : setTestOpen(true)
+              }
+              disabled={browserTestStatus === 'connecting'}
               className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[5px] border px-2 text-[12.5px] font-medium transition"
             >
-              <PlayIcon /> Run Test
+              <PlayIcon />{' '}
+              {testMode === 'browser'
+                ? browserTestStatus === 'connecting'
+                  ? 'Connecting'
+                  : browserTestStatus === 'live'
+                    ? 'Stop Test'
+                    : 'Run Test'
+                : 'Test Call'}
             </button>
           </div>
         </aside>
       </div>
 
-      {/* Place test call dialog */}
+      {/* AI builder dialog */}
       <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
         <DialogContent className="max-w-2xl">
           <BanglaAgentBuilder
@@ -2041,11 +2229,11 @@ export function AgentEditor({
         </DialogContent>
       </Dialog>
 
-      {/* Place test call dialog */}
+      {/* Test call dialog */}
       <Dialog open={testOpen} onOpenChange={setTestOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Test this agent</DialogTitle>
+            <DialogTitle>Place a test call</DialogTitle>
             <p className="text-fg-muted text-[12.5px]">
               We&rsquo;ll originate a real call to the number you provide. Make sure the destination
               is expecting the call.
@@ -2538,6 +2726,106 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Divider() {
   return <div className="bg-line my-3 h-px" />
+}
+
+function closeBrowserAudioSession(session: BrowserAudioSession | null, closeSocket = true) {
+  if (!session) return
+  try {
+    session.processor?.disconnect()
+  } catch {}
+  try {
+    session.source?.disconnect()
+  } catch {}
+  for (const track of session.stream?.getTracks() ?? []) {
+    track.stop()
+  }
+  if (
+    closeSocket &&
+    session.socket &&
+    (session.socket.readyState === WebSocket.OPEN ||
+      session.socket.readyState === WebSocket.CONNECTING)
+  ) {
+    session.socket.close(1000, 'browser test stopped')
+  }
+  if (session.context && session.context.state !== 'closed') {
+    void session.context.close().catch(() => {})
+  }
+}
+
+function waitForSocketOpen(socket: WebSocket): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup()
+      reject(new Error('Browser test connection timed out'))
+    }, 10000)
+
+    function cleanup() {
+      window.clearTimeout(timeout)
+      socket.removeEventListener('open', handleOpen)
+      socket.removeEventListener('error', handleError)
+    }
+    function handleOpen() {
+      cleanup()
+      resolve()
+    }
+    function handleError() {
+      cleanup()
+      reject(new Error('Could not connect to the browser test service'))
+    }
+
+    socket.addEventListener('open', handleOpen)
+    socket.addEventListener('error', handleError)
+  })
+}
+
+function resampleFloat32(input: Float32Array, fromRate: number, toRate: number): Float32Array {
+  if (fromRate === toRate) return new Float32Array(input)
+  const ratio = fromRate / toRate
+  const outputLength = Math.max(1, Math.round(input.length / ratio))
+  const output = new Float32Array(outputLength)
+  for (let i = 0; i < outputLength; i += 1) {
+    const sourceIndex = i * ratio
+    const left = Math.floor(sourceIndex)
+    const right = Math.min(input.length - 1, left + 1)
+    const weight = sourceIndex - left
+    output[i] = input[left] * (1 - weight) + input[right] * weight
+  }
+  return output
+}
+
+function floatTo16BitPcm(input: Float32Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(input.length * 2)
+  const view = new DataView(buffer)
+  for (let i = 0; i < input.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, input[i]))
+    view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true)
+  }
+  return buffer
+}
+
+function playPcmChunk(session: BrowserAudioSession, buffer: ArrayBuffer) {
+  if (!session.context || buffer.byteLength < 2) return
+  const aligned = buffer.byteLength % 2 === 0 ? buffer : buffer.slice(0, buffer.byteLength - 1)
+  const samples = new Int16Array(aligned)
+  if (samples.length === 0) return
+  const sampleRate = inferPcmSampleRate(aligned.byteLength, session.outputSampleRate)
+  const audioBuffer = session.context.createBuffer(1, samples.length, sampleRate)
+  const channel = audioBuffer.getChannelData(0)
+  for (let i = 0; i < samples.length; i += 1) {
+    channel[i] = samples[i] / (samples[i] < 0 ? 0x8000 : 0x7fff)
+  }
+  const source = session.context.createBufferSource()
+  source.buffer = audioBuffer
+  source.connect(session.context.destination)
+  const startAt = Math.max(session.context.currentTime + 0.02, session.playbackTime)
+  source.start(startAt)
+  session.playbackTime = startAt + audioBuffer.duration
+}
+
+function inferPcmSampleRate(byteLength: number, fallback: number) {
+  if (byteLength % 960 === 0 && byteLength % 640 !== 0) return 24000
+  if (byteLength % 640 === 0 && byteLength % 960 !== 0) return 16000
+  return fallback
 }
 
 function formatTime(d: Date) {
