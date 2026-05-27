@@ -469,6 +469,29 @@ const DEFAULT_OUTCOME_LABELS: OutcomeLabel[] = [
   },
 ]
 
+function labelFromOutcomeKey(key: string): string {
+  const cleaned = key
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+  if (!cleaned) return ''
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+}
+
+function isAutoOutcomeLabel(label: OutcomeLabel): boolean {
+  return label.label.trim() === '' || label.label.trim() === labelFromOutcomeKey(label.key)
+}
+
+function uniqueOutcomeKey(labels: OutcomeLabel[], base: string): string {
+  const used = new Set(labels.map((label) => label.key))
+  if (!used.has(base)) return base
+  for (let i = 2; i <= 12; i += 1) {
+    const next = `${base}_${i}`
+    if (!used.has(next)) return next
+  }
+  return base
+}
+
 function normalizeOutcomeLabels(labels?: OutcomeLabel[] | null): OutcomeLabel[] {
   const cleaned = (labels?.length ? labels : DEFAULT_OUTCOME_LABELS)
     .map((label) => ({
@@ -730,7 +753,14 @@ export function AgentEditor({
 
   function updateOutcomeLabel(index: number, patch: Partial<OutcomeLabel>) {
     setOutcomeLabels((labels) =>
-      labels.map((label, i) => (i === index ? { ...label, ...patch } : label)),
+      labels.map((label, i) => {
+        if (i !== index) return label
+        const next = { ...label, ...patch }
+        if (typeof patch.key === 'string' && isAutoOutcomeLabel(label)) {
+          next.label = labelFromOutcomeKey(patch.key)
+        }
+        return next
+      }),
     )
   }
 
@@ -739,9 +769,10 @@ export function AgentEditor({
       toast('Revenue outcomes are limited to 12 labels', 'error')
       return
     }
+    const key = uniqueOutcomeKey(outcomeLabels, 'new_outcome')
     setOutcomeLabels((labels) => [
       ...labels,
-      { key: 'new_outcome', label: 'New outcome', description: '', conversion: false },
+      { key, label: labelFromOutcomeKey(key), description: '', conversion: false },
     ])
   }
 
@@ -2336,8 +2367,13 @@ export function AgentEditor({
               setSystemPrompt(prompt.system)
               setFirstMessage(prompt.firstMessage)
               setGuardrails(prompt.guardrails)
+              if (prompt.outcomeConfig) {
+                const generatedOutcomes = normalizeOutcomeConfig(prompt.outcomeConfig)
+                setOutcomeEnabled(generatedOutcomes.enabled)
+                setOutcomeLabels(generatedOutcomes.labels)
+              }
               setBuilderOpen(false)
-              toast('Bangla prompt generated. Save changes to publish it.', 'success')
+              toast('Bangla prompt and revenue outcomes generated. Save changes to publish it.', 'success')
             }}
           />
         </DialogContent>

@@ -10,6 +10,7 @@ import {
 import { isResponse, requireDashboardSession } from '@/lib/api-helpers'
 import { withErrors } from '@/lib/errors'
 import { agentLanguageCodes } from '@/types/agent'
+import { OutcomeConfigSchema } from '@/lib/business-outcomes'
 
 const Body = z.object({
   answers: z.object({
@@ -44,13 +45,14 @@ async function generateWithGemini(answers: AgentBuilderAnswers): Promise<Generat
   if (!key) return null
   const fallback = buildBanglaAgentPrompt(answers)
   const prompt = `Generate a production-ready Bangla phone-call AI agent prompt as strict JSON.
-Return exactly: {"name":"","description":"","language":"bn-en-mixed","system":"","firstMessage":"","guardrails":""}
+Return exactly: {"name":"","description":"","language":"bn-en-mixed","system":"","firstMessage":"","guardrails":"","outcomeConfig":{"enabled":true,"labels":[{"key":"order_confirmed","label":"Order confirmed","description":"Caller confirmed the target business outcome.","conversion":true},{"key":"unknown","label":"Unknown","description":"Outcome cannot be confidently determined.","conversion":false}]}}
 Rules:
 - Bangla-first, natural Bangladesh call-center tone.
 - Short, low-latency phone replies.
 - One question at a time.
 - Enforce KB/tool/transfer/compliance rules.
 - Do not invent facts.
+- Generate revenue outcome labels automatically from the call goal. Include 3-8 labels, keep an unknown fallback, and mark only true revenue/goal-completion labels as conversion=true.
 
 Answers:
 ${JSON.stringify(answers, null, 2)}
@@ -84,9 +86,14 @@ ${JSON.stringify(fallback, null, 2)}`
       system: z.string().min(1).max(8000),
       firstMessage: z.string().min(1).max(2000),
       guardrails: z.string().min(1).max(4000),
+      outcomeConfig: OutcomeConfigSchema.optional(),
     })
     .safeParse(JSON.parse(stripCodeFence(text)))
-  return parsed.success ? parsed.data : null
+  if (!parsed.success) return null
+  return {
+    ...parsed.data,
+    outcomeConfig: parsed.data.outcomeConfig ?? fallback.outcomeConfig,
+  }
 }
 
 export const POST = withErrors(async (req: Request) => {
