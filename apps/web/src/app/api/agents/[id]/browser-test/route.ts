@@ -30,12 +30,31 @@ export const POST = withErrors(async (_req: Request, ctx: { params: Promise<{ id
   }>()
   if (!agent) return apiError('not_found', 'agent not found')
 
+  const callId = new Types.ObjectId().toString()
+  if (agent.tier === 'gemini_live') {
+    const webrtcUrl = browserWebrtcUrl()
+    if (!webrtcUrl) {
+      return apiError('upstream_error', 'browser WebRTC is not configured')
+    }
+    webrtcUrl.searchParams.set('call_id', callId)
+    webrtcUrl.searchParams.set('agent_id', String(oid))
+    webrtcUrl.searchParams.set('tier', agent.tier)
+    webrtcUrl.searchParams.append('meta', 'source:dashboard-browser-test')
+    const auth = signWsAuth(callId)
+    if (auth) webrtcUrl.searchParams.set('auth', auth)
+
+    return NextResponse.json({
+      callId,
+      transport: 'small-webrtc',
+      webrtcUrl: webrtcUrl.toString(),
+      iceServers: browserIceServers(),
+    })
+  }
+
   const wsBase = browserWsBaseUrl()
   if (!wsBase) {
     return apiError('upstream_error', 'browser voice test websocket is not configured')
   }
-
-  const callId = new Types.ObjectId().toString()
   const wsUrl = new URL(wsBase)
   wsUrl.searchParams.set('call_id', callId)
   wsUrl.searchParams.set('agent_id', String(oid))
@@ -46,11 +65,48 @@ export const POST = withErrors(async (_req: Request, ctx: { params: Promise<{ id
 
   return NextResponse.json({
     callId,
+    transport: 'raw-websocket',
     wsUrl: wsUrl.toString(),
     inputSampleRate: 16000,
     outputSampleRate: agent.tier === 'grok_voice' || agent.tier === 'dtmf' ? 16000 : 24000,
   })
 })
+
+type IceServer = {
+  urls: string | string[]
+  username?: string
+  credential?: string
+}
+
+function browserWebrtcUrl() {
+  const direct = process.env.VOICE_BROWSER_WEBRTC_URL || ''
+  const serviceUrl = process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || process.env.VOICE_SERVICE_URL || ''
+  const value = direct || (serviceUrl ? `${serviceUrl.replace(/\/+$/, '')}/webrtc/browser-offer` : '')
+  if (!value) return null
+  try {
+    const url = new URL(value.trim())
+    if (!/^https?:$/.test(url.protocol)) return null
+    return url
+  } catch {
+    return null
+  }
+}
+
+function browserIceServers(): IceServer[] {
+  const servers: IceServer[] = (process.env.WEBRTC_ICE_SERVERS || 'stun:stun.l.google.com:19302')
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean)
+    .map((url) => ({ urls: url }))
+  const turnUrl = process.env.WEBRTC_TURN_URL || ''
+  if (turnUrl) {
+    const turn: IceServer = { urls: turnUrl }
+    if (process.env.WEBRTC_TURN_USERNAME) turn.username = process.env.WEBRTC_TURN_USERNAME
+    if (process.env.WEBRTC_TURN_CREDENTIAL) turn.credential = process.env.WEBRTC_TURN_CREDENTIAL
+    servers.push(turn)
+  }
+  return servers
+}
 
 function browserWsBaseUrl() {
   const direct =

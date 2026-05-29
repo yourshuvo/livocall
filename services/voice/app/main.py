@@ -4,10 +4,31 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import BaseModel, Field
 
 from app import event_bridge, originator
+from app.browser_webrtc import (
+    aclose as aclose_browser_webrtc,
+)
+from app.browser_webrtc import (
+    handle_ice_candidate as handle_browser_ice_candidate,
+)
+from app.browser_webrtc import (
+    handle_offer as handle_browser_webrtc_offer,
+)
+from app.browser_webrtc import (
+    public_ice_servers,
+)
 from app.latency import LatencyTrace
 from app.observability import (
     init_otel,
@@ -65,6 +86,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
             await ingestor.stop()
         if consumer is not None:
             await consumer.stop()
+        await aclose_browser_webrtc()
         await aclose_web_client()
 
 
@@ -98,7 +120,26 @@ async def health() -> dict[str, object]:
         "fs_codec_ms": settings.fs_codec_ms,
         "audio_fork_buffer_ms": settings.audio_fork_buffer_ms,
         "audio_fork_jitter_buffer_ms": settings.audio_fork_jitter_buffer_ms,
+        "browser_webrtc_enabled": settings.browser_webrtc_enabled,
     }
+
+
+@app.get("/webrtc/browser-config")
+async def browser_webrtc_config() -> dict[str, object]:
+    return {
+        "enabled": settings.browser_webrtc_enabled,
+        "iceServers": public_ice_servers(),
+    }
+
+
+@app.post("/webrtc/browser-offer")
+async def browser_webrtc_offer(request: Request, background_tasks: BackgroundTasks) -> Any:
+    return await handle_browser_webrtc_offer(request, background_tasks)
+
+
+@app.patch("/webrtc/browser-offer")
+async def browser_webrtc_ice_candidate(request: Request) -> dict[str, str]:
+    return await handle_browser_ice_candidate(request)
 
 
 class OriginateRequest(BaseModel):

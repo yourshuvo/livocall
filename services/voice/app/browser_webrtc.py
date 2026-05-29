@@ -1,0 +1,374 @@
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
+
+import structlog
+from fastapi import BackgroundTasks, HTTPException, Request, status
+
+from app.agent_runtime import (
+    build_system_prompt,
+    execute_agent_tool,
+    gemini_live_model,
+    gemini_tool_declarations,
+    gemini_voice,
+)
+from app.persistence import TranscriptBuffer
+from app.settings import settings
+from app.tiers._common import fetch_agent_for_call
+from app.ws_auth import verify as ws_verify
+
+log = structlog.get_logger()
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserWebRTCContext:
+    call_id: str
+    agent_id: str
+    tier: str
+    prompt: str
+    metadata: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class PipecatWebRTCImports:
+    SmallWebRTCRequest: Any
+    SmallWebRTCPatchRequest: Any
+    SmallWebRTCRequestHandler: Any
+    IceServer: Any
+
+
+_small_webrtc_handler: Any | None = None
+
+
+def _load_webrtc_imports() -> PipecatWebRTCImports:
+    try:
+        from pipecat.transports.smallwebrtc.connection import (
+            IceServer,  # type: ignore[import-not-found]
+        )
+        from pipecat.transports.smallwebrtc.request_handler import (  # type: ignore[import-not-found]
+            SmallWebRTCPatchRequest,
+            SmallWebRTCRequest,
+            SmallWebRTCRequestHandler,
+        )
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Pipecat WebRTC dependencies are not installed; install services/voice with .[voice]",
+        ) from exc
+    return PipecatWebRTCImports(
+        SmallWebRTCRequest=SmallWebRTCRequest,
+        SmallWebRTCPatchRequest=SmallWebRTCPatchRequest,
+        SmallWebRTCRequestHandler=SmallWebRTCRequestHandler,
+        IceServer=IceServer,
+    )
+
+
+def _metadata_from_query(request: Request) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    for item in request.query_params.getlist("meta"):
+        if ":" not in item:
+            continue
+        key, value = item.split(":", 1)
+        metadata[key] = value
+    return metadata
+
+
+def _context_from_query(request: Request) -> BrowserWebRTCContext:
+    call_id = request.query_params.get("call_id", "")
+    agent_id = request.query_params.get("agent_id", "")
+    tier = request.query_params.get("tier", "gemini_live")
+    prompt = request.query_params.get("prompt", "")
+    auth = request.query_params.get("auth", "")
+
+    if not settings.browser_webrtc_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="browser WebRTC is disabled",
+        )
+    if not call_id or not agent_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing call_id or agent_id")
+    if not ws_verify(call_id, auth or None):
+        log.warning("browser_webrtc.auth_failed", call_id=call_id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="invalid WebRTC auth")
+    if tier != "gemini_live":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="browser WebRTC currently supports gemini_live agents only",
+        )
+
+    return BrowserWebRTCContext(
+        call_id=call_id,
+        agent_id=agent_id,
+        tier=tier,
+        prompt=prompt,
+        metadata=_metadata_from_query(request),
+    )
+
+
+def public_ice_servers() -> list[dict[str, str | list[str]]]:
+    servers: list[dict[str, str | list[str]]] = [
+        {"urls": url.strip()}
+        for url in settings.webrtc_ice_servers.split(",")
+        if url.strip()
+    ]
+    if settings.webrtc_turn_url:
+        turn: dict[str, str | list[str]] = {"urls": settings.webrtc_turn_url}
+        if settings.webrtc_turn_username:
+            turn["username"] = settings.webrtc_turn_username
+        if settings.webrtc_turn_credential:
+            turn["credential"] = settings.webrtc_turn_credential
+        servers.append(turn)
+    return servers
+
+
+def _server_ice_servers(ice_server_type: Any) -> list[Any]:
+    servers: list[Any] = []
+    for item in public_ice_servers():
+        urls = item["urls"]
+        if isinstance(urls, list):
+            for url in urls:
+                servers.append(ice_server_type(urls=url))
+            continue
+        kwargs = {"urls": urls}
+        if "username" in item:
+            kwargs["username"] = item["username"]
+        if "credential" in item:
+            kwargs["credential"] = item["credential"]
+        servers.append(ice_server_type(**kwargs))
+    return servers
+
+
+def _get_handler(imports: PipecatWebRTCImports) -> Any:
+    global _small_webrtc_handler
+    if _small_webrtc_handler is None:
+        _small_webrtc_handler = imports.SmallWebRTCRequestHandler(
+            ice_servers=_server_ice_servers(imports.IceServer)
+        )
+    return _small_webrtc_handler
+
+
+def _request_model(model_type: Any, body: dict[str, Any]) -> Any:
+    if hasattr(model_type, "from_dict"):
+        return model_type.from_dict(dict(body))
+    if hasattr(model_type, "model_validate"):
+        return model_type.model_validate(body)
+    return model_type(**body)
+
+
+async def handle_offer(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    *,
+    run_bot: Callable[..., Awaitable[None]] | None = None,
+) -> Any:
+    context = _context_from_query(request)
+    imports = _load_webrtc_imports()
+    handler = _get_handler(imports)
+    body = await request.json()
+    offer = _request_model(imports.SmallWebRTCRequest, body)
+
+    async def on_connection(connection: Any) -> None:
+        background_tasks.add_task(
+            run_bot or run_browser_gemini_bot,
+            connection,
+            call_id=context.call_id,
+            agent_id=context.agent_id,
+            prompt=context.prompt,
+            metadata={**context.metadata, "source": context.metadata.get("source", "browser-webrtc")},
+        )
+
+    log.info(
+        "browser_webrtc.offer",
+        call_id=context.call_id,
+        agent_id=context.agent_id,
+        tier=context.tier,
+    )
+    return await handler.handle_web_request(
+        request=offer,
+        webrtc_connection_callback=on_connection,
+    )
+
+
+async def handle_ice_candidate(request: Request) -> dict[str, str]:
+    context = _context_from_query(request)
+    imports = _load_webrtc_imports()
+    handler = _get_handler(imports)
+    body = await request.json()
+    patch = _request_model(imports.SmallWebRTCPatchRequest, body)
+    await handler.handle_patch_request(patch)
+    return {"status": "success", "callId": context.call_id}
+
+
+async def run_browser_gemini_bot(
+    webrtc_connection: Any,
+    *,
+    call_id: str,
+    agent_id: str,
+    prompt: str = "",
+    metadata: dict[str, str] | None = None,
+) -> None:
+    if not settings.gemini_api_key:
+        log.warning("browser_webrtc.no_gemini_key", hint="set GEMINI_API_KEY")
+        return
+
+    try:
+        from pipecat.audio.vad.silero import SileroVADAnalyzer  # type: ignore[import-not-found]
+        from pipecat.frames.frames import LLMRunFrame  # type: ignore[import-not-found]
+        from pipecat.pipeline.pipeline import Pipeline  # type: ignore[import-not-found]
+        from pipecat.pipeline.worker import (  # type: ignore[import-not-found]
+            PipelineParams,
+            PipelineWorker,
+        )
+        from pipecat.processors.aggregators.llm_context import (
+            LLMContext,  # type: ignore[import-not-found]
+        )
+        from pipecat.processors.aggregators.llm_response_universal import (  # type: ignore[import-not-found]
+            LLMContextAggregatorPair,
+            LLMUserAggregatorParams,
+        )
+        from pipecat.services.google.gemini_live.llm import (  # type: ignore[import-not-found]
+            ContextWindowCompressionParams,
+            GeminiLiveLLMService,
+            GeminiVADParams,
+        )
+        from pipecat.transports.base_transport import (
+            TransportParams,  # type: ignore[import-not-found]
+        )
+        from pipecat.transports.smallwebrtc.transport import (
+            SmallWebRTCTransport,  # type: ignore[import-not-found]
+        )
+        from pipecat.workers.runner import WorkerRunner  # type: ignore[import-not-found]
+    except ImportError:
+        log.warning(
+            "browser_webrtc.pipecat_missing",
+            hint="pip install -e '.[voice]' to enable browser WebRTC",
+        )
+        return
+
+    agent = await fetch_agent_for_call(agent_id, call_id)
+    system_prompt = await build_system_prompt(agent, prompt)
+    model = gemini_live_model(agent)
+    voice = gemini_voice(agent)
+    tools = gemini_tool_declarations(agent)
+    transcript = TranscriptBuffer(call_id)
+
+    transport = SmallWebRTCTransport(
+        webrtc_connection=webrtc_connection,
+        params=TransportParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            audio_out_10ms_chunks=2,
+        ),
+    )
+    llm = GeminiLiveLLMService(
+        api_key=settings.gemini_api_key,
+        tools=tools or None,
+        settings=GeminiLiveLLMService.Settings(
+            model=model,
+            voice=voice,
+            system_instruction=system_prompt,
+            language=settings.gemini_live_language,
+            temperature=settings.gemini_live_temperature,
+            max_tokens=settings.gemini_live_max_tokens,
+            vad=GeminiVADParams(
+                disabled=False,
+                prefix_padding_ms=settings.gemini_live_vad_prefix_padding_ms,
+                silence_duration_ms=settings.gemini_live_vad_silence_ms,
+            ),
+            context_window_compression=ContextWindowCompressionParams(
+                enabled=settings.gemini_live_context_compression_enabled,
+            ),
+        ),
+    )
+
+    async def handle_tool_call(params: Any) -> None:
+        result = await execute_agent_tool(
+            agent,
+            call_id=call_id,
+            name=str(params.function_name),
+            arguments=dict(params.arguments or {}),
+        )
+        await params.result_callback(result)
+
+    if tools:
+        llm.register_function(None, handle_tool_call)
+
+    initial_messages = []
+    if _should_start_with_ai(agent):
+        initial_messages.append(
+            {
+                "role": "user",
+                "content": "Start the live browser call now with the configured opening. Keep it brief.",
+            }
+        )
+    context = LLMContext(initial_messages)
+    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+    )
+    pipeline = Pipeline(
+        [
+            transport.input(),
+            user_aggregator,
+            llm,
+            transport.output(),
+            assistant_aggregator,
+        ]
+    )
+    worker = PipelineWorker(
+        pipeline,
+        params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
+    )
+
+    @transport.event_handler("on_client_connected")
+    async def on_client_connected(_transport: Any, _client: Any) -> None:
+        log.info(
+            "browser_webrtc.connected",
+            call_id=call_id,
+            agent_id=agent_id,
+            model=model,
+            voice=voice,
+        )
+        if _should_start_with_ai(agent):
+            await worker.queue_frames([LLMRunFrame()])
+
+    @transport.event_handler("on_client_disconnected")
+    async def on_client_disconnected(_transport: Any, _client: Any) -> None:
+        log.info("browser_webrtc.disconnected", call_id=call_id)
+        await worker.cancel()
+
+    runner = WorkerRunner(handle_sigint=False)
+    try:
+        await runner.add_workers(worker)
+        await runner.run()
+    except Exception as exc:  # noqa: BLE001
+        log.exception("browser_webrtc.error", call_id=call_id, error=str(exc))
+    finally:
+        for msg in getattr(context, "messages", []) or []:
+            if isinstance(msg, dict):
+                role = str(msg.get("role", ""))
+                text = str(msg.get("content", "")).strip()
+            else:
+                role = str(getattr(msg, "role", ""))
+                text = str(getattr(msg, "content", "")).strip()
+            if role == "system" or not text:
+                continue
+            if text.startswith("Start the live browser call now"):
+                continue
+            await transcript.add("agent" if role == "assistant" else "user", text)
+        await transcript.flush()
+
+
+def _should_start_with_ai(agent: dict[str, Any]) -> bool:
+    runtime = agent.get("runtimeSettings") if isinstance(agent.get("runtimeSettings"), dict) else {}
+    welcome_mode = str(runtime.get("welcomeMode") or "ai")
+    return welcome_mode == "ai"
+
+
+async def aclose() -> None:
+    global _small_webrtc_handler
+    if _small_webrtc_handler is not None:
+        await _small_webrtc_handler.close()
+        _small_webrtc_handler = None

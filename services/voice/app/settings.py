@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     voice_ws_shared_secret: str = Field(default="")
     voice_ws_auth_ttl_seconds: int = Field(default=3600)
 
+    # Browser-only WebRTC transport. This is intentionally separate from
+    # FreeSWITCH/mod_audio_fork so phone-call latency tuning stays isolated.
+    browser_webrtc_enabled: bool = Field(default=False)
+    webrtc_ice_servers: str = Field(default="stun:stun.l.google.com:19302")
+    webrtc_turn_url: str = Field(default="")
+    webrtc_turn_username: str = Field(default="")
+    webrtc_turn_credential: str = Field(default="")
+
     # Pricing — paisa per minute, charged at the end of the call. See ARCHITECTURE.md §7.
     rate_paisa_per_min_gemini_live: int = Field(default=700)
     rate_paisa_per_min_grok_voice: int = Field(default=700)

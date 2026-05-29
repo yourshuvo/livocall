@@ -32,6 +32,8 @@ def get_request_id() -> str:
 
 
 def _structlog_correlation_id(_, __, event_dict):  # type: ignore[no-untyped-def]
+    if not isinstance(event_dict, dict):
+        return event_dict
     rid = request_id_var.get("")
     if rid and "req_id" not in event_dict:
         event_dict["req_id"] = rid

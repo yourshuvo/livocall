@@ -20,6 +20,7 @@ import { api } from '@/lib/api-fetch'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/cn'
 import { defaultLanguageForTier, languageOptionsForTier } from '@/types/agent'
+import type { PipecatClient } from '@pipecat-ai/client-js'
 
 type Tier = 'gemini_live' | 'grok_voice' | 'pipeline' | 'dtmf'
 
@@ -116,12 +117,22 @@ interface NumberOption {
 type TestRunMode = 'browser' | 'call'
 type BrowserTestStatus = 'idle' | 'connecting' | 'live'
 
-interface BrowserTestStartResult {
+interface BrowserWebrtcStartResult {
   callId: string
+  transport: 'small-webrtc'
+  webrtcUrl: string
+  iceServers?: RTCIceServer[]
+}
+
+interface BrowserRawWebsocketStartResult {
+  callId: string
+  transport?: 'raw-websocket'
   wsUrl: string
   inputSampleRate: number
   outputSampleRate: number
 }
+
+type BrowserTestStartResult = BrowserWebrtcStartResult | BrowserRawWebsocketStartResult
 
 interface LlmTestResult {
   response: string
@@ -141,6 +152,7 @@ interface BrowserAudioSession {
   source?: MediaStreamAudioSourceNode
   processor?: ScriptProcessorNode
   socket?: WebSocket
+  pipecat?: PipecatClient
   playbackTime: number
   outputSampleRate: number
 }
@@ -905,6 +917,31 @@ export function AgentEditor({
         `/api/agents/${initial.id}/browser-test`,
         {},
       )
+      if (session.transport === 'small-webrtc') {
+        await connectBrowserWebrtcSession(session, audioSession, {
+          onDisconnected: () => {
+            if (browserAudioRef.current !== audioSession) return
+            browserAudioRef.current = null
+            closeBrowserAudioSession(audioSession, false)
+            setBrowserTestStatus('idle')
+            setBrowserTestCallId('')
+          },
+          onError: () => {
+            if (browserAudioRef.current !== audioSession) return
+            toast('Browser test disconnected', 'error')
+            stopBrowserTest(false)
+          },
+        })
+
+        closeBrowserAudioSession(browserAudioRef.current)
+        browserAudioRef.current = audioSession
+        setBrowserTestStatus('live')
+        setBrowserTestCallId(session.callId)
+        setTestOpen(false)
+        toast('Browser test connected in this tab', 'success')
+        return
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -916,6 +953,7 @@ export function AgentEditor({
       const context = new AudioContext()
       audioSession.context = context
       await context.resume()
+      if (!session.wsUrl) throw new Error('Browser voice test websocket is not configured')
       const socket = new WebSocket(session.wsUrl)
       audioSession.socket = socket
       socket.binaryType = 'arraybuffer'
@@ -2935,6 +2973,9 @@ function Divider() {
 
 function closeBrowserAudioSession(session: BrowserAudioSession | null, closeSocket = true) {
   if (!session) return
+  if (session.pipecat) {
+    void session.pipecat.disconnect().catch(() => {})
+  }
   try {
     session.processor?.disconnect()
   } catch {}
@@ -2955,6 +2996,45 @@ function closeBrowserAudioSession(session: BrowserAudioSession | null, closeSock
   if (session.context && session.context.state !== 'closed') {
     void session.context.close().catch(() => {})
   }
+}
+
+async function connectBrowserWebrtcSession(
+  session: BrowserWebrtcStartResult,
+  audioSession: BrowserAudioSession,
+  handlers: { onDisconnected: () => void; onError: () => void },
+) {
+  const [{ PipecatClient }, { SmallWebRTCTransport }] = await Promise.all([
+    import('@pipecat-ai/client-js'),
+    import('@pipecat-ai/small-webrtc-transport'),
+  ])
+  const iceServers = session.iceServers ?? []
+  const client = new PipecatClient({
+    transport: new SmallWebRTCTransport({
+      iceServers,
+      waitForICEGathering: true,
+    }),
+    enableMic: true,
+    enableCam: false,
+    callbacks: {
+      onDisconnected: handlers.onDisconnected,
+      onBotDisconnected: handlers.onDisconnected,
+      onError: handlers.onError,
+      onDeviceError: handlers.onError,
+      onTransportStateChanged: (state) => {
+        if (state === 'error') handlers.onError()
+      },
+    },
+  })
+  audioSession.pipecat = client
+  await client.initDevices()
+  await client.connect({
+    webrtcRequestParams: {
+      endpoint: session.webrtcUrl,
+    },
+    iceConfig: {
+      iceServers,
+    },
+  })
 }
 
 function waitForSocketOpen(socket: WebSocket): Promise<void> {
