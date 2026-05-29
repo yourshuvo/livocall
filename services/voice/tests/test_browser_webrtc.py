@@ -27,6 +27,13 @@ class FakePatch(FakeOffer):
     pass
 
 
+class FakeIceCandidate:
+    def __init__(self, **kwargs: Any) -> None:
+        self.candidate = kwargs["candidate"]
+        self.sdp_mid = kwargs["sdp_mid"]
+        self.sdp_mline_index = kwargs["sdp_mline_index"]
+
+
 class FakeHandler:
     def __init__(self, ice_servers: list[Any] | None = None) -> None:
         self.ice_servers = ice_servers or []
@@ -49,6 +56,7 @@ def _fake_imports() -> PipecatWebRTCImports:
         SmallWebRTCRequest=FakeOffer,
         SmallWebRTCPatchRequest=FakePatch,
         SmallWebRTCRequestHandler=FakeHandler,
+        IceCandidate=FakeIceCandidate,
         IceServer=FakeIceServer,
     )
 
@@ -141,3 +149,38 @@ def test_browser_webrtc_offer_starts_background_bot(monkeypatch) -> None:
             "metadata": {"source": "browser-webrtc"},
         }
     ]
+
+
+def test_browser_webrtc_patch_normalizes_ice_candidate_dicts(monkeypatch) -> None:
+    _enable_browser_webrtc(monkeypatch)
+    token = ws_auth.sign("call-1")
+
+    with TestClient(app) as client:
+        offer_res = client.post(
+            f"/webrtc/browser-offer?call_id=call-1&agent_id=agent-1&tier=gemini_live&auth={token}",
+            json={"sdp": "offer-sdp", "type": "offer"},
+        )
+        patch_res = client.patch(
+            f"/webrtc/browser-offer?call_id=call-1&agent_id=agent-1&tier=gemini_live&auth={token}",
+            json={
+                "pc_id": "pc-test",
+                "candidates": [
+                    {
+                        "candidate": "candidate:1 1 udp 2130706431 192.0.2.1 54400 typ host",
+                        "sdp_mid": "0",
+                        "sdp_mline_index": 0,
+                    }
+                ],
+            },
+        )
+        assert offer_res.status_code == 200
+        assert patch_res.status_code == 200
+        handler = browser_webrtc._small_webrtc_handler
+        assert isinstance(handler, FakeHandler)
+        patch = handler.patches[-1]
+        assert patch.kwargs["pc_id"] == "pc-test"
+        candidate = patch.kwargs["candidates"][0]
+        assert isinstance(candidate, FakeIceCandidate)
+        assert candidate.candidate.startswith("candidate:1 ")
+        assert candidate.sdp_mid == "0"
+        assert candidate.sdp_mline_index == 0

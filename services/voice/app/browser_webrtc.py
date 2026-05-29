@@ -36,6 +36,7 @@ class PipecatWebRTCImports:
     SmallWebRTCRequest: Any
     SmallWebRTCPatchRequest: Any
     SmallWebRTCRequestHandler: Any
+    IceCandidate: Any
     IceServer: Any
 
 
@@ -48,6 +49,7 @@ def _load_webrtc_imports() -> PipecatWebRTCImports:
             IceServer,  # type: ignore[import-not-found]
         )
         from pipecat.transports.smallwebrtc.request_handler import (  # type: ignore[import-not-found]
+            IceCandidate,
             SmallWebRTCPatchRequest,
             SmallWebRTCRequest,
             SmallWebRTCRequestHandler,
@@ -61,6 +63,7 @@ def _load_webrtc_imports() -> PipecatWebRTCImports:
         SmallWebRTCRequest=SmallWebRTCRequest,
         SmallWebRTCPatchRequest=SmallWebRTCPatchRequest,
         SmallWebRTCRequestHandler=SmallWebRTCRequestHandler,
+        IceCandidate=IceCandidate,
         IceServer=IceServer,
     )
 
@@ -157,6 +160,48 @@ def _request_model(model_type: Any, body: dict[str, Any]) -> Any:
     return model_type(**body)
 
 
+def _patch_request_model(imports: PipecatWebRTCImports, body: dict[str, Any]) -> Any:
+    normalized = dict(body)
+    if "pcId" in normalized and "pc_id" not in normalized:
+        normalized["pc_id"] = normalized.pop("pcId")
+    pc_id = normalized.get("pc_id")
+    candidates = normalized.get("candidates")
+    if not isinstance(pc_id, str) or not pc_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing pc_id")
+    if not isinstance(candidates, list):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing candidates")
+
+    ice_candidates = []
+    for candidate in candidates:
+        if hasattr(candidate, "candidate"):
+            ice_candidates.append(candidate)
+            continue
+        if not isinstance(candidate, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid ICE candidate")
+        raw_candidate = candidate.get("candidate")
+        sdp_mid = candidate.get("sdp_mid", candidate.get("sdpMid"))
+        sdp_mline_index = candidate.get("sdp_mline_index", candidate.get("sdpMLineIndex"))
+        if not isinstance(raw_candidate, str) or not raw_candidate:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid ICE candidate")
+        try:
+            parsed_sdp_mline_index = int(sdp_mline_index)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="invalid ICE candidate m-line index",
+            ) from exc
+        ice_candidates.append(
+            imports.IceCandidate(
+                candidate=raw_candidate,
+                sdp_mid="" if sdp_mid is None else str(sdp_mid),
+                sdp_mline_index=parsed_sdp_mline_index,
+            )
+        )
+
+    normalized["candidates"] = ice_candidates
+    return _request_model(imports.SmallWebRTCPatchRequest, normalized)
+
+
 async def handle_offer(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -196,7 +241,7 @@ async def handle_ice_candidate(request: Request) -> dict[str, str]:
     imports = _load_webrtc_imports()
     handler = _get_handler(imports)
     body = await request.json()
-    patch = _request_model(imports.SmallWebRTCPatchRequest, body)
+    patch = _patch_request_model(imports, body)
     await handler.handle_patch_request(patch)
     return {"status": "success", "callId": context.call_id}
 
