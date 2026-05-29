@@ -130,6 +130,11 @@ interface LlmTestResult {
   aiPowered: boolean
 }
 
+interface LlmChatMessage {
+  role: 'caller' | 'agent'
+  text: string
+}
+
 interface BrowserAudioSession {
   stream?: MediaStream
   context?: AudioContext
@@ -629,6 +634,7 @@ export function AgentEditor({
   const [llmInput, setLlmInput] = useState('Hi, I want to know your pricing.')
   const [llmTesting, setLlmTesting] = useState(false)
   const [llmResult, setLlmResult] = useState<LlmTestResult | null>(null)
+  const [llmMessages, setLlmMessages] = useState<LlmChatMessage[]>([])
   const [toolTesting, setToolTesting] = useState<number | null>(null)
   const [toolResults, setToolResults] = useState<Record<number, string>>({})
   const browserAudioRef = useRef<BrowserAudioSession | null>(null)
@@ -1001,18 +1007,31 @@ export function AgentEditor({
       if (!ok) return
     }
     stopBrowserTest(false)
+    const callerMessage: LlmChatMessage = { role: 'caller', text: message }
+    const previousMessages = llmMessages
+    const nextMessages = [...previousMessages, callerMessage]
+    setLlmMessages(nextMessages)
+    setLlmInput('')
     setLlmTesting(true)
-    setLlmResult(null)
     try {
       const result = await api.post<LlmTestResult>(`/api/agents/${initial.id}/llm-test`, {
-        message,
+        messages: nextMessages,
       })
       setLlmResult(result)
+      setLlmMessages([...nextMessages, { role: 'agent', text: result.response }])
     } catch (e) {
+      setLlmMessages(previousMessages)
+      setLlmInput(message)
       toast((e as Error).message, 'error')
     } finally {
       setLlmTesting(false)
     }
+  }
+
+  function clearLlmChat() {
+    setLlmMessages([])
+    setLlmResult(null)
+    setLlmInput('')
   }
 
   async function testTool(index: number) {
@@ -2282,51 +2301,87 @@ export function AgentEditor({
                   <Icon name="cpu" size="sm" className="text-fg-muted" />
                 </span>
                 <span className="min-w-0">
-                  <span className="text-fg block text-[12.5px] font-medium">LLM turn test</span>
+                  <span className="text-fg block text-[12.5px] font-medium">LLM chat test</span>
                   <span className="text-fg-muted block truncate text-[10.5px]">
                     {modelShortLabel}
                   </span>
                 </span>
+                <button
+                  type="button"
+                  onClick={clearLlmChat}
+                  disabled={llmTesting || (!llmMessages.length && !llmInput)}
+                  className="border-line text-fg-muted hover:bg-bg-muted ml-auto grid size-7 place-items-center rounded-[5px] border transition disabled:opacity-40"
+                  aria-label="Clear LLM chat"
+                >
+                  <Icon name="x" size="xs" />
+                </button>
               </div>
-              <div>
-                <p className="text-fg-muted mb-1 text-[11px] font-medium">Caller message</p>
-                <Textarea
-                  rows={5}
-                  value={llmInput}
-                  onChange={(e) => setLlmInput(e.target.value)}
-                  placeholder="Write one caller turn..."
-                  className="text-[12px] leading-snug"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => void runLlmTest()}
-                disabled={llmTesting || !llmInput.trim()}
-                className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[5px] border px-2 text-[12.5px] font-medium transition disabled:opacity-50"
-              >
-                <PlayIcon /> {llmTesting ? 'Testing' : 'Run LLM'}
-              </button>
-              <div className="border-line bg-bg min-h-0 flex-1 overflow-auto rounded-[5px] border p-3">
-                {llmResult ? (
+
+              <div className="border-line bg-bg min-h-0 flex-1 overflow-auto rounded-[5px] border p-2">
+                {llmMessages.length ? (
                   <div className="space-y-2">
-                    <div className="text-fg-muted flex items-center justify-between gap-2 text-[10.5px]">
-                      <span className="truncate">{llmResult.model}</span>
-                      <span>{llmResult.latencyMs}ms</span>
-                    </div>
-                    {!llmResult.aiPowered && (
-                      <p className="text-status-warn text-[11px]">
-                        Gemini key is not configured.
-                      </p>
+                    {llmMessages.map((message, index) => (
+                      <div
+                        key={`${message.role}-${index}-${message.text.slice(0, 8)}`}
+                        className={cn(
+                          'flex',
+                          message.role === 'caller' ? 'justify-end' : 'justify-start',
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            'max-w-[88%] rounded-[6px] px-2.5 py-2 text-[12px] leading-relaxed',
+                            message.role === 'caller'
+                              ? 'bg-fg text-bg'
+                              : 'border-line bg-[#F5F5F7] text-fg border',
+                          )}
+                        >
+                          <p className="whitespace-pre-wrap">{message.text}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {llmTesting && (
+                      <div className="flex justify-start">
+                        <div className="border-line bg-[#F5F5F7] text-fg-muted rounded-[6px] border px-2.5 py-2 text-[12px]">
+                          Thinking...
+                        </div>
+                      </div>
                     )}
-                    <p className="text-fg whitespace-pre-wrap text-[12.5px] leading-relaxed">
-                      {llmResult.response}
-                    </p>
                   </div>
                 ) : (
                   <p className="text-fg-muted text-[11px] leading-snug">
-                    Test one caller message against the saved prompt and guardrails.
+                    Start with a caller message.
                   </p>
                 )}
+              </div>
+
+              {llmResult && (
+                <div className="text-fg-muted flex items-center justify-between gap-2 text-[10.5px]">
+                  <span className="truncate">{llmResult.model}</span>
+                  <span>{llmResult.latencyMs}ms</span>
+                </div>
+              )}
+              {llmResult && !llmResult.aiPowered && (
+                <p className="text-status-warn text-[11px]">Gemini key is not configured.</p>
+              )}
+
+              <div className="space-y-2">
+                <p className="text-fg-muted text-[11px] font-medium">Caller message</p>
+                <Textarea
+                  rows={3}
+                  value={llmInput}
+                  onChange={(e) => setLlmInput(e.target.value)}
+                  placeholder="Type the next caller message..."
+                  className="text-[12px] leading-snug"
+                />
+                <button
+                  type="button"
+                  onClick={() => void runLlmTest()}
+                  disabled={llmTesting || !llmInput.trim()}
+                  className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[5px] border px-2 text-[12.5px] font-medium transition disabled:opacity-50"
+                >
+                  <PlayIcon /> {llmTesting ? 'Sending' : 'Send'}
+                </button>
               </div>
             </div>
           )}

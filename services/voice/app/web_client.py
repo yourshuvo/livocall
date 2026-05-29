@@ -7,6 +7,7 @@ both sides).
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -37,7 +38,7 @@ async def post_voice_event(payload: dict[str, Any]) -> bool:
     if rid:
         headers["x-request-id"] = rid
     try:
-        r = await _get_client().post(url, json=payload, headers=headers)
+        r = await _get_client().post(url, json=_json_safe(payload), headers=headers)
         if r.status_code >= 400:
             log.warning("web.event_post_failed", status=r.status_code, body=r.text[:500])
             return False
@@ -45,6 +46,19 @@ async def post_voice_event(payload: dict[str, Any]) -> bool:
     except httpx.HTTPError as exc:
         log.warning("web.event_post_error", error=str(exc))
         return False
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, datetime):
+        dt = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        return dt.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    if isinstance(value, str):
+        return value.replace("+00:00", "Z") if value.endswith("+00:00") else value
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
 
 
 async def aclose() -> None:

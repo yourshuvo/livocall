@@ -149,7 +149,7 @@ class GeminiPcmBridge:
                     _send_caller_audio(session, types, input_queue, barge_in, call_id, latency)
                 )
                 receiver = asyncio.create_task(
-                    _receive_model_audio(
+                    _receive_model_audio_loop(
                         session,
                         ws,
                         barge_in,
@@ -290,8 +290,9 @@ async def _receive_model_audio(
     transcript: TranscriptBuffer,
     *,
     wire_format: str,
-) -> None:
+) -> bool:
     publish_tasks: set[asyncio.Task[None]] = set()
+    saw_item = False
 
     def on_publish_done(task: asyncio.Task[None]) -> None:
         publish_tasks.discard(task)
@@ -302,6 +303,7 @@ async def _receive_model_audio(
 
     try:
         async for item in _iter_model_output(session, agent, call_id):
+            saw_item = True
             if isinstance(item, ToolResponse):
                 await session.send_tool_response(function_responses=[item.payload])
                 continue
@@ -328,6 +330,33 @@ async def _receive_model_audio(
         if publish_tasks:
             await asyncio.gather(*publish_tasks, return_exceptions=True)
     log.info("gemini_pcm.receiver_done", call_id=call_id)
+    return saw_item
+
+
+async def _receive_model_audio_loop(
+    session: Any,
+    ws: WebSocket,
+    barge_in: asyncio.Event,
+    call_id: str,
+    agent: dict[str, Any],
+    latency: PcmuLatency,
+    transcript: TranscriptBuffer,
+    *,
+    wire_format: str,
+) -> None:
+    while True:
+        saw_item = await _receive_model_audio(
+            session,
+            ws,
+            barge_in,
+            call_id,
+            agent,
+            latency,
+            transcript,
+            wire_format=wire_format,
+        )
+        if not saw_item:
+            return
 
 
 async def _publish_transcript(

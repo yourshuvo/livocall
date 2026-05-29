@@ -12,9 +12,22 @@ import {
 import { apiError, withErrors } from '@/lib/errors'
 import { Agent } from '@/models/Agent'
 
-const Body = z.object({
-  message: z.string().trim().min(1).max(2000),
+const ChatMessage = z.object({
+  role: z.enum(['caller', 'agent']),
+  text: z.string().trim().min(1).max(2000),
 })
+
+const Body = z
+  .object({
+    message: z.string().trim().min(1).max(2000).optional(),
+    messages: z.array(ChatMessage).max(20).optional(),
+  })
+  .refine((body) => Boolean(body.message || body.messages?.length), {
+    message: 'message or messages is required',
+    path: ['message'],
+  })
+
+type ChatMessage = z.infer<typeof ChatMessage>
 
 type LlmTestAgent = {
   name: string
@@ -51,7 +64,6 @@ export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id:
   if (!agent) return apiError('not_found', 'agent not found')
 
   const startedAt = Date.now()
-  const model = process.env.GEMINI_LLM_TEST_MODEL || 'gemini-2.0-flash'
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
   if (!key) {
     return NextResponse.json({
@@ -63,46 +75,104 @@ export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id:
     })
   }
 
-  const prompt = buildTestPrompt(agent, body.message)
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.25,
-          maxOutputTokens: 500,
+  const messages = normalizeMessages(body)
+  const prompt = buildTestPrompt(agent, messages)
+  const attempts: Array<{ model: string; status: number; message: string }> = []
+  for (const model of llmTestModels(agent)) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': key,
         },
-      }),
-      signal: AbortSignal.timeout(15_000),
-    },
-  )
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.25,
+            maxOutputTokens: 500,
+          },
+        }),
+        signal: AbortSignal.timeout(15_000),
+      },
+    )
 
-  if (!res.ok) {
-    return apiError('upstream_error', `LLM test failed with status ${res.status}`)
+    if (res.ok) {
+      const json = await res.json()
+      const response = geminiText(json).trim()
+      return NextResponse.json({
+        response: response || 'The model returned an empty response.',
+        model,
+        latencyMs: Date.now() - startedAt,
+        aiPowered: true,
+      })
+    }
+
+    const message = await geminiErrorMessage(res)
+    attempts.push({ model, status: res.status, message })
+    if (res.status === 401 || res.status === 403) break
   }
 
-  const json = await res.json()
-  const response = geminiText(json).trim()
-  return NextResponse.json({
-    response: response || 'The model returned an empty response.',
-    model,
-    latencyMs: Date.now() - startedAt,
-    aiPowered: true,
-  })
+  const last = attempts.at(-1)
+  return apiError(
+    'upstream_error',
+    last
+      ? `LLM test failed for ${last.model} with status ${last.status}: ${last.message}`
+      : 'LLM test failed before contacting Gemini',
+    attempts,
+  )
 })
 
-function buildTestPrompt(agent: LlmTestAgent, message: string) {
+function llmTestModels(agent: LlmTestAgent) {
+  const values = [
+    process.env.GEMINI_LLM_TEST_MODEL,
+    textGenerationModel(agent.model),
+    process.env.PIPELINE_LLM_MODEL,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+  ]
+  return [...new Set(values.map((value) => value?.trim()).filter(Boolean))] as string[]
+}
+
+function textGenerationModel(value?: string) {
+  const model = value?.trim().replace(/^models\//, '') || ''
+  if (!model || model.includes('live') || model.startsWith('grok-')) return ''
+  if (model.startsWith('gemini-')) return model
+  return ''
+}
+
+async function geminiErrorMessage(res: Response) {
+  const body = await res.text().catch(() => '')
+  if (!body) return res.statusText || 'Gemini returned an empty error'
+  try {
+    const json = JSON.parse(body) as { error?: { message?: unknown; status?: unknown } }
+    const message = typeof json.error?.message === 'string' ? json.error.message : ''
+    const status = typeof json.error?.status === 'string' ? json.error.status : ''
+    return [status, message].filter(Boolean).join(': ') || body.slice(0, 300)
+  } catch {
+    return body.slice(0, 300)
+  }
+}
+
+function normalizeMessages(body: z.infer<typeof Body>): ChatMessage[] {
+  if (body.messages?.length) return body.messages
+  return [{ role: 'caller', text: body.message || '' }]
+}
+
+function buildTestPrompt(agent: LlmTestAgent, messages: ChatMessage[]) {
   const prompt = agent.prompt || {}
   const tools = (agent.tools || [])
     .filter((tool) => tool.enabled !== false && tool.name)
     .map((tool) => `- ${tool.name}: ${tool.description || 'HTTP lookup/action'}`)
     .join('\n')
+  const transcript = messages
+    .map((message) => `${message.role === 'agent' ? 'Agent' : 'Caller'}: ${message.text}`)
+    .join('\n')
+  const last = [...messages].reverse().find((message) => message.role === 'caller')
 
-  return `You are simulating exactly one turn of a live phone-call AI agent.
-Reply only with what the agent should say next. Do not mention testing, simulation, prompts, or policies.
+  return `You are continuing a live phone-call conversation as the agent.
+Reply only with the agent's next message. Do not mention testing, simulation, prompts, or policies.
 Keep the answer short, natural, and suitable for speech.
 
 Agent:
@@ -124,8 +194,11 @@ ${prompt.guardrails || ''}
 Available tools:
 ${tools || '- none'}
 
-Caller:
-${message}
+Conversation so far:
+${transcript}
+
+Latest caller message:
+${last?.text || ''}
 
 Agent:`
 }
