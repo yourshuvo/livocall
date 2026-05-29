@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 
@@ -31,6 +32,14 @@ class FakeTranscript:
 
     async def flush(self) -> None:
         self.flushes += 1
+
+
+class FakeWebSocket:
+    def __init__(self) -> None:
+        self.sent: list[bytes] = []
+
+    async def send_bytes(self, data: bytes) -> None:
+        self.sent.append(data)
 
 
 def _transcription(text: str) -> SimpleNamespace:
@@ -142,6 +151,63 @@ async def test_iter_model_output_wraps_tool_response(monkeypatch: pytest.MonkeyP
             {"id": "tool-1", "name": "lookup_order", "response": {"ok": True}}
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_receive_model_audio_sends_pcm16_for_browser_wire_format() -> None:
+    content = SimpleNamespace(
+        input_transcription=None,
+        output_transcription=None,
+        turn_complete=True,
+        generation_complete=False,
+        interrupted=False,
+        model_turn=SimpleNamespace(
+            parts=[SimpleNamespace(inline_data=SimpleNamespace(data=b"\x01\x02" * 480))]
+        ),
+    )
+    ws = FakeWebSocket()
+
+    await bridge._receive_model_audio(
+        FakeSession([_response(content)]),
+        ws,  # type: ignore[arg-type]
+        asyncio.Event(),
+        "64b64b64b64b64b64b64b64b",
+        {},
+        bridge.PcmuLatency("64b64b64b64b64b64b64b64b"),
+        FakeTranscript(),  # type: ignore[arg-type]
+        wire_format="pcm16",
+    )
+
+    assert ws.sent == [b"\x01\x02" * 480]
+
+
+@pytest.mark.asyncio
+async def test_receive_model_audio_converts_pcmu_for_phone_wire_format() -> None:
+    content = SimpleNamespace(
+        input_transcription=None,
+        output_transcription=None,
+        turn_complete=True,
+        generation_complete=False,
+        interrupted=False,
+        model_turn=SimpleNamespace(
+            parts=[SimpleNamespace(inline_data=SimpleNamespace(data=b"\x01\x02" * 480))]
+        ),
+    )
+    ws = FakeWebSocket()
+
+    await bridge._receive_model_audio(
+        FakeSession([_response(content)]),
+        ws,  # type: ignore[arg-type]
+        asyncio.Event(),
+        "64b64b64b64b64b64b64b64b",
+        {},
+        bridge.PcmuLatency("64b64b64b64b64b64b64b64b"),
+        FakeTranscript(),  # type: ignore[arg-type]
+        wire_format="pcmu",
+    )
+
+    assert len(ws.sent) == 1
+    assert len(ws.sent[0]) == 160
 
 
 @pytest.mark.asyncio

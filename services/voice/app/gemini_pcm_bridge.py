@@ -86,6 +86,11 @@ class TranscriptUpdate:
 
 
 class GeminiPcmBridge:
+    def __init__(self, *, wire_format: str = "pcmu") -> None:
+        if wire_format not in {"pcmu", "pcm16"}:
+            raise ValueError(f"unknown wire_format: {wire_format}")
+        self.wire_format = wire_format
+
     async def run(
         self,
         ws: WebSocket,
@@ -145,11 +150,25 @@ class GeminiPcmBridge:
                 )
                 receiver = asyncio.create_task(
                     _receive_model_audio(
-                        session, ws, barge_in, call_id, agent, latency, transcript
+                        session,
+                        ws,
+                        barge_in,
+                        call_id,
+                        agent,
+                        latency,
+                        transcript,
+                        wire_format=self.wire_format,
                     )
                 )
                 reader = asyncio.create_task(
-                    _read_pcmside_audio(ws, input_queue, barge_in, call_id, latency)
+                    _read_wire_audio(
+                        ws,
+                        input_queue,
+                        barge_in,
+                        call_id,
+                        latency,
+                        wire_format=self.wire_format,
+                    )
                 )
                 done, pending = await asyncio.wait(
                     {sender, receiver, reader}, return_when=asyncio.FIRST_COMPLETED
@@ -205,12 +224,14 @@ def _live_config(types: Any, system_prompt: str, voice: str, agent: dict[str, An
     return config
 
 
-async def _read_pcmside_audio(
+async def _read_wire_audio(
     ws: WebSocket,
     input_queue: asyncio.Queue[bytes | None],
     barge_in: asyncio.Event,
     call_id: str,
     latency: PcmuLatency,
+    *,
+    wire_format: str,
 ) -> None:
     try:
         while True:
@@ -222,12 +243,18 @@ async def _read_pcmside_audio(
                 continue
             latency.mark("first_caller_audio")
             barge_in.set()
-            for pcmu_chunk in split_pcmu_20ms(bytes(data)):
-                pcm16 = pcmu_to_pcm16_16k(pcmu_chunk)
-                for pcm_chunk in split_pcm16_16k_20ms(pcm16):
-                    if input_queue.full():
-                        input_queue.get_nowait()
-                    await input_queue.put(pcm_chunk)
+            if wire_format == "pcmu":
+                chunks = [
+                    pcm_chunk
+                    for pcmu_chunk in split_pcmu_20ms(bytes(data))
+                    for pcm_chunk in split_pcm16_16k_20ms(pcmu_to_pcm16_16k(pcmu_chunk))
+                ]
+            else:
+                chunks = split_pcm16_16k_20ms(bytes(data))
+            for pcm_chunk in chunks:
+                if input_queue.full():
+                    input_queue.get_nowait()
+                await input_queue.put(pcm_chunk)
     finally:
         await input_queue.put(None)
         log.info("gemini_pcm.reader_done", call_id=call_id)
@@ -261,6 +288,8 @@ async def _receive_model_audio(
     agent: dict[str, Any],
     latency: PcmuLatency,
     transcript: TranscriptBuffer,
+    *,
+    wire_format: str,
 ) -> None:
     publish_tasks: set[asyncio.Task[None]] = set()
 
@@ -290,7 +319,10 @@ async def _receive_model_audio(
             for pcm24_chunk in split_pcm16_24k_20ms(audio):
                 if barge_in.is_set():
                     break
-                await ws.send_bytes(pcm16_24k_to_pcmu(pcm24_chunk))
+                if wire_format == "pcmu":
+                    await ws.send_bytes(pcm16_24k_to_pcmu(pcm24_chunk))
+                else:
+                    await ws.send_bytes(pcm24_chunk)
                 latency.mark("first_fs_audio_send")
     finally:
         if publish_tasks:
