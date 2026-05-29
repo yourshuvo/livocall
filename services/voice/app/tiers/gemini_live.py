@@ -21,7 +21,7 @@ class GeminiLiveTier:
         metadata: dict[str, str] | None = None,
     ) -> None:
         log.info("tier1.start", call_id=call_id, agent_id=agent_id)
-        await GeminiPcmBridge(wire_format="pcm16").run(
+        await GeminiPcmBridge.for_browser_test().run(
             ws,
             call_id=call_id,
             agent_id=agent_id,

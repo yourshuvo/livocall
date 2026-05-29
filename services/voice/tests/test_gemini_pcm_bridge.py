@@ -59,6 +59,23 @@ def test_live_config_enables_audio_transcription() -> None:
     assert config["thinking_config"] == {"thinking_level": "minimal"}
 
 
+def test_pcm16_has_speech_ignores_silence() -> None:
+    assert not bridge._pcm16_has_speech(b"\x00\x00" * 320)
+    assert bridge._pcm16_has_speech((1200).to_bytes(2, "little", signed=True) * 320)
+
+
+def test_bridge_modes_keep_phone_and_browser_separate() -> None:
+    phone = bridge.GeminiPcmBridge.for_phone_call()
+    browser = bridge.GeminiPcmBridge.for_browser_test()
+
+    assert phone.wire_format == "pcmu"
+    assert phone.input_queue_frames == 2
+    assert phone.barge_in_enabled
+    assert browser.wire_format == "pcm16"
+    assert browser.input_queue_frames > phone.input_queue_frames
+    assert not browser.barge_in_enabled
+
+
 @pytest.mark.asyncio
 async def test_iter_model_output_yields_transcripts_and_audio() -> None:
     content_1 = SimpleNamespace(

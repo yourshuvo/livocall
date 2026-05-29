@@ -86,10 +86,38 @@ class TranscriptUpdate:
 
 
 class GeminiPcmBridge:
-    def __init__(self, *, wire_format: str = "pcmu") -> None:
+    def __init__(
+        self,
+        *,
+        wire_format: str = "pcmu",
+        input_queue_frames: int = 2,
+        barge_in_enabled: bool = True,
+        bridge_mode: str = "phone",
+    ) -> None:
         if wire_format not in {"pcmu", "pcm16"}:
             raise ValueError(f"unknown wire_format: {wire_format}")
         self.wire_format = wire_format
+        self.input_queue_frames = max(1, input_queue_frames)
+        self.barge_in_enabled = barge_in_enabled
+        self.bridge_mode = bridge_mode
+
+    @classmethod
+    def for_phone_call(cls) -> "GeminiPcmBridge":
+        return cls(
+            wire_format="pcmu",
+            input_queue_frames=2,
+            barge_in_enabled=True,
+            bridge_mode="phone",
+        )
+
+    @classmethod
+    def for_browser_test(cls) -> "GeminiPcmBridge":
+        return cls(
+            wire_format="pcm16",
+            input_queue_frames=8,
+            barge_in_enabled=False,
+            bridge_mode="browser",
+        )
 
     async def run(
         self,
@@ -125,7 +153,7 @@ class GeminiPcmBridge:
         client = genai.Client(api_key=settings.gemini_api_key)
         config = _live_config(types, system_prompt, voice, agent)
 
-        input_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=2)
+        input_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=self.input_queue_frames)
         barge_in = asyncio.Event()
         latency = PcmuLatency(call_id)
         transcript = TranscriptBuffer(call_id)
@@ -142,7 +170,10 @@ class GeminiPcmBridge:
                     preconnected=warm_session is not None,
                     model=model,
                     voice=voice,
-                    input_queue_frames=2,
+                    bridge_mode=self.bridge_mode,
+                    wire_format=self.wire_format,
+                    input_queue_frames=self.input_queue_frames,
+                    barge_in_enabled=self.barge_in_enabled,
                 )
                 latency.mark("gemini_ws_connected")
                 sender = asyncio.create_task(
@@ -168,6 +199,7 @@ class GeminiPcmBridge:
                         call_id,
                         latency,
                         wire_format=self.wire_format,
+                        barge_in_enabled=self.barge_in_enabled,
                     )
                 )
                 done, pending = await asyncio.wait(
@@ -232,6 +264,7 @@ async def _read_wire_audio(
     latency: PcmuLatency,
     *,
     wire_format: str,
+    barge_in_enabled: bool,
 ) -> None:
     try:
         while True:
@@ -241,8 +274,6 @@ async def _read_wire_audio(
             data = msg.get("bytes")
             if not isinstance(data, (bytes, bytearray)):
                 continue
-            latency.mark("first_caller_audio")
-            barge_in.set()
             if wire_format == "pcmu":
                 chunks = [
                     pcm_chunk
@@ -251,6 +282,11 @@ async def _read_wire_audio(
                 ]
             else:
                 chunks = split_pcm16_16k_20ms(bytes(data))
+            if barge_in_enabled and any(_pcm16_has_speech(chunk) for chunk in chunks):
+                latency.mark("first_caller_audio")
+                barge_in.set()
+            else:
+                barge_in.clear()
             for pcm_chunk in chunks:
                 if input_queue.full():
                     input_queue.get_nowait()
@@ -329,8 +365,19 @@ async def _receive_model_audio(
     finally:
         if publish_tasks:
             await asyncio.gather(*publish_tasks, return_exceptions=True)
-    log.info("gemini_pcm.receiver_done", call_id=call_id)
+        log.info("gemini_pcm.receiver_done", call_id=call_id)
     return saw_item
+
+
+def _pcm16_has_speech(audio: bytes, *, min_avg_abs: int = 220) -> bool:
+    if len(audio) < 2:
+        return False
+    total = 0
+    count = 0
+    for i in range(0, len(audio) - 1, 2):
+        total += abs(int.from_bytes(audio[i : i + 2], "little", signed=True))
+        count += 1
+    return count > 0 and (total / count) >= min_avg_abs
 
 
 async def _receive_model_audio_loop(

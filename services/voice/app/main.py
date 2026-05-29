@@ -309,7 +309,7 @@ async def ws_audio_pcmu(ws: WebSocket) -> None:
         else:
             from app.gemini_pcm_bridge import GeminiPcmBridge
 
-            runner = GeminiPcmBridge()
+            runner = GeminiPcmBridge.for_phone_call()
         await runner.run(
             ws,
             call_id=call_id,
