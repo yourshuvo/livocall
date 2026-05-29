@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import Any
+from urllib.parse import urlsplit
 
 import structlog
 from fastapi import (
@@ -14,6 +15,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from app import event_bridge, originator
@@ -94,7 +96,36 @@ install_correlation_processor()
 init_sentry()
 init_otel()
 
+
+def _origin_from_url(value: str) -> str:
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return ""
+    if not parsed.scheme or not parsed.hostname:
+        return ""
+    port = f":{parsed.port}" if parsed.port else ""
+    return f"{parsed.scheme}://{parsed.hostname}{port}"
+
+
+def _cors_origins() -> list[str]:
+    origins = {
+        _origin_from_url(settings.web_base_url),
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    }
+    return sorted(origin for origin in origins if origin)
+
+
 app = FastAPI(title="livocall engine", version="0.2.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=["*"],
+    max_age=600,
+)
 install_correlation_middleware(app)
 
 

@@ -96,6 +96,24 @@ def test_browser_webrtc_offer_rejects_bad_auth(monkeypatch) -> None:
     assert res.status_code == 403
 
 
+def test_browser_webrtc_offer_allows_cors_preflight(monkeypatch) -> None:
+    _enable_browser_webrtc(monkeypatch)
+
+    with TestClient(app) as client:
+        res = client.options(
+            "/webrtc/browser-offer?call_id=call-1&agent_id=agent-1&tier=gemini_live",
+            headers={
+                "origin": "http://localhost:3000",
+                "access-control-request-method": "POST",
+                "access-control-request-headers": "content-type",
+            },
+        )
+
+    assert res.status_code == 200
+    assert res.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert "POST" in res.headers["access-control-allow-methods"]
+
+
 def test_browser_webrtc_offer_starts_background_bot(monkeypatch) -> None:
     _enable_browser_webrtc(monkeypatch)
     started: list[dict[str, Any]] = []
