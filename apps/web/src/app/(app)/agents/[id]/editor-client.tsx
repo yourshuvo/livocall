@@ -3011,7 +3011,7 @@ async function connectBrowserWebrtcSession(
   const client = new PipecatClient({
     transport: new SmallWebRTCTransport({
       iceServers,
-      waitForICEGathering: true,
+      waitForICEGathering: false,
     }),
     enableMic: true,
     enableCam: false,
