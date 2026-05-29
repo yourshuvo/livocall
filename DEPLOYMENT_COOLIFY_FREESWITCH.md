@@ -401,133 +401,162 @@ and receives the signed `wss://voice.yourdomain.com/ws/audio...` URL for `mod_au
 
 ## 13. SIP Profile
 
-The main profile is:
+The working VPS setup uses the drachtio FreeSWITCH image because it includes
+`mod_audio_fork`. Its active SIP profile is named:
 
 ```txt
-/opt/livocall/freeswitch/sip_profiles/external.xml
+drachtio_mrf
 ```
 
-Important values:
+and is stored inside the container at:
+
+```txt
+/usr/local/freeswitch/conf/sip_profiles/mrf.xml
+```
+
+Important values for LivoCall:
 
 ```xml
 <param name="sip-port" value="5080"/>
 <param name="context" value="public"/>
-<param name="inbound-codec-prefs" value="PCMU@20i"/>
-<param name="outbound-codec-prefs" value="PCMU@20i"/>
+<param name="rtp-ip" value="YOUR_VPS_PUBLIC_IP"/>
+<param name="sip-ip" value="YOUR_VPS_PUBLIC_IP"/>
+<param name="ext-rtp-ip" value="YOUR_VPS_PUBLIC_IP"/>
+<param name="ext-sip-ip" value="YOUR_VPS_PUBLIC_IP"/>
 <param name="apply-inbound-acl" value="livocall_trunks"/>
 <param name="auth-calls" value="false"/>
 ```
 
+The `public` context is required so inbound DIDs hit
+`dialplan/public/00_livocall_inbound.xml`.
+
 If your provider uses `5060`, change `sip-port` or ask them to send to `5080`.
 
-For one static public IP, if NAT detection causes one-way audio, replace:
+## 14. Dashboard SIP Gateway Sync
 
-```xml
-<param name="ext-rtp-ip" value="auto-nat"/>
-<param name="ext-sip-ip" value="auto-nat"/>
-```
-
-with:
-
-```xml
-<param name="ext-rtp-ip" value="YOUR_VPS_PUBLIC_IP"/>
-<param name="ext-sip-ip" value="YOUR_VPS_PUBLIC_IP"/>
-```
-
-## 14. SIP Gateway XML
-
-The current `/api/numbers/freeswitch` route returns JSON, not complete gateway XML with decrypted passwords. Create gateway XML manually for now.
-
-Create:
+Users add SIP trunks and numbers from the dashboard. The web app stores the SIP
+credentials encrypted in MongoDB, then exposes FreeSWITCH gateway XML through:
 
 ```bash
-nano /opt/livocall/freeswitch/sip_profiles/external/sip_custom.xml
+curl -fsS \
+  -H "Authorization: Bearer $FREESWITCH_CONFIG_TOKEN" \
+  "https://app.yourdomain.com/api/numbers/freeswitch?format=xml"
 ```
 
-Registration-based trunk:
+That endpoint renders one `<gateway>` per active `providerSlug`. The gateway
+name must match the phone number `providerSlug`, because outbound calls use:
 
-```xml
-<include>
-  <gateway name="sip_custom">
-    <param name="username" value="YOUR_TRUNK_USERNAME"/>
-    <param name="auth-username" value="YOUR_TRUNK_AUTH_USERNAME"/>
-    <param name="password" value="YOUR_TRUNK_PASSWORD"/>
-    <param name="realm" value="PROVIDER_REALM_OR_DOMAIN"/>
-    <param name="proxy" value="PROVIDER_SIP_IP_OR_DOMAIN"/>
-    <param name="register-proxy" value="PROVIDER_SIP_IP_OR_DOMAIN"/>
-    <param name="register" value="true"/>
-    <param name="transport" value="udp"/>
-    <param name="caller-id-in-from" value="true"/>
-    <param name="codec-prefs" value="PCMU@20i"/>
-  </gateway>
-</include>
+```txt
+sofia/gateway/<providerSlug>/<e164>
 ```
 
-IP-authenticated trunk:
-
-```xml
-<include>
-  <gateway name="sip_custom">
-    <param name="username" value="YOUR_DID_OR_ACCOUNT"/>
-    <param name="realm" value="PROVIDER_REALM_OR_DOMAIN"/>
-    <param name="proxy" value="PROVIDER_SIP_IP_OR_DOMAIN"/>
-    <param name="register" value="false"/>
-    <param name="transport" value="udp"/>
-    <param name="caller-id-in-from" value="true"/>
-    <param name="codec-prefs" value="PCMU@20i"/>
-  </gateway>
-</include>
-```
-
-The gateway name must match:
+For a single fallback trunk, keep:
 
 ```env
 FS_DEFAULT_GATEWAY=sip_custom
 ```
 
-and/or the phone number `providerSlug` in MongoDB.
+and make sure the dashboard number/provider slug is `sip_custom`.
+
+On the VPS, sync dashboard trunks into FreeSWITCH with:
+
+```bash
+ENV_FILE=/root/livocall.env /opt/livocall/sync-freeswitch-gateways.sh
+```
+
+For automatic sync, run it from cron:
+
+```cron
+* * * * * /opt/livocall/sync-freeswitch-gateways.sh >> /var/log/livocall-fs-sync.log 2>&1
+```
+
+For instant sync when a dashboard/API user creates, updates, or deletes a SIP
+number, run the small VPS webhook and set the web app env:
+
+```env
+FREESWITCH_SYNC_WEBHOOK_URL=http://YOUR_VPS_PUBLIC_IP:8789/sync
+FREESWITCH_SYNC_WEBHOOK_TOKEN=replace-with-random-token
+```
+
+The webhook validates the bearer token and runs
+`/opt/livocall/sync-freeswitch-gateways.sh`. Keep the cron job as a fallback.
+
+Install the webhook service:
+
+```bash
+cp /opt/livocall/repo/infra/freeswitch/scripts/sync_webhook.py /opt/livocall/sync_webhook.py
+chmod +x /opt/livocall/sync_webhook.py
+
+cat >/etc/systemd/system/livocall-fs-sync-webhook.service <<'EOF'
+[Unit]
+Description=LivoCall FreeSWITCH gateway sync webhook
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/root/livocall.env
+Environment=FREESWITCH_SYNC_PORT=8789
+Environment=FREESWITCH_SYNC_SCRIPT=/opt/livocall/sync-freeswitch-gateways.sh
+ExecStart=/usr/bin/python3 /opt/livocall/sync_webhook.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now livocall-fs-sync-webhook
+curl http://127.0.0.1:8789/health
+```
 
 ## 15. Run FreeSWITCH
 
-Create:
+Use the installer:
 
 ```bash
-nano /opt/livocall/freeswitch.compose.yml
+chmod +x /root/install-vps.sh
+ENV_FILE=/root/livocall.env /root/install-vps.sh
 ```
 
-Paste:
+The installer writes `/opt/livocall/freeswitch.compose.yml`, uses
+`drachtio/drachtio-freeswitch-mrf:0.9.6`, and creates a writable config volume
+because the image entrypoint edits files on startup.
+
+The resulting compose shape is:
 
 ```yaml
 services:
   freeswitch:
-    image: signalwire/freeswitch:1.10.11-release
+    image: drachtio/drachtio-freeswitch-mrf:0.9.6
     container_name: livocall-freeswitch
     restart: unless-stopped
     network_mode: host
     volumes:
-      - /opt/livocall/freeswitch/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
-      - /opt/livocall/freeswitch/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro
-      - /opt/livocall/freeswitch/acl.conf.xml:/etc/freeswitch/autoload_configs/acl.conf.xml:ro
-      - /opt/livocall/freeswitch/dialplan:/etc/freeswitch/dialplan:ro
-      - /opt/livocall/freeswitch/sip_profiles/external.xml:/etc/freeswitch/sip_profiles/external.xml:ro
-      - /opt/livocall/freeswitch/sip_profiles/external:/etc/freeswitch/sip_profiles/external:ro
+      - livocall-fs-conf:/usr/local/freeswitch/conf
       - /opt/livocall/freeswitch/scripts/inbound_route.py:/usr/local/freeswitch/scripts/inbound_route.py:ro
-      - livocall-fs-state:/var/lib/freeswitch
-      - livocall-recordings:/var/lib/freeswitch/recordings
-    environment:
-      SOUND_RATES: "8000:16000"
-      SOUND_TYPES: "music:en-us-callie"
+      - livocall-recordings:/usr/local/freeswitch/recordings
+      - livocall-sounds:/usr/local/freeswitch/sounds
+      - livocall-logs:/usr/local/freeswitch/log
 
 volumes:
-  livocall-fs-state:
+  livocall-fs-conf:
   livocall-recordings:
+  livocall-sounds:
+  livocall-logs:
 ```
 
-Start:
+After startup, copy the LivoCall configs into the writable container config
+volume and restart:
 
 ```bash
-cd /opt/livocall
-docker compose -f freeswitch.compose.yml up -d
+docker cp /opt/livocall/freeswitch/event_socket.conf.xml livocall-freeswitch:/usr/local/freeswitch/conf/autoload_configs/event_socket.conf.xml
+docker cp /opt/livocall/freeswitch/acl.conf.xml livocall-freeswitch:/usr/local/freeswitch/conf/autoload_configs/acl.conf.xml
+docker cp /opt/livocall/freeswitch/dialplan livocall-freeswitch:/usr/local/freeswitch/conf/
+docker cp /opt/livocall/freeswitch/sip_profiles/mrf.xml livocall-freeswitch:/usr/local/freeswitch/conf/sip_profiles/mrf.xml
+docker cp /opt/livocall/freeswitch/sip_profiles/external livocall-freeswitch:/usr/local/freeswitch/conf/sip_profiles/
+docker restart livocall-freeswitch
 ```
 
 Logs:
@@ -538,30 +567,34 @@ docker logs -f livocall-freeswitch
 
 ## 16. Verify FreeSWITCH
 
-Open CLI:
+Use the ESL password from `FS_ESL_PASSWORD`:
 
 ```bash
-docker exec -it livocall-freeswitch fs_cli
-```
+docker exec -it livocall-freeswitch fs_cli \
+  -H 127.0.0.1 \
+  -P 8021 \
+  -p "$FS_ESL_PASSWORD" \
+  -x "status"
 
-Run:
+docker exec -it livocall-freeswitch fs_cli \
+  -H 127.0.0.1 \
+  -P 8021 \
+  -p "$FS_ESL_PASSWORD" \
+  -x "module_exists mod_audio_fork"
 
-```txt
-status
-sofia status
-sofia status profile external
-sofia status gateway sip_custom
-module_exists mod_audio_fork
+docker exec -it livocall-freeswitch fs_cli \
+  -H 127.0.0.1 \
+  -P 8021 \
+  -p "$FS_ESL_PASSWORD" \
+  -x "sofia status profile drachtio_mrf"
 ```
 
 Expected:
 
-- `external` profile is running.
-- `sip_custom` exists.
-- Gateway is `REGED` if registration is enabled.
-- `module_exists mod_audio_fork` returns true.
-
-If `mod_audio_fork` is missing, the image does not include it. Use or build a FreeSWITCH image with `mod_audio_fork`.
+- `status` shows FreeSWITCH is ready.
+- `module_exists mod_audio_fork` returns `true`.
+- `sofia status profile drachtio_mrf` is `RUNNING`.
+- `ss -lntp | grep 8021` shows ESL listening.
 
 ## 17. Verify App Links
 
@@ -608,9 +641,10 @@ In the dashboard:
 2. Create an agent.
 3. Set agent status to live.
 4. Add a DID in E.164 format, for example `+8801XXXXXXXXX`.
-5. Set provider slug to `sip_custom`, or match your gateway name.
+5. Set provider slug to `sip_custom`, or match the generated gateway name.
 6. Enable inbound and/or outbound.
 7. Attach inbound DID to the live agent.
+8. Run `/opt/livocall/sync-freeswitch-gateways.sh`, or wait for cron.
 
 ## 19. Outbound Checklist
 
@@ -620,7 +654,9 @@ In the dashboard:
 - Voice has `VOICE_FAKE_DRIVER=false`.
 - Voice can connect to FreeSWITCH ESL at `FS_HOST:8021`.
 - FreeSWITCH ESL listens on `0.0.0.0` with `livocall_esl` ACL.
-- FreeSWITCH has gateway `sip_custom`.
+- Dashboard-created trunks have been synced to FreeSWITCH.
+- FreeSWITCH has the required gateway/provider slug, for example `sip_custom`.
+- `drachtio_mrf` profile is running.
 - `mod_audio_fork` is loaded.
 - `VOICE_WS_PUBLIC_URL=wss://voice.yourdomain.com/ws/audio`.
 - AI provider keys are configured for the tier you use.
@@ -629,6 +665,7 @@ In the dashboard:
 
 - SIP provider sends INVITE to `YOUR_VPS_PUBLIC_IP:5080`.
 - Provider signalling IPs are in `livocall_trunks`.
+- `drachtio_mrf` profile context is `public`.
 - DID is stored as E.164, for example `+8801XXXXXXXXX`.
 - DID has `inboundEnabled=true`.
 - DID is attached to a live agent.
@@ -680,6 +717,18 @@ Fix:
 - `acl.conf.xml` allows the Coolify Docker subnet.
 - Firewall allows `8021` only from local/private Docker subnet.
 - Voice env has correct `FS_HOST`, `FS_ESL_PORT`, `FS_ESL_PASSWORD`.
+- Verify with `fs_cli -H 127.0.0.1 -P 8021 -p "$FS_ESL_PASSWORD" -x "status"`.
+
+### Dashboard Trunks Do Not Appear in FreeSWITCH
+
+Check:
+
+- Web has been redeployed with the XML export route.
+- `FREESWITCH_CONFIG_TOKEN` in web matches `/root/livocall.env`.
+- `curl -H "Authorization: Bearer $FREESWITCH_CONFIG_TOKEN" "https://app.yourdomain.com/api/numbers/freeswitch?format=xml"` returns `<gateway>` XML.
+- `/opt/livocall/sync-freeswitch-gateways.sh` runs successfully.
+- `sofia profile drachtio_mrf rescan reloadxml` completes.
+- `sofia status gateway` lists the provider slug.
 
 ### Calls Connect But No AI Audio
 
@@ -694,7 +743,7 @@ Check:
 
 ### One-Way Audio
 
-Set explicit public IP in `external.xml`:
+Set explicit public IP in `sip_profiles/mrf.xml` for the `drachtio_mrf` profile:
 
 ```xml
 <param name="ext-rtp-ip" value="YOUR_VPS_PUBLIC_IP"/>
@@ -705,7 +754,7 @@ Reload:
 
 ```bash
 docker exec -it livocall-freeswitch fs_cli -x "reloadxml"
-docker exec -it livocall-freeswitch fs_cli -x "sofia profile external restart reloadxml"
+docker exec -it livocall-freeswitch fs_cli -x "sofia profile drachtio_mrf restart reloadxml"
 ```
 
 Confirm RTP UDP range `16384-32768` is open.
@@ -732,13 +781,15 @@ Re-apply production edits:
 - ESL listen IP and ACL.
 - SIP provider IP ACL.
 - Inbound route URL/token.
-- Gateway XML.
+- `drachtio_mrf` profile context `public`.
+- Dashboard gateway sync cron.
 
 Reload:
 
 ```bash
 docker exec -it livocall-freeswitch fs_cli -x "reloadxml"
-docker exec -it livocall-freeswitch fs_cli -x "sofia profile external restart reloadxml"
+docker exec -it livocall-freeswitch fs_cli -x "sofia profile drachtio_mrf restart reloadxml"
+ENV_FILE=/root/livocall.env /opt/livocall/sync-freeswitch-gateways.sh
 ```
 
 ## 23. Production Checklist
@@ -752,6 +803,8 @@ docker exec -it livocall-freeswitch fs_cli -x "sofia profile external restart re
 - FreeSWITCH ESL password is changed.
 - SIP provider IPs are allow-listed.
 - `mod_audio_fork` is loaded.
+- `drachtio_mrf` profile is running with context `public`.
+- Dashboard gateway sync cron is installed.
 - Gateway registration is healthy.
 - Inbound route script is mounted.
 - `VOICE_WS_PUBLIC_URL` uses `wss://voice.yourdomain.com/ws/audio`.

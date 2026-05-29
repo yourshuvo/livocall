@@ -9,6 +9,7 @@ import { apiError, withErrors } from '@/lib/errors'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
 import { AutoCallbackConfigSchema } from '@/lib/auto-callback'
+import { triggerFreeswitchSync } from '@/lib/freeswitch-sync'
 
 const Body = z.object({
   e164: z.string().regex(/^\+\d{8,15}$/).optional(),
@@ -77,5 +78,6 @@ export const POST = withErrors(async (req: Request) => {
     agentId: body.agentId || null,
     autoCallback: body.autoCallback,
   })
+  await triggerFreeswitchSync('number.create', String(created._id))
   return NextResponse.json(phoneNumberToJson(created.toObject()), { status: 201 })
 })

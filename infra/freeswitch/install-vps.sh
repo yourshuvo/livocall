@@ -432,7 +432,7 @@ cat > "${FS_ROOT}/sip_profiles/external/sip_custom.xml.example" <<'EOF'
 </include>
 EOF
 
-cat > /opt/livocall/freeswitch.compose.yml <<'EOF'
+cat > /opt/livocall/freeswitch.compose.yml <<EOF
 services:
   freeswitch:
     image: ${FREESWITCH_IMAGE}
@@ -466,7 +466,7 @@ echo
 echo "FreeSWITCH container requested. Next checks:"
 echo "  docker logs --tail=120 livocall-freeswitch"
 echo "  docker exec -it livocall-freeswitch fs_cli -x 'status'"
-echo "  docker exec -it livocall-freeswitch fs_cli -x 'sofia status profile external'"
+echo "  docker exec -it livocall-freeswitch fs_cli -x 'sofia status profile drachtio_mrf'"
 echo "  docker exec -it livocall-freeswitch fs_cli -x 'module_exists mod_audio_fork'"
 echo
 echo "To sync dashboard-created SIP trunks:"

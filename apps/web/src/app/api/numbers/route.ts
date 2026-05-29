@@ -11,6 +11,7 @@ import { recordAudit } from '@/lib/audit'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
 import { AutoCallbackConfigSchema } from '@/lib/auto-callback'
+import { triggerFreeswitchSync } from '@/lib/freeswitch-sync'
 
 const Body = z.object({
   e164: z.string().regex(/^\+\d{8,15}$/, 'must be E.164'),
@@ -75,5 +76,6 @@ export const POST = withErrors(async (req: Request) => {
     resource: { type: 'PhoneNumber', id: String(created._id) },
     meta: { e164: body.e164, providerSlug, sipServer: body.sipServer },
   })
+  await triggerFreeswitchSync('number.create', String(created._id))
   return NextResponse.json(phoneNumberToJson(created.toObject()))
 })

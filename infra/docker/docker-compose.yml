@@ -45,6 +45,7 @@ services:
       - MONGODB_URI=mongodb://mongo:27017/livocall
       - SESSION_SECRET=local-dev-please-change-this-32-chars
       - VOICE_SERVICE_URL=http://voice:8084
+      - VOICE_WS_PUBLIC_URL=ws://localhost:8084/ws/audio
       - NEXT_PUBLIC_APP_URL=http://localhost:3000
     ports: ["3000:3000"]
 
