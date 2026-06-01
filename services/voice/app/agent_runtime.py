@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 from typing import Any
 from urllib.parse import urlparse
 
@@ -79,6 +82,38 @@ def runtime_float(agent: dict[str, Any], key: str, default: float) -> float:
 
 def runtime_int(agent: dict[str, Any], key: str, default: int) -> int:
     return int(runtime_float(agent, key, default))
+
+
+def runtime_bool(agent: dict[str, Any], key: str, default: bool) -> bool:
+    value = runtime_settings(agent).get(key)
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gemini_live_vad_silence_ms(agent: dict[str, Any]) -> int:
+    value = runtime_int(agent, "geminiLiveVadSilenceMs", settings.gemini_live_vad_silence_ms)
+    return max(300, min(2000, value))
+
+
+def gemini_live_vad_prefix_padding_ms(agent: dict[str, Any]) -> int:
+    value = runtime_int(
+        agent,
+        "geminiLiveVadPrefixPaddingMs",
+        settings.gemini_live_vad_prefix_padding_ms,
+    )
+    return max(0, min(1000, value))
+
+
+def gemini_kb_tool_timeout_ms(agent: dict[str, Any]) -> int:
+    value = runtime_int(agent, "geminiKbToolTimeoutMs", settings.gemini_kb_tool_timeout_ms)
+    return max(300, min(5000, value))
+
+
+def gemini_memory_enabled(agent: dict[str, Any]) -> bool:
+    return settings.gemini_memory_enabled and runtime_bool(agent, "geminiMemoryEnabled", True)
 
 
 def gemini_live_model(agent: dict[str, Any]) -> str:
@@ -161,6 +196,17 @@ async def knowledge_context(agent: dict[str, Any], *, query: str = "", limit: in
     return "Relevant knowledge base context:\n" + "\n".join(lines)
 
 
+async def gemini_memory_context(agent: dict[str, Any]) -> str:
+    if not gemini_memory_enabled(agent) or not agent.get("knowledgeBaseIds"):
+        return ""
+    stored = agent.get("geminiMemory") if isinstance(agent.get("geminiMemory"), dict) else {}
+    status = str(stored.get("status") or "")
+    text = str(stored.get("text") or "").strip()
+    if status == "ready" and text:
+        return _format_gemini_memory(text)
+    return await _build_and_store_gemini_memory(agent)
+
+
 async def build_system_prompt(agent: dict[str, Any], override: str = "", *, kb_query: str = "") -> str:
     system_prompt, first_message = prompt_parts(agent, override)
     runtime = runtime_settings(agent)
@@ -174,15 +220,23 @@ async def build_system_prompt(agent: dict[str, Any], override: str = "", *, kb_q
     system_prompt = (
         f"{system_prompt}\n\nLatency rule: this is a live phone call. Start answering immediately, "
         "keep most replies under one short sentence, and never silently wait on slow tools. "
-        "If a lookup may take time, first say “একটু দেখছি...” then use the tool."
+        'If a lookup may take time, first say "one moment, I am checking..." then use the tool.'
     )
-    kb = await knowledge_context(agent, query=kb_query or system_prompt)
-    if kb:
+    memory = await gemini_memory_context(agent)
+    if memory:
         system_prompt = (
-            f"{system_prompt}\n\n{kb}\n"
-            "Knowledge rule: answer factual business questions from this context when possible. "
-            "If the answer is not in the knowledge context, say you need to check and offer transfer/follow-up."
+            f"{system_prompt}\n\n{memory}\n"
+            "Knowledge rule: answer factual business questions from Gemini memory first. "
+            "Only use search_knowledge_base if the answer is missing, ambiguous, or needs exact detail."
         )
+    else:
+        kb = await knowledge_context(agent, query=kb_query, limit=4)
+        if kb:
+            system_prompt = (
+                f"{system_prompt}\n\n{kb}\n"
+                "Knowledge rule: answer factual business questions from this context when possible. "
+                "Only use search_knowledge_base if the answer is missing, ambiguous, or needs exact detail."
+            )
     tools = tool_context(agent)
     if tools:
         system_prompt = f"{system_prompt}\n\n{tools}"
@@ -246,7 +300,7 @@ def gemini_tool_declarations(agent: dict[str, Any]) -> list[dict[str, Any]]:
                 "name": "search_knowledge_base",
                 "description": (
                     "Search the agent knowledge base for current caller question context. "
-                    "Use before answering factual business/policy/pricing questions."
+                    "Use only when Gemini memory or provided context is missing, ambiguous, or needs exact detail."
                 ),
                 "parameters": {
                     "type": "OBJECT",
@@ -285,8 +339,32 @@ async def execute_agent_tool(
     started = _now()
     if _tool_name(name) == "search_knowledge_base":
         query = str(arguments.get("query") or arguments.get("notes") or "")
-        context = await knowledge_context(agent, query=query, limit=5)
-        result = {"ok": bool(context), "context": context, "answerPolicy": "answer from context; if missing, say you need to check"}
+        try:
+            context = await asyncio.wait_for(
+                knowledge_context(agent, query=query, limit=5),
+                timeout=gemini_kb_tool_timeout_ms(agent) / 1000,
+            )
+            result = {
+                "ok": bool(context),
+                "answer": context or "I need to check that and follow up.",
+                "context": context,
+                "source": "vector" if context else "missing",
+                "answerPolicy": "answer from context; if missing, say you need to check",
+            }
+        except TimeoutError:
+            result = {
+                "ok": False,
+                "error": "knowledge base lookup timed out",
+                "answer": "I need to check that and follow up.",
+                "source": "timeout",
+            }
+        except Exception as exc:  # noqa: BLE001
+            result = {
+                "ok": False,
+                "error": str(exc)[:300],
+                "answer": "I need to check that and follow up.",
+                "source": "error",
+            }
         await _log_tool_call(agent, call_id, "search_knowledge_base", _redact(arguments), result, started_at=started)
         return result
     tool = next((t for t in configured_tools(agent) if t["name"] == _tool_name(name)), None)
@@ -374,6 +452,131 @@ def _now() -> str:
     from datetime import UTC, datetime
 
     return datetime.now(UTC).isoformat()
+
+
+def _format_gemini_memory(text: str) -> str:
+    return (
+        "Gemini memory for low-latency answers. Use this before tools:\n"
+        f"{text.strip()}"
+    )
+
+
+async def _build_and_store_gemini_memory(agent: dict[str, Any]) -> str:
+    ids = [x for x in agent.get("knowledgeBaseIds") or [] if ObjectId.is_valid(str(x))]
+    if not ids:
+        return ""
+    db = get_db()
+    kb_ids = [ObjectId(str(x)) for x in ids]
+    chunks: list[dict[str, Any]] = []
+    cursor = (
+        db["kb_chunks"]
+        .find({"kbId": {"$in": kb_ids}}, {"text": 1, "sourceRef": 1, "chunkIndex": 1})
+        .sort([("sourceRef", 1), ("chunkIndex", 1)])
+        .limit(40)
+    )
+    async for chunk in cursor:
+        text = " ".join(str(chunk.get("text") or "").split())
+        if text:
+            chunks.append(
+                {
+                    "sourceRef": str(chunk.get("sourceRef") or "knowledge"),
+                    "chunkIndex": int(chunk.get("chunkIndex") or 0),
+                    "text": text,
+                }
+            )
+    if not chunks:
+        await _store_gemini_memory(agent, status="failed", text="", source_hash="")
+        return ""
+
+    source_hash = _gemini_memory_source_hash(agent, chunks)
+    text = _compact_gemini_memory(chunks, max_chars=settings.gemini_memory_max_chars)
+    if text:
+        await _store_gemini_memory(agent, status="ready", text=text, source_hash=source_hash)
+        return _format_gemini_memory(text)
+    await _store_gemini_memory(agent, status="failed", text="", source_hash=source_hash)
+    return ""
+
+
+def _compact_gemini_memory(chunks: list[dict[str, Any]], *, max_chars: int) -> str:
+    budget = max(1200, min(12000, max_chars))
+    lines: list[str] = []
+    used = 0
+    for chunk in chunks:
+        source = str(chunk.get("sourceRef") or "knowledge")[:120]
+        text = str(chunk.get("text") or "")
+        for sentence in _memory_sentences(text):
+            line = f"- {source}: {sentence}"
+            if used + len(line) + 1 > budget:
+                return "\n".join(lines)
+            lines.append(line)
+            used += len(line) + 1
+            break
+    return "\n".join(lines)
+
+
+def _memory_sentences(text: str) -> list[str]:
+    cleaned = " ".join(text.split())
+    if not cleaned:
+        return []
+    pieces = []
+    current = []
+    for char in cleaned:
+        current.append(char)
+        if char in ".!?":
+            sentence = "".join(current).strip()
+            if sentence:
+                pieces.append(sentence[:500])
+            current = []
+        if len("".join(current)) >= 500:
+            sentence = "".join(current).strip()
+            if sentence:
+                pieces.append(sentence)
+            current = []
+    tail = "".join(current).strip()
+    if tail:
+        pieces.append(tail[:500])
+    return pieces or [cleaned[:500]]
+
+
+def _gemini_memory_source_hash(agent: dict[str, Any], chunks: list[dict[str, Any]]) -> str:
+    prompt_doc = agent.get("prompt") if isinstance(agent.get("prompt"), dict) else {}
+    payload = {
+        "prompt": {
+            "system": str(prompt_doc.get("system") or agent.get("systemPrompt") or ""),
+            "firstMessage": str(prompt_doc.get("firstMessage") or agent.get("firstMessage") or ""),
+            "guardrails": str(prompt_doc.get("guardrails") or ""),
+        },
+        "knowledgeBaseIds": [str(x) for x in agent.get("knowledgeBaseIds") or []],
+        "chunks": chunks,
+    }
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+async def _store_gemini_memory(
+    agent: dict[str, Any],
+    *,
+    status: str,
+    text: str,
+    source_hash: str,
+) -> None:
+    agent_id = agent.get("_id")
+    if not ObjectId.is_valid(str(agent_id)):
+        return
+    memory = {
+        "status": status,
+        "text": text,
+        "sourceHash": source_hash,
+        "updatedAt": _now(),
+        "cacheName": "",
+        "cacheModel": "",
+        "cacheExpiresAt": None,
+    }
+    agent["geminiMemory"] = memory
+    try:
+        await get_db()["agents"].update_one({"_id": ObjectId(str(agent_id))}, {"$set": {"geminiMemory": memory}})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("gemini_memory.store_failed", agent_id=str(agent_id), error=str(exc))
 
 
 async def _log_tool_call(

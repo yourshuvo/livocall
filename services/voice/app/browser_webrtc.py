@@ -12,6 +12,8 @@ from app.agent_runtime import (
     build_system_prompt,
     execute_agent_tool,
     gemini_live_model,
+    gemini_live_vad_prefix_padding_ms,
+    gemini_live_vad_silence_ms,
     gemini_tool_declarations,
     gemini_voice,
 )
@@ -220,9 +222,23 @@ def _gemini_live_tools(declarations: list[dict[str, Any]]) -> list[dict[str, Any
     return [{"function_declarations": declarations}]
 
 
-def _register_live_tool_handler(llm: Any, handler: Callable[[Any], Awaitable[None]], tools: list[dict[str, Any]]) -> None:
+def _supports_non_blocking_live_tools(model: str) -> bool:
+    return "gemini-3" not in model
+
+
+def _register_live_tool_handler(
+    llm: Any,
+    handler: Callable[[Any], Awaitable[None]],
+    tools: list[dict[str, Any]],
+    *,
+    model: str,
+) -> None:
     if tools:
-        llm.register_function(None, handler, cancel_on_interruption=False)
+        llm.register_function(
+            None,
+            handler,
+            cancel_on_interruption=not _supports_non_blocking_live_tools(model),
+        )
 
 
 def _is_dashboard_browser_test(metadata: dict[str, str] | None) -> bool:
@@ -364,8 +380,8 @@ async def run_browser_gemini_bot(
             max_tokens=settings.gemini_live_max_tokens,
             vad=GeminiVADParams(
                 disabled=False,
-                prefix_padding_ms=settings.gemini_live_vad_prefix_padding_ms,
-                silence_duration_ms=settings.gemini_live_vad_silence_ms,
+                prefix_padding_ms=gemini_live_vad_prefix_padding_ms(agent),
+                silence_duration_ms=gemini_live_vad_silence_ms(agent),
             ),
             context_window_compression=ContextWindowCompressionParams(
                 enabled=settings.gemini_live_context_compression_enabled,
@@ -374,15 +390,24 @@ async def run_browser_gemini_bot(
     )
 
     async def handle_tool_call(params: Any) -> None:
+        tool_started = datetime.now(UTC)
         result = await execute_agent_tool(
             agent,
             call_id=call_id,
             name=str(params.function_name),
             arguments=dict(params.arguments or {}),
         )
+        log.info(
+            "browser_webrtc.tool_result",
+            call_id=call_id,
+            name=str(params.function_name),
+            ok=bool(result.get("ok")),
+            source=result.get("source"),
+            latency_ms=max(0, int((datetime.now(UTC) - tool_started).total_seconds() * 1000)),
+        )
         await params.result_callback(result, properties=FunctionCallResultProperties(run_llm=True))
 
-    _register_live_tool_handler(llm, handle_tool_call, tools)
+    _register_live_tool_handler(llm, handle_tool_call, tools, model=model)
 
     initial_messages = []
     if _should_start_with_ai(agent):

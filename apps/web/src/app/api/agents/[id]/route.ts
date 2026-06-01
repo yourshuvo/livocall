@@ -35,6 +35,10 @@ const RuntimeSettings = z.object({
   maxDurationHours: z.number().min(0.25).max(4).optional(),
   handoffTarget: z.string().max(240).optional(),
   handoffRules: z.string().max(2000).optional(),
+  geminiLiveVadSilenceMs: z.number().int().min(300).max(2000).optional(),
+  geminiKbToolTimeoutMs: z.number().int().min(300).max(5000).optional(),
+  geminiMemoryEnabled: z.boolean().optional(),
+  geminiKbCacheEnabled: z.boolean().optional(),
 })
 
 const Patch = z.object({
@@ -163,6 +167,23 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
   }
   const existing = await Agent.findOne({ _id: oid, orgId: s.orgId }).lean()
   if (!existing) return apiError('not_found')
+  const setBody: Record<string, unknown> = { ...body }
+  if (
+    body.knowledgeBaseIds ||
+    body.prompt ||
+    body.runtimeSettings?.geminiMemoryEnabled !== undefined ||
+    body.runtimeSettings?.geminiKbCacheEnabled !== undefined
+  ) {
+    setBody.geminiMemory = {
+      status: body.runtimeSettings?.geminiMemoryEnabled === false ? 'unsupported' : 'stale',
+      text: '',
+      sourceHash: '',
+      updatedAt: new Date(),
+      cacheName: '',
+      cacheModel: '',
+      cacheExpiresAt: undefined,
+    }
+  }
   await AgentVersion.create({
     orgId: s.orgId,
     agentId: oid,
@@ -172,7 +193,7 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
   })
   const agent = await Agent.findOneAndUpdate(
     { _id: oid, orgId: s.orgId },
-    { $set: body },
+    { $set: setBody },
     { new: true },
   ).lean()
   if (!agent) return apiError('not_found')

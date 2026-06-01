@@ -20,6 +20,28 @@ const runtimeSettingsSchema = new Schema(
     maxDurationHours: { type: Number, default: 1 },
     handoffTarget: { type: String, default: '' },
     handoffRules: { type: String, default: '' },
+    geminiLiveVadSilenceMs: { type: Number, default: 600 },
+    geminiKbToolTimeoutMs: { type: Number, default: 1200 },
+    geminiMemoryEnabled: { type: Boolean, default: true },
+    geminiKbCacheEnabled: { type: Boolean, default: true },
+  },
+  { _id: false },
+)
+
+const geminiMemorySchema = new Schema(
+  {
+    status: {
+      type: String,
+      enum: ['ready', 'stale', 'failed', 'unsupported'],
+      default: 'stale',
+    },
+    text: { type: String, default: '' },
+    sourceHash: { type: String, default: '' },
+    updatedAt: { type: Date },
+    cacheName: { type: String, default: '' },
+    cacheModel: { type: String, default: '' },
+    cacheExpiresAt: { type: Date },
+    error: { type: String, default: '' },
   },
   { _id: false },
 )
@@ -166,6 +188,7 @@ const agentSchema = new Schema(
     knowledgeBaseIds: [{ type: Schema.Types.ObjectId, ref: 'KnowledgeBase' }],
     postCallWebhook: { type: String, default: '' },
     runtimeSettings: { type: runtimeSettingsSchema, default: () => ({}) },
+    geminiMemory: { type: geminiMemorySchema, default: () => ({}) },
     outcomeConfig: { type: outcomeConfigSchema, default: () => ({}) },
     status: { type: String, enum: ['draft', 'live'], default: 'draft' },
   },

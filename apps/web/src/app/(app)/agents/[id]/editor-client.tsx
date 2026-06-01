@@ -71,6 +71,10 @@ interface RuntimeSettings {
   maxDurationHours?: number
   handoffTarget?: string
   handoffRules?: string
+  geminiLiveVadSilenceMs?: number
+  geminiKbToolTimeoutMs?: number
+  geminiMemoryEnabled?: boolean
+  geminiKbCacheEnabled?: boolean
 }
 
 interface OutcomeLabel {
@@ -99,6 +103,11 @@ interface AgentDto {
   knowledgeBaseIds: string[]
   postCallWebhook: string
   runtimeSettings: RuntimeSettings
+  geminiMemory?: {
+    status: 'ready' | 'stale' | 'failed' | 'unsupported'
+    updatedAt?: string | null
+    cacheExpiresAt?: string | null
+  } | null
   outcomeConfig?: OutcomeConfig | null
   status: 'draft' | 'live'
 }
@@ -640,6 +649,18 @@ export function AgentEditor({
   const [maxDuration, setMaxDuration] = useState(runtime.maxDurationHours ?? 1)
   const [handoffTarget, setHandoffTarget] = useState(runtime.handoffTarget || '')
   const [handoffRules, setHandoffRules] = useState(runtime.handoffRules || '')
+  const [geminiLiveVadSilenceMs, setGeminiLiveVadSilenceMs] = useState(
+    runtime.geminiLiveVadSilenceMs ?? 600,
+  )
+  const [geminiKbToolTimeoutMs, setGeminiKbToolTimeoutMs] = useState(
+    runtime.geminiKbToolTimeoutMs ?? 1200,
+  )
+  const [geminiMemoryEnabled, setGeminiMemoryEnabled] = useState(
+    runtime.geminiMemoryEnabled !== false,
+  )
+  const [geminiKbCacheEnabled, setGeminiKbCacheEnabled] = useState(
+    runtime.geminiKbCacheEnabled !== false,
+  )
   const [outcomeEnabled, setOutcomeEnabled] = useState(normalizedInitialOutcome.enabled)
   const [outcomeLabels, setOutcomeLabels] = useState<OutcomeLabel[]>(
     normalizedInitialOutcome.labels,
@@ -728,6 +749,10 @@ export function AgentEditor({
     maxDurationHours: maxDuration,
     handoffTarget,
     handoffRules,
+    geminiLiveVadSilenceMs,
+    geminiKbToolTimeoutMs,
+    geminiMemoryEnabled,
+    geminiKbCacheEnabled,
   }
   const outcomeConfig = {
     enabled: outcomeEnabled,
@@ -779,6 +804,10 @@ export function AgentEditor({
       maxDurationHours: maxDuration,
       handoffTarget,
       handoffRules,
+      geminiLiveVadSilenceMs,
+      geminiKbToolTimeoutMs,
+      geminiMemoryEnabled,
+      geminiKbCacheEnabled,
     }
   }
 
@@ -1782,6 +1811,11 @@ export function AgentEditor({
                 })}
               </div>
             )}
+            {tier === 'gemini_live' && selectedKbs.length > 0 && (
+              <p className="text-fg-muted text-[11px]">
+                Gemini memory: {initial.geminiMemory?.status ?? 'stale'}
+              </p>
+            )}
           </Accordion>
 
           {showSpeechSettings && (
@@ -1868,6 +1902,58 @@ export function AgentEditor({
                     ))}
                   </div>
                 </Field>
+              )}
+              {tier === 'gemini_live' && (
+                <>
+                  <Divider />
+                  <SubLabel
+                    title="Gemini Live latency"
+                    hint="Tune turn timing and keep common KB answers on the hot path."
+                  />
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <Field label="VAD silence (ms)">
+                      <Input
+                        type="number"
+                        min={300}
+                        max={2000}
+                        step={50}
+                        value={geminiLiveVadSilenceMs}
+                        onChange={(e) =>
+                          setGeminiLiveVadSilenceMs(
+                            Math.max(300, Math.min(2000, Number(e.target.value) || 600)),
+                          )
+                        }
+                      />
+                    </Field>
+                    <Field label="KB timeout (ms)">
+                      <Input
+                        type="number"
+                        min={300}
+                        max={5000}
+                        step={100}
+                        value={geminiKbToolTimeoutMs}
+                        onChange={(e) =>
+                          setGeminiKbToolTimeoutMs(
+                            Math.max(300, Math.min(5000, Number(e.target.value) || 1200)),
+                          )
+                        }
+                      />
+                    </Field>
+                  </div>
+                  <ToggleRow
+                    title="Gemini memory"
+                    hint="Inject a compact KB summary into Live prompts."
+                    checked={geminiMemoryEnabled}
+                    onChange={setGeminiMemoryEnabled}
+                  />
+                  <Divider />
+                  <ToggleRow
+                    title="Gemini KB cache"
+                    hint="Prepare large KBs for non-Live fallback jobs."
+                    checked={geminiKbCacheEnabled}
+                    onChange={setGeminiKbCacheEnabled}
+                  />
+                </>
               )}
             </Accordion>
           )}
@@ -3150,6 +3236,63 @@ async function connectBrowserWebrtcSession(
   ])
   const iceServers = session.iceServers ?? []
   let botTurnSeq = 0
+  let botTurnId = ''
+  let botTurnAt = ''
+  let botText = ''
+  let botFlushTimer: number | undefined
+
+  function clearBotFlushTimer() {
+    if (!botFlushTimer) return
+    window.clearTimeout(botFlushTimer)
+    botFlushTimer = undefined
+  }
+
+  function ensureBotTurn() {
+    if (botTurnId) return
+    botTurnSeq += 1
+    botTurnAt = new Date().toISOString()
+    botTurnId = `browser-agent-${botTurnSeq}`
+    botText = ''
+  }
+
+  function emitBotTranscript(final: boolean) {
+    const text = botText.trim()
+    if (!botTurnId || !text) return
+    handlers.onTranscript({
+      id: botTurnId,
+      role: 'agent',
+      text,
+      at: botTurnAt,
+      final,
+    })
+    if (final) {
+      botTurnId = ''
+      botTurnAt = ''
+      botText = ''
+    }
+  }
+
+  function appendBotTranscript(chunk: string) {
+    const text = chunk.trim()
+    if (!text) return
+    ensureBotTurn()
+    botText = mergeTranscriptChunk(botText, text)
+    const previewText = botText.trim()
+    if (/[.!?\u0964]$/u.test(previewText) || previewText.length >= 180) {
+      emitBotTranscript(false)
+    }
+    clearBotFlushTimer()
+    botFlushTimer = window.setTimeout(() => {
+      emitBotTranscript(true)
+      clearBotFlushTimer()
+    }, 1200)
+  }
+
+  function finalizeBotTranscript() {
+    clearBotFlushTimer()
+    emitBotTranscript(true)
+  }
+
   const client = new PipecatClient({
     transport: new SmallWebRTCTransport({
       iceServers,
@@ -3158,10 +3301,22 @@ async function connectBrowserWebrtcSession(
     enableMic: true,
     enableCam: false,
     callbacks: {
-      onDisconnected: handlers.onDisconnected,
-      onBotDisconnected: handlers.onDisconnected,
-      onError: handlers.onError,
-      onDeviceError: handlers.onError,
+      onError: () => {
+        finalizeBotTranscript()
+        handlers.onError()
+      },
+      onDeviceError: () => {
+        finalizeBotTranscript()
+        handlers.onError()
+      },
+      onDisconnected: () => {
+        finalizeBotTranscript()
+        handlers.onDisconnected()
+      },
+      onBotDisconnected: () => {
+        finalizeBotTranscript()
+        handlers.onDisconnected()
+      },
       onUserTranscript: (data) => {
         const text = String(data.text || '').trim()
         if (!text) return
@@ -3178,16 +3333,13 @@ async function connectBrowserWebrtcSession(
       onBotOutput: (data) => {
         if (!data.spoken) return
         const text = String(data.text || '').trim()
-        if (!text) return
-        const at = new Date().toISOString()
-        botTurnSeq += 1
-        handlers.onTranscript({
-          id: `browser-agent-${botTurnSeq}-${hashString(`${at}:${text}`)}`,
-          role: 'agent',
-          text,
-          at,
-          final: true,
-        })
+        appendBotTranscript(text)
+      },
+      onBotStartedSpeaking: () => {
+        ensureBotTurn()
+      },
+      onBotStoppedSpeaking: () => {
+        finalizeBotTranscript()
       },
       onTrackStarted: (track) => {
         attachBrowserWebrtcAudioTrack(audioSession, track)
@@ -3200,7 +3352,10 @@ async function connectBrowserWebrtcSession(
         audioSession.remoteStream = undefined
       },
       onTransportStateChanged: (state) => {
-        if (state === 'error') handlers.onError()
+        if (state === 'error') {
+          finalizeBotTranscript()
+          handlers.onError()
+        }
       },
     },
   })
@@ -3352,6 +3507,17 @@ function normalizeTranscriptAt(value?: string) {
 
 function transcriptTurnId(role: LiveTranscriptRole, at: string, text: string) {
   return `browser-${role}-${hashString(`${role}:${at}:${text}`)}`
+}
+
+function mergeTranscriptChunk(current: string, chunk: string) {
+  const text = chunk.trim()
+  const existing = current.trim()
+  if (!existing) return text
+  if (text.startsWith(existing)) return text
+  if (existing.endsWith(text)) return existing
+  if (/^[,.;:!?)]/.test(text)) return `${existing}${text}`
+  if (/[(]$/.test(existing)) return `${existing}${text}`
+  return `${existing} ${text}`
 }
 
 function hashString(value: string) {

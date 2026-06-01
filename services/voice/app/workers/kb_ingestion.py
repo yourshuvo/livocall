@@ -21,6 +21,7 @@ import contextlib
 import hashlib
 import pathlib
 import struct
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -228,6 +229,22 @@ class KbIngestor:
                     }
                 )
             log.info("kb.ingested", kb_id=str(kb["_id"]), ref=ref, chunks=len(chunks))
+            await db["agents"].update_many(
+                {
+                    "$or": [
+                        {"knowledgeBaseIds": kb["_id"]},
+                        {"knowledgeBaseIds": str(kb["_id"])},
+                    ]
+                },
+                {
+                    "$set": {
+                        "geminiMemory.status": "stale",
+                        "geminiMemory.text": "",
+                        "geminiMemory.sourceHash": "",
+                        "geminiMemory.updatedAt": datetime.now(UTC),
+                    }
+                },
+            )
 
 
 _singleton: KbIngestor | None = None

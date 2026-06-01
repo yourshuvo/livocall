@@ -69,6 +69,13 @@ export function agentToJson(a: AgentLean) {
     knowledgeBaseIds: (a.knowledgeBaseIds || []).map(id),
     postCallWebhook: a.postCallWebhook,
     runtimeSettings: a.runtimeSettings ?? {},
+    geminiMemory: a.geminiMemory
+      ? {
+          status: a.geminiMemory.status ?? 'stale',
+          updatedAt: iso(a.geminiMemory.updatedAt),
+          cacheExpiresAt: iso(a.geminiMemory.cacheExpiresAt),
+        }
+      : null,
     outcomeConfig: a.outcomeConfig ?? null,
     status: a.status,
     createdAt: iso(a.createdAt),

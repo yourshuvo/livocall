@@ -46,16 +46,39 @@ def _transcription(text: str) -> SimpleNamespace:
     return SimpleNamespace(text=text)
 
 
-def _response(content: Any = None, tool_call: Any = None) -> SimpleNamespace:
-    return SimpleNamespace(server_content=content, tool_call=tool_call)
+def _response(
+    content: Any = None,
+    tool_call: Any = None,
+    session_resumption_update: Any = None,
+    go_away: Any = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        server_content=content,
+        tool_call=tool_call,
+        session_resumption_update=session_resumption_update,
+        go_away=go_away,
+    )
 
 
-def test_live_config_enables_audio_transcription() -> None:
-    config = bridge._live_config(FakeTypes, "Answer fast.", "Puck", {})
+def test_live_config_enables_audio_transcription(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bridge.settings, "gemini_live_context_compression_enabled", True)
+    config = bridge._live_config(
+        FakeTypes,
+        "Answer fast.",
+        "Puck",
+        {"runtimeSettings": {"geminiLiveVadSilenceMs": 700}},
+    )
 
     assert config["response_modalities"] == ["AUDIO"]
     assert config["input_audio_transcription"] == {}
     assert config["output_audio_transcription"] == {}
+    assert config["realtime_input_config"]["automatic_activity_detection"] == {
+        "disabled": False,
+        "prefix_padding_ms": 100,
+        "silence_duration_ms": 700,
+    }
+    assert config["context_window_compression"] == {"sliding_window": {}}
+    assert config["session_resumption"] == {"handle": None}
     assert config["thinking_config"] == {"thinking_level": "minimal"}
 
 
@@ -168,6 +191,25 @@ async def test_iter_model_output_wraps_tool_response(monkeypatch: pytest.MonkeyP
             {"id": "tool-1", "name": "lookup_order", "response": {"ok": True}}
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_iter_model_output_captures_session_resumption_handle() -> None:
+    state: dict[str, str] = {}
+    update = SimpleNamespace(resumable=True, new_handle="resume-1")
+
+    items = [
+        item
+        async for item in bridge._iter_model_output(
+            FakeSession([_response(session_resumption_update=update)]),
+            {},
+            "64b64b64b64b64b64b64b64b",
+            session_state=state,
+        )
+    ]
+
+    assert items == []
+    assert state == {"handle": "resume-1"}
 
 
 @pytest.mark.asyncio

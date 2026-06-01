@@ -54,9 +54,13 @@ class Settings(BaseSettings):
     gemini_live_language: str = Field(default="bn-BD")
     gemini_live_temperature: float = Field(default=0.25)
     gemini_live_max_tokens: int = Field(default=512)
-    gemini_live_vad_silence_ms: int = Field(default=250)
+    gemini_live_vad_silence_ms: int = Field(default=600)
     gemini_live_vad_prefix_padding_ms: int = Field(default=100)
     gemini_live_context_compression_enabled: bool = Field(default=True)
+    gemini_kb_tool_timeout_ms: int = Field(default=1200)
+    gemini_memory_enabled: bool = Field(default=True)
+    gemini_memory_max_chars: int = Field(default=6000)
+    gemini_kb_cache_enabled: bool = Field(default=True)
 
     # Grok Voice Agent
     grok_voice_model: str = Field(default="grok-voice-think-fast-1.0")

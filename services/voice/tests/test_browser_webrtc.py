@@ -5,7 +5,12 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app import browser_webrtc, ws_auth
-from app.browser_webrtc import PipecatWebRTCImports, _gemini_live_tools, _register_live_tool_handler
+from app.browser_webrtc import (
+    PipecatWebRTCImports,
+    _gemini_live_tools,
+    _register_live_tool_handler,
+    _supports_non_blocking_live_tools,
+)
 from app.main import app
 
 
@@ -275,6 +280,7 @@ def test_live_tool_handler_survives_interruption() -> None:
         llm,
         _fake_tool_handler,
         [{"name": "search_knowledge_base"}],
+        model="models/gemini-2.5-flash-live-preview",
     )
 
     assert len(llm.registrations) == 1
@@ -283,8 +289,33 @@ def test_live_tool_handler_survives_interruption() -> None:
     assert kwargs == {"cancel_on_interruption": False}
 
 
+def test_live_tool_handler_uses_blocking_tools_for_gemini_3() -> None:
+    llm = FakeLLM()
+    _register_live_tool_handler(
+        llm,
+        _fake_tool_handler,
+        [{"name": "search_knowledge_base"}],
+        model="models/gemini-3.1-flash-live-preview",
+    )
+
+    assert len(llm.registrations) == 1
+    args, kwargs = llm.registrations[0]
+    assert args == (None, _fake_tool_handler)
+    assert kwargs == {"cancel_on_interruption": True}
+
+
 def test_live_tool_handler_skips_registration_without_tools() -> None:
     llm = FakeLLM()
-    _register_live_tool_handler(llm, _fake_tool_handler, [])
+    _register_live_tool_handler(
+        llm,
+        _fake_tool_handler,
+        [],
+        model="models/gemini-3.1-flash-live-preview",
+    )
 
     assert llm.registrations == []
+
+
+def test_non_blocking_live_tool_support_follows_model_family() -> None:
+    assert _supports_non_blocking_live_tools("models/gemini-2.5-flash-live-preview") is True
+    assert _supports_non_blocking_live_tools("models/gemini-3.1-flash-live-preview") is False

@@ -28,6 +28,10 @@ const RuntimeSettings = z
     maxDurationHours: z.number().min(0.25).max(4).optional(),
     handoffTarget: z.string().max(240).optional(),
     handoffRules: z.string().max(2000).optional(),
+    geminiLiveVadSilenceMs: z.number().int().min(300).max(2000).optional(),
+    geminiKbToolTimeoutMs: z.number().int().min(300).max(5000).optional(),
+    geminiMemoryEnabled: z.boolean().optional(),
+    geminiKbCacheEnabled: z.boolean().optional(),
   })
   .optional()
 
@@ -74,6 +78,12 @@ export const POST = withErrors(async (req: Request) => {
     ...body,
     voice: body.voice ?? { provider: 'gemini-live', voiceId: 'aoede', style: 'conversational' },
     prompt: body.prompt ?? { system: '', firstMessage: '', guardrails: '' },
+    geminiMemory: {
+      status: body.runtimeSettings?.geminiMemoryEnabled === false ? 'unsupported' : 'stale',
+      text: '',
+      sourceHash: '',
+      updatedAt: new Date(),
+    },
     status: 'draft',
   })
   return NextResponse.json(agentToJson(created.toObject()), { status: 201 })

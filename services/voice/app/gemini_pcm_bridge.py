@@ -16,6 +16,8 @@ from app.agent_runtime import (
     build_system_prompt,
     execute_agent_tool,
     gemini_live_model,
+    gemini_live_vad_prefix_padding_ms,
+    gemini_live_vad_silence_ms,
     gemini_tool_declarations,
     gemini_voice,
 )
@@ -60,10 +62,18 @@ class PcmuLatency:
             return
         trace = {k: round(v, 2) for k, v in self.marks.items()}
         deltas = {
-            "callerAudioToGeminiFirstSendMs": self.delta("first_caller_audio", "first_gemini_audio_send"),
-            "callerAudioToModelFirstAudioMs": self.delta("first_caller_audio", "first_model_audio"),
-            "modelAudioToFsFirstSendMs": self.delta("first_model_audio", "first_fs_audio_send"),
-            "bridgeConnectedToFsFirstSendMs": self.delta("bridge_connected", "first_fs_audio_send"),
+            "callerAudioToGeminiFirstSendMs": self.delta(
+                "first_caller_audio", "first_gemini_audio_send"
+            ),
+            "callerAudioToModelFirstAudioMs": self.delta(
+                "first_caller_audio", "first_model_audio"
+            ),
+            "modelAudioToFsFirstSendMs": self.delta(
+                "first_model_audio", "first_fs_audio_send"
+            ),
+            "bridgeConnectedToFsFirstSendMs": self.delta(
+                "bridge_connected", "first_fs_audio_send"
+            ),
         }
         try:
             await get_db()["calls"].update_one(
@@ -102,7 +112,7 @@ class GeminiPcmBridge:
         self.bridge_mode = bridge_mode
 
     @classmethod
-    def for_phone_call(cls) -> "GeminiPcmBridge":
+    def for_phone_call(cls) -> GeminiPcmBridge:
         return cls(
             wire_format="pcmu",
             input_queue_frames=2,
@@ -111,7 +121,7 @@ class GeminiPcmBridge:
         )
 
     @classmethod
-    def for_browser_test(cls) -> "GeminiPcmBridge":
+    def for_browser_test(cls) -> GeminiPcmBridge:
         return cls(
             wire_format="pcm16",
             input_queue_frames=8,
@@ -142,7 +152,11 @@ class GeminiPcmBridge:
             return
 
         warm_session = await warm_sessions.pop(call_id)
-        agent = warm_session.agent if warm_session is not None else await fetch_agent_for_call(agent_id, call_id)
+        agent = (
+            warm_session.agent
+            if warm_session is not None
+            else await fetch_agent_for_call(agent_id, call_id)
+        )
         if warm_session is not None:
             prompt = prompt or warm_session.prompt
             metadata = {**warm_session.metadata, **(metadata or {})}
@@ -151,67 +165,125 @@ class GeminiPcmBridge:
         model = gemini_live_model(agent)
         voice = gemini_voice(agent)
         client = genai.Client(api_key=settings.gemini_api_key)
-        config = _live_config(types, system_prompt, voice, agent)
 
         input_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=self.input_queue_frames)
         barge_in = asyncio.Event()
         latency = PcmuLatency(call_id)
         transcript = TranscriptBuffer(call_id)
+        session_state: dict[str, str] = {}
         latency.mark("bridge_connected")
 
+        reader: asyncio.Task[None] | None = None
         try:
-            async with client.aio.live.connect(
-                model=model.replace("models/", ""),
-                config=config,
-            ) as session:
-                log.info(
-                    "gemini_pcm.connected",
-                    call_id=call_id,
-                    preconnected=warm_session is not None,
-                    model=model,
-                    voice=voice,
-                    bridge_mode=self.bridge_mode,
+            reader = asyncio.create_task(
+                _read_wire_audio(
+                    ws,
+                    input_queue,
+                    barge_in,
+                    call_id,
+                    latency,
                     wire_format=self.wire_format,
-                    input_queue_frames=self.input_queue_frames,
                     barge_in_enabled=self.barge_in_enabled,
                 )
-                latency.mark("gemini_ws_connected")
-                sender = asyncio.create_task(
-                    _send_caller_audio(session, types, input_queue, barge_in, call_id, latency)
+            )
+            for reconnect_attempt in range(3):
+                if reader.done():
+                    break
+                config = _live_config(
+                    types,
+                    system_prompt,
+                    voice,
+                    agent,
+                    session_resumption_handle=session_state.get("handle"),
                 )
-                receiver = asyncio.create_task(
-                    _receive_model_audio_loop(
-                        session,
-                        ws,
-                        barge_in,
-                        call_id,
-                        agent,
-                        latency,
-                        transcript,
-                        wire_format=self.wire_format,
-                    )
-                )
-                reader = asyncio.create_task(
-                    _read_wire_audio(
-                        ws,
-                        input_queue,
-                        barge_in,
-                        call_id,
-                        latency,
-                        wire_format=self.wire_format,
-                        barge_in_enabled=self.barge_in_enabled,
-                    )
-                )
-                done, pending = await asyncio.wait(
-                    {sender, receiver, reader}, return_when=asyncio.FIRST_COMPLETED
-                )
-                for task in pending:
-                    task.cancel()
-                for task in pending:
-                    with suppress(asyncio.CancelledError):
-                        await task
-                for task in done:
-                    task.result()
+                try:
+                    async with client.aio.live.connect(
+                        model=model.replace("models/", ""),
+                        config=config,
+                    ) as session:
+                        log.info(
+                            "gemini_pcm.connected",
+                            call_id=call_id,
+                            preconnected=warm_session is not None,
+                            resumed=bool(session_state.get("handle")),
+                            model=model,
+                            voice=voice,
+                            bridge_mode=self.bridge_mode,
+                            wire_format=self.wire_format,
+                            input_queue_frames=self.input_queue_frames,
+                            barge_in_enabled=self.barge_in_enabled,
+                        )
+                        latency.mark("gemini_ws_connected")
+                        sender = asyncio.create_task(
+                            _send_caller_audio(
+                                session, types, input_queue, barge_in, call_id, latency
+                            )
+                        )
+                        receiver = asyncio.create_task(
+                            _receive_model_audio_loop(
+                                session,
+                                ws,
+                                barge_in,
+                                call_id,
+                                agent,
+                                latency,
+                                transcript,
+                                wire_format=self.wire_format,
+                                session_state=session_state,
+                            )
+                        )
+                        done, pending = await asyncio.wait(
+                            {sender, receiver, reader}, return_when=asyncio.FIRST_COMPLETED
+                        )
+                        should_reconnect = (
+                            receiver in done
+                            and reader not in done
+                            and sender not in done
+                            and bool(session_state.get("handle"))
+                            and reconnect_attempt < 2
+                        )
+                        for task in pending:
+                            if task is reader and should_reconnect:
+                                continue
+                            task.cancel()
+                        for task in pending:
+                            if task is reader and should_reconnect:
+                                continue
+                            with suppress(asyncio.CancelledError):
+                                await task
+                        for task in done:
+                            try:
+                                task.result()
+                            except Exception as exc:  # noqa: BLE001
+                                if task is receiver and should_reconnect:
+                                    log.warning(
+                                        "gemini_pcm.receiver_reconnect",
+                                        call_id=call_id,
+                                        attempt=reconnect_attempt + 1,
+                                        error=str(exc),
+                                    )
+                                    break
+                                raise
+                        if should_reconnect:
+                            log.info(
+                                "gemini_pcm.reconnecting",
+                                call_id=call_id,
+                                attempt=reconnect_attempt + 1,
+                            )
+                            continue
+                        if reader in done or sender in done:
+                            break
+                        break
+                except Exception as exc:  # noqa: BLE001
+                    if session_state.get("handle") and not reader.done() and reconnect_attempt < 2:
+                        log.warning(
+                            "gemini_pcm.reconnect_after_error",
+                            call_id=call_id,
+                            attempt=reconnect_attempt + 1,
+                            error=str(exc),
+                        )
+                        continue
+                    raise
         except Exception as exc:  # noqa: BLE001
             if settings.low_latency_pcmu_bridge_strict:
                 log.exception("gemini_pcm.error", call_id=call_id, error=str(exc))
@@ -221,12 +293,23 @@ class GeminiPcmBridge:
                 log.exception("gemini_pcm.error", call_id=call_id, error=str(exc))
                 await echo_until_close(ws)
         finally:
+            if reader is not None and not reader.done():
+                reader.cancel()
+                with suppress(asyncio.CancelledError):
+                    await reader
             await transcript.flush()
             await latency.persist()
             await warm_sessions.cleanup(call_id)
 
 
-def _live_config(types: Any, system_prompt: str, voice: str, agent: dict[str, Any]) -> dict[str, Any]:
+def _live_config(
+    types: Any,
+    system_prompt: str,
+    voice: str,
+    agent: dict[str, Any],
+    *,
+    session_resumption_handle: str | None = None,
+) -> dict[str, Any]:
     config: dict[str, Any] = {
         "response_modalities": ["AUDIO"],
         "input_audio_transcription": {},
@@ -235,18 +318,19 @@ def _live_config(types: Any, system_prompt: str, voice: str, agent: dict[str, An
         "temperature": settings.gemini_live_temperature,
         "max_output_tokens": settings.gemini_live_max_tokens,
         "speech_config": {
-            "voice_config": {
-                "prebuilt_voice_config": {"voice_name": voice}
-            }
+            "voice_config": {"prebuilt_voice_config": {"voice_name": voice}}
         },
         "realtime_input_config": {
             "automatic_activity_detection": {
                 "disabled": False,
-                "prefix_padding_ms": settings.gemini_live_vad_prefix_padding_ms,
-                "silence_duration_ms": settings.gemini_live_vad_silence_ms,
+                "prefix_padding_ms": gemini_live_vad_prefix_padding_ms(agent),
+                "silence_duration_ms": gemini_live_vad_silence_ms(agent),
             }
         },
     }
+    if settings.gemini_live_context_compression_enabled:
+        config["context_window_compression"] = {"sliding_window": {}}
+    config["session_resumption"] = {"handle": session_resumption_handle}
     declarations = gemini_tool_declarations(agent)
     if declarations:
         config["tools"] = [{"function_declarations": declarations}]
@@ -326,6 +410,7 @@ async def _receive_model_audio(
     transcript: TranscriptBuffer,
     *,
     wire_format: str,
+    session_state: dict[str, str] | None = None,
 ) -> bool:
     publish_tasks: set[asyncio.Task[None]] = set()
     saw_item = False
@@ -338,7 +423,7 @@ async def _receive_model_audio(
                 log.warning("gemini_pcm.transcript_publish_failed", call_id=call_id, error=str(exc))
 
     try:
-        async for item in _iter_model_output(session, agent, call_id):
+        async for item in _iter_model_output(session, agent, call_id, session_state=session_state):
             saw_item = True
             if isinstance(item, ToolResponse):
                 await session.send_tool_response(function_responses=[item.payload])
@@ -390,6 +475,7 @@ async def _receive_model_audio_loop(
     transcript: TranscriptBuffer,
     *,
     wire_format: str,
+    session_state: dict[str, str] | None = None,
 ) -> None:
     while True:
         saw_item = await _receive_model_audio(
@@ -401,6 +487,7 @@ async def _receive_model_audio_loop(
             latency,
             transcript,
             wire_format=wire_format,
+            session_state=session_state,
         )
         if not saw_item:
             return
@@ -434,16 +521,31 @@ async def _iter_model_output(
     session: Any,
     agent: dict[str, Any],
     call_id: str,
+    *,
+    session_state: dict[str, str] | None = None,
 ) -> AsyncIterator[bytes | ToolResponse | TranscriptUpdate]:
     output_transcript_chunks: list[str] = []
     async for response in session.receive():
+        _capture_session_resumption(call_id, response, session_state)
+        go_away = getattr(response, "go_away", None)
+        if go_away is not None:
+            log.info("gemini_pcm.go_away", call_id=call_id, time_left=str(getattr(go_away, "time_left", "")))
         tool_call = getattr(response, "tool_call", None)
         calls = getattr(tool_call, "function_calls", None) or []
         for call in calls:
             name = str(getattr(call, "name", "") or "")
             args = getattr(call, "args", None) or {}
             call_id_part = str(getattr(call, "id", "") or name)
+            started = _now_ms()
             result = await execute_agent_tool(agent, call_id=call_id, name=name, arguments=dict(args))
+            log.info(
+                "gemini_pcm.tool_result",
+                call_id=call_id,
+                name=name,
+                ok=bool(result.get("ok")),
+                source=result.get("source"),
+                latency_ms=round(_now_ms() - started, 2),
+            )
             yield ToolResponse({"id": call_id_part, "name": name, "response": result})
         content = getattr(response, "server_content", None)
         input_text = _transcription_text(getattr(content, "input_transcription", None))
@@ -472,6 +574,21 @@ async def _iter_model_output(
                 yield data
     if output_transcript_chunks:
         yield TranscriptUpdate("agent", _join_transcript_chunks(output_transcript_chunks))
+
+
+def _capture_session_resumption(
+    call_id: str,
+    response: Any,
+    session_state: dict[str, str] | None,
+) -> None:
+    update = getattr(response, "session_resumption_update", None)
+    if update is None:
+        return
+    handle = str(getattr(update, "new_handle", "") or "")
+    resumable = bool(getattr(update, "resumable", False))
+    log.info("gemini_pcm.session_resumption_update", call_id=call_id, resumable=resumable)
+    if resumable and handle and session_state is not None:
+        session_state["handle"] = handle
 
 
 def _transcription_text(value: Any, *, strip: bool = True) -> str:
