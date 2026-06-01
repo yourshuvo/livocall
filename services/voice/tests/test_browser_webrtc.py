@@ -186,6 +186,66 @@ def test_browser_webrtc_patch_normalizes_ice_candidate_dicts(monkeypatch) -> Non
         assert candidate.sdp_mline_index == 0
 
 
+def test_browser_webrtc_patch_accepts_null_mline_index_with_numeric_mid(monkeypatch) -> None:
+    _enable_browser_webrtc(monkeypatch)
+    token = ws_auth.sign("call-1")
+
+    with TestClient(app) as client:
+        offer_res = client.post(
+            f"/webrtc/browser-offer?call_id=call-1&agent_id=agent-1&tier=gemini_live&auth={token}",
+            json={"sdp": "offer-sdp", "type": "offer"},
+        )
+        patch_res = client.patch(
+            f"/webrtc/browser-offer?call_id=call-1&agent_id=agent-1&tier=gemini_live&auth={token}",
+            json={
+                "pc_id": "pc-test",
+                "candidates": [
+                    {
+                        "candidate": "candidate:2 1 udp 1694498815 203.0.113.1 50000 typ relay",
+                        "sdp_mid": "2",
+                        "sdp_mline_index": None,
+                    }
+                ],
+            },
+        )
+
+        assert offer_res.status_code == 200
+        assert patch_res.status_code == 200
+        handler = browser_webrtc._small_webrtc_handler
+        assert isinstance(handler, FakeHandler)
+        candidate = handler.patches[-1].kwargs["candidates"][0]
+        assert isinstance(candidate, FakeIceCandidate)
+        assert candidate.sdp_mid == "2"
+        assert candidate.sdp_mline_index == 2
+
+
+def test_browser_webrtc_patch_ignores_empty_ice_candidate_markers(monkeypatch) -> None:
+    _enable_browser_webrtc(monkeypatch)
+    token = ws_auth.sign("call-1")
+
+    with TestClient(app) as client:
+        offer_res = client.post(
+            f"/webrtc/browser-offer?call_id=call-1&agent_id=agent-1&tier=gemini_live&auth={token}",
+            json={"sdp": "offer-sdp", "type": "offer"},
+        )
+        patch_res = client.patch(
+            f"/webrtc/browser-offer?call_id=call-1&agent_id=agent-1&tier=gemini_live&auth={token}",
+            json={
+                "pc_id": "pc-test",
+                "candidates": [
+                    {"candidate": "", "sdp_mid": "0", "sdp_mline_index": 0},
+                    {"candidate": None, "sdp_mid": "1", "sdp_mline_index": 1},
+                ],
+            },
+        )
+
+        assert offer_res.status_code == 200
+        assert patch_res.status_code == 200
+        handler = browser_webrtc._small_webrtc_handler
+        assert isinstance(handler, FakeHandler)
+        assert handler.patches[-1].kwargs["candidates"] == []
+
+
 def test_gemini_live_tools_wrap_function_declarations() -> None:
     declaration = {
         "name": "search_knowledge_base",

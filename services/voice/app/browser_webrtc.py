@@ -166,6 +166,10 @@ def _patch_request_model(imports: PipecatWebRTCImports, body: dict[str, Any]) ->
         normalized["pc_id"] = normalized.pop("pcId")
     pc_id = normalized.get("pc_id")
     candidates = normalized.get("candidates")
+    if candidates is None and "candidate" in normalized:
+        candidates = [normalized["candidate"]]
+    if isinstance(candidates, dict):
+        candidates = [candidates]
     if not isinstance(pc_id, str) or not pc_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing pc_id")
     if not isinstance(candidates, list):
@@ -181,10 +185,16 @@ def _patch_request_model(imports: PipecatWebRTCImports, body: dict[str, Any]) ->
         raw_candidate = candidate.get("candidate")
         sdp_mid = candidate.get("sdp_mid", candidate.get("sdpMid"))
         sdp_mline_index = candidate.get("sdp_mline_index", candidate.get("sdpMLineIndex"))
-        if not isinstance(raw_candidate, str) or not raw_candidate:
+        if not raw_candidate:
+            continue
+        if not isinstance(raw_candidate, str):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid ICE candidate")
         try:
-            parsed_sdp_mline_index = int(sdp_mline_index)
+            parsed_sdp_mline_index = (
+                int(sdp_mid)
+                if sdp_mline_index is None and isinstance(sdp_mid, str) and sdp_mid.isdecimal()
+                else int(sdp_mline_index)
+            )
         except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -247,7 +257,18 @@ async def handle_ice_candidate(request: Request) -> dict[str, str]:
     imports = _load_webrtc_imports()
     handler = _get_handler(imports)
     body = await request.json()
-    patch = _patch_request_model(imports, body)
+    try:
+        patch = _patch_request_model(imports, body)
+    except HTTPException as exc:
+        candidates = body.get("candidates") if isinstance(body, dict) else None
+        log.warning(
+            "browser_webrtc.patch_rejected",
+            call_id=context.call_id,
+            detail=exc.detail,
+            body_keys=sorted(body.keys()) if isinstance(body, dict) else [],
+            candidate_count=len(candidates) if isinstance(candidates, list) else None,
+        )
+        raise
     await handler.handle_patch_request(patch)
     return {"status": "success", "callId": context.call_id}
 
