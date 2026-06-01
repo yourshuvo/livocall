@@ -151,8 +151,9 @@ export const POST = withErrors(async (req: Request) => {
     call.transcript = compliantCall.transcript
     call.metadata = compliantCall.metadata
   }
+  const isBrowserTest = isDashboardBrowserTest(call.metadata)
   const agent = await Agent.findOne({ _id: call.agentId, orgId: call.orgId }).lean()
-  if (data.outcome === 'completed') {
+  if (!isBrowserTest && data.outcome === 'completed') {
     const analyzed = await analyzeBusinessOutcome(compliantCall || call, agent)
     if (analyzed) {
       call.businessOutcome = toStoredBusinessOutcome(analyzed)
@@ -160,10 +161,12 @@ export const POST = withErrors(async (req: Request) => {
       await updateCampaignAttemptWithBusinessOutcome(call)
     }
   }
-  await completeMissedCallbackAttempt(call)
-  await enqueueMissedCallbackForCall(call)
+  if (!isBrowserTest) {
+    await completeMissedCallbackAttempt(call)
+    await enqueueMissedCallbackForCall(call)
+  }
 
-  if (data.cost && data.cost.totalPaisa > 0) {
+  if (!isBrowserTest && data.cost && data.cost.totalPaisa > 0) {
     await postLedger({
       orgId: String(call.orgId),
       kind: 'usage',
@@ -171,6 +174,10 @@ export const POST = withErrors(async (req: Request) => {
       description: `${call.tier} call ${data.durationSec}s`,
       callId: String(call._id),
     }).catch(() => {})
+  }
+
+  if (isBrowserTest) {
+    return NextResponse.json({ ok: true })
   }
 
   const event = data.outcome === 'completed' ? 'call.completed' : 'call.failed'
@@ -195,6 +202,14 @@ export const POST = withErrors(async (req: Request) => {
 
   return NextResponse.json({ ok: true })
 })
+
+function isDashboardBrowserTest(metadata: unknown): boolean {
+  return (
+    typeof metadata === 'object' &&
+    metadata !== null &&
+    String((metadata as Record<string, unknown>).source || '') === 'dashboard-browser-test'
+  )
+}
 
 function toStoredBusinessOutcome(outcome: Awaited<ReturnType<typeof analyzeBusinessOutcome>>) {
   if (!outcome) return undefined

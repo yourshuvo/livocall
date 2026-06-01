@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -17,6 +18,7 @@ from app.agent_runtime import (
 from app.persistence import TranscriptBuffer
 from app.settings import settings
 from app.tiers._common import fetch_agent_for_call
+from app.web_client import post_voice_event
 from app.ws_auth import verify as ws_verify
 
 log = structlog.get_logger()
@@ -218,6 +220,15 @@ def _gemini_live_tools(declarations: list[dict[str, Any]]) -> list[dict[str, Any
     return [{"function_declarations": declarations}]
 
 
+def _register_live_tool_handler(llm: Any, handler: Callable[[Any], Awaitable[None]], tools: list[dict[str, Any]]) -> None:
+    if tools:
+        llm.register_function(None, handler, cancel_on_interruption=False)
+
+
+def _is_dashboard_browser_test(metadata: dict[str, str] | None) -> bool:
+    return (metadata or {}).get("source") == "dashboard-browser-test"
+
+
 async def handle_offer(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -286,7 +297,10 @@ async def run_browser_gemini_bot(
         return
 
     try:
-        from pipecat.frames.frames import LLMRunFrame  # type: ignore[import-not-found]
+        from pipecat.frames.frames import (  # type: ignore[import-not-found]
+            FunctionCallResultProperties,
+            LLMRunFrame,
+        )
         from pipecat.pipeline.pipeline import Pipeline  # type: ignore[import-not-found]
         from pipecat.pipeline.worker import (  # type: ignore[import-not-found]
             PipelineParams,
@@ -326,6 +340,9 @@ async def run_browser_gemini_bot(
     voice = gemini_voice(agent)
     tools = gemini_tool_declarations(agent)
     transcript = TranscriptBuffer(call_id)
+    started_at = datetime.now(UTC)
+    outcome = "completed"
+    hangup_cause = "browser_test_disconnected"
 
     transport = SmallWebRTCTransport(
         webrtc_connection=webrtc_connection,
@@ -363,10 +380,9 @@ async def run_browser_gemini_bot(
             name=str(params.function_name),
             arguments=dict(params.arguments or {}),
         )
-        await params.result_callback(result)
+        await params.result_callback(result, properties=FunctionCallResultProperties(run_llm=True))
 
-    if tools:
-        llm.register_function(None, handle_tool_call)
+    _register_live_tool_handler(llm, handle_tool_call, tools)
 
     initial_messages = []
     if _should_start_with_ai(agent):
@@ -417,21 +433,43 @@ async def run_browser_gemini_bot(
         await runner.add_workers(worker)
         await runner.run()
     except Exception as exc:  # noqa: BLE001
+        outcome = "failed"
+        hangup_cause = "browser_webrtc_error"
         log.exception("browser_webrtc.error", call_id=call_id, error=str(exc))
     finally:
-        for msg in getattr(context, "messages", []) or []:
-            if isinstance(msg, dict):
-                role = str(msg.get("role", ""))
-                text = str(msg.get("content", "")).strip()
-            else:
-                role = str(getattr(msg, "role", ""))
-                text = str(getattr(msg, "content", "")).strip()
-            if role == "system" or not text:
-                continue
-            if text.startswith("Start the live browser call now"):
-                continue
-            await transcript.add("agent" if role == "assistant" else "user", text)
-        await transcript.flush()
+        if _is_dashboard_browser_test(metadata):
+            ended_at = datetime.now(UTC)
+            await post_voice_event(
+                {
+                    "type": "call.completed",
+                    "callId": call_id,
+                    "endedAt": ended_at.isoformat(),
+                    "durationSec": max(0, int((ended_at - started_at).total_seconds())),
+                    "outcome": outcome,
+                    "cost": {
+                        "sttPaisa": 0,
+                        "llmPaisa": 0,
+                        "ttsPaisa": 0,
+                        "sipPaisa": 0,
+                        "totalPaisa": 0,
+                    },
+                    "hangupCause": hangup_cause,
+                }
+            )
+        else:
+            for msg in getattr(context, "messages", []) or []:
+                if isinstance(msg, dict):
+                    role = str(msg.get("role", ""))
+                    text = str(msg.get("content", "")).strip()
+                else:
+                    role = str(getattr(msg, "role", ""))
+                    text = str(getattr(msg, "content", "")).strip()
+                if role == "system" or not text:
+                    continue
+                if text.startswith("Start the live browser call now"):
+                    continue
+                await transcript.add("agent" if role == "assistant" else "user", text)
+            await transcript.flush()
 
 
 def _should_start_with_ai(agent: dict[str, Any]) -> bool:

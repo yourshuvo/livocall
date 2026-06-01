@@ -32,6 +32,7 @@ export default async function MonitoringPage() {
           toE164: json.toE164,
           startedAt: json.startedAt,
           transcript: json.transcript,
+          metadata: json.metadata,
         }
       })
       agentNames = Object.fromEntries(agents.map((agent) => [String(agent._id), agent.name]))

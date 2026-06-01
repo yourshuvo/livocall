@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { api } from '@/lib/api-fetch'
-import { fmtDate, fmtDuration, fmtPhoneE164 } from '@/lib/format'
+import { fmtDate, fmtDuration, fmtPhoneE164, isBrowserTestCall } from '@/lib/format'
 import { useToast } from '@/components/ui/toast'
 
 const LIVE_REFRESH_MS = 2000
@@ -26,6 +26,7 @@ export interface MonitoringCall {
   toE164: string
   startedAt: string | null
   transcript: { role: string; text: string; at: string | null }[]
+  metadata?: Record<string, unknown>
 }
 
 export function MonitoringClient({
@@ -121,6 +122,7 @@ export function MonitoringClient({
               <p className="text-fg-muted text-[13px]">No live calls right now.</p>
             ) : (
               calls.map((call) => {
+                const browserTest = isBrowserTestCall(call.metadata)
                 const latest = call.transcript[call.transcript.length - 1]
                 const recentTranscript = call.transcript.slice(-4)
                 const startedAt = call.startedAt ? new Date(call.startedAt) : null
@@ -138,7 +140,9 @@ export function MonitoringClient({
                         <div className="flex items-center gap-2">
                           <Badge variant="live">live</Badge>
                           <span className="text-fg-muted font-mono text-[12px]">
-                            {fmtPhoneE164(call.fromE164)} {'->'} {fmtPhoneE164(call.toE164)}
+                            {browserTest
+                              ? 'Browser test'
+                              : `${fmtPhoneE164(call.fromE164)} -> ${fmtPhoneE164(call.toE164)}`}
                           </span>
                         </div>
                         <p className="text-fg-muted mt-1 text-[13px]">

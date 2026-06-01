@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/icon'
 import { connectMongo, isMongoConfigured } from '@/lib/db'
 import { getSession } from '@/lib/session'
 import { Call, type CallLean } from '@/models/Call'
-import { fmtBdt, fmtDate, fmtDuration, fmtPhoneE164 } from '@/lib/format'
+import { fmtBdt, fmtDate, fmtDuration, fmtPhoneE164, isBrowserTestCall } from '@/lib/format'
 import { tierBadge } from '@/types/agent'
 import { cn } from '@/lib/cn'
 import { CreateAgentButton } from '../agents/create-agent-button'
@@ -200,52 +200,61 @@ export default async function CallsPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {calls.map((c) => (
-                      <tr
-                        key={String(c._id)}
-                        className="border-line hover:bg-bg-subtle/40 cursor-pointer border-t transition"
-                      >
-                        <td className="text-fg-muted px-5 py-3">
-                          <Link href={`/calls/${c._id}`} className="block">
-                            {fmtDate(c.startedAt)}
-                          </Link>
-                        </td>
-                        <td className="px-5 py-3">
-                          <DirectionPill direction={c.direction} />
-                        </td>
-                        <td className="px-5 py-3 font-mono text-xs">
-                          <Link href={`/calls/${c._id}`}>
-                            <span className="text-fg">{fmtPhoneE164(c.fromE164)}</span>
-                            <Icon name="arrow-right" size="xs" className="text-fg-faint mx-1.5" />
-                            <span className="text-fg">{fmtPhoneE164(c.toE164)}</span>
-                          </Link>
-                        </td>
-                        <td className="px-5 py-3">
-                          <Badge variant="outline">{tierBadge[c.tier]}</Badge>
-                        </td>
-                        <td className="px-5 py-3">
-                          <OutcomeBadge outcome={c.outcome} />
-                        </td>
-                        <td className="px-5 py-3">
-                          <BusinessOutcomeBadge outcome={c.businessOutcome} />
-                        </td>
-                        <td className="text-fg px-5 py-3 text-right font-mono text-xs">
-                          {fmtDuration(c.durationSec || 0)}
-                        </td>
-                        <td className="text-fg px-5 py-3 text-right font-mono text-xs">
-                          {fmtBdt(c.cost?.totalPaisa || 0)}
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <Link
-                            href={`/calls/${c._id}`}
-                            className="border-line bg-bg text-fg-muted hover:border-fg/30 hover:text-fg inline-flex size-7 items-center justify-center rounded-md border transition"
-                            aria-label="Open call"
-                          >
-                            <Icon name="chevron-right" size="sm" />
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
+                    {calls.map((c) => {
+                      const browserTest = isBrowserTestCall(c.metadata)
+                      return (
+                        <tr
+                          key={String(c._id)}
+                          className="border-line hover:bg-bg-subtle/40 cursor-pointer border-t transition"
+                        >
+                          <td className="text-fg-muted px-5 py-3">
+                            <Link href={`/calls/${c._id}`} className="block">
+                              {fmtDate(c.startedAt)}
+                            </Link>
+                          </td>
+                          <td className="px-5 py-3">
+                            <DirectionPill direction={c.direction} />
+                          </td>
+                          <td className="px-5 py-3 font-mono text-xs">
+                            <Link href={`/calls/${c._id}`}>
+                              {browserTest ? (
+                                <span className="text-fg">Browser test</span>
+                              ) : (
+                                <>
+                                  <span className="text-fg">{fmtPhoneE164(c.fromE164)}</span>
+                                  <Icon name="arrow-right" size="xs" className="text-fg-faint mx-1.5" />
+                                  <span className="text-fg">{fmtPhoneE164(c.toE164)}</span>
+                                </>
+                              )}
+                            </Link>
+                          </td>
+                          <td className="px-5 py-3">
+                            <Badge variant="outline">{tierBadge[c.tier]}</Badge>
+                          </td>
+                          <td className="px-5 py-3">
+                            <OutcomeBadge outcome={c.outcome} />
+                          </td>
+                          <td className="px-5 py-3">
+                            <BusinessOutcomeBadge outcome={c.businessOutcome} />
+                          </td>
+                          <td className="text-fg px-5 py-3 text-right font-mono text-xs">
+                            {fmtDuration(c.durationSec || 0)}
+                          </td>
+                          <td className="text-fg px-5 py-3 text-right font-mono text-xs">
+                            {fmtBdt(c.cost?.totalPaisa || 0)}
+                          </td>
+                          <td className="px-5 py-3 text-right">
+                            <Link
+                              href={`/calls/${c._id}`}
+                              className="border-line bg-bg text-fg-muted hover:border-fg/30 hover:text-fg inline-flex size-7 items-center justify-center rounded-md border transition"
+                              aria-label="Open call"
+                            >
+                              <Icon name="chevron-right" size="sm" />
+                            </Link>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

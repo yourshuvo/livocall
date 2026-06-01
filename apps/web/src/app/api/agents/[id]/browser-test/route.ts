@@ -13,6 +13,7 @@ import {
 } from '@/lib/api-helpers'
 import { apiError, withErrors } from '@/lib/errors'
 import { Agent } from '@/models/Agent'
+import { Call } from '@/models/Call'
 
 export const POST = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params
@@ -36,6 +37,12 @@ export const POST = withErrors(async (_req: Request, ctx: { params: Promise<{ id
     if (!webrtcUrl) {
       return apiError('upstream_error', 'browser WebRTC is not configured')
     }
+    await createBrowserTestCall({
+      callId,
+      orgId: session.orgId,
+      agentId: oid,
+      tier: agent.tier,
+    })
     webrtcUrl.searchParams.set('call_id', callId)
     webrtcUrl.searchParams.set('agent_id', String(oid))
     webrtcUrl.searchParams.set('tier', agent.tier)
@@ -71,6 +78,41 @@ export const POST = withErrors(async (_req: Request, ctx: { params: Promise<{ id
     outputSampleRate: agent.tier === 'grok_voice' || agent.tier === 'dtmf' ? 16000 : 24000,
   })
 })
+
+async function createBrowserTestCall({
+  callId,
+  orgId,
+  agentId,
+  tier,
+}: {
+  callId: string
+  orgId: string
+  agentId: Types.ObjectId
+  tier: 'gemini_live' | 'grok_voice' | 'pipeline' | 'dtmf'
+}) {
+  const startedAt = new Date()
+  await Call.create({
+    _id: new Types.ObjectId(callId),
+    orgId,
+    agentId,
+    direction: 'outbound',
+    fromE164: 'browser-test',
+    toE164: 'browser-test',
+    tier,
+    startedAt,
+    outcome: 'in_progress',
+    transcript: [],
+    cost: {
+      sttPaisa: 0,
+      llmPaisa: 0,
+      ttsPaisa: 0,
+      sipPaisa: 0,
+      totalPaisa: 0,
+    },
+    metadata: { source: 'dashboard-browser-test' },
+    latency: { callCreatedAt: startedAt.toISOString() },
+  })
+}
 
 type IceServer = {
   urls: string | string[]

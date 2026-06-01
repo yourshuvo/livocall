@@ -5,7 +5,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app import browser_webrtc, ws_auth
-from app.browser_webrtc import PipecatWebRTCImports, _gemini_live_tools
+from app.browser_webrtc import PipecatWebRTCImports, _gemini_live_tools, _register_live_tool_handler
 from app.main import app
 
 
@@ -49,6 +49,14 @@ class FakeHandler:
 
     async def close(self) -> None:
         return None
+
+
+class FakeLLM:
+    def __init__(self) -> None:
+        self.registrations: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    def register_function(self, *args: Any, **kwargs: Any) -> None:
+        self.registrations.append((args, kwargs))
 
 
 def _fake_imports() -> PipecatWebRTCImports:
@@ -255,3 +263,28 @@ def test_gemini_live_tools_wrap_function_declarations() -> None:
 
     assert _gemini_live_tools([]) is None
     assert _gemini_live_tools([declaration]) == [{"function_declarations": [declaration]}]
+
+
+async def _fake_tool_handler(params: Any) -> None:
+    return None
+
+
+def test_live_tool_handler_survives_interruption() -> None:
+    llm = FakeLLM()
+    _register_live_tool_handler(
+        llm,
+        _fake_tool_handler,
+        [{"name": "search_knowledge_base"}],
+    )
+
+    assert len(llm.registrations) == 1
+    args, kwargs = llm.registrations[0]
+    assert args == (None, _fake_tool_handler)
+    assert kwargs == {"cancel_on_interruption": False}
+
+
+def test_live_tool_handler_skips_registration_without_tools() -> None:
+    llm = FakeLLM()
+    _register_live_tool_handler(llm, _fake_tool_handler, [])
+
+    assert llm.registrations == []

@@ -5,6 +5,7 @@ const turnSchema = new Schema(
     role: { type: String, enum: ['user', 'agent', 'system'], required: true },
     text: { type: String, required: true },
     at: { type: Date, default: Date.now },
+    clientTurnId: { type: String },
   },
   { _id: false },
 )

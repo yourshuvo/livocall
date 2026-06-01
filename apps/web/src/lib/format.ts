@@ -27,3 +27,11 @@ export function fmtPhoneE164(e164: string): string {
   if (!e164.startsWith('+880') || e164.length !== 14) return e164
   return `+880 ${e164.slice(4, 6)} ${e164.slice(6, 9)} ${e164.slice(9, 12)} ${e164.slice(12)}`
 }
+
+export function isBrowserTestCall(metadata: unknown): boolean {
+  return (
+    typeof metadata === 'object' &&
+    metadata !== null &&
+    String((metadata as Record<string, unknown>).source || '') === 'dashboard-browser-test'
+  )
+}
