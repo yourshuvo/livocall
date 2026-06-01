@@ -5,7 +5,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app import browser_webrtc, ws_auth
-from app.browser_webrtc import PipecatWebRTCImports
+from app.browser_webrtc import PipecatWebRTCImports, _gemini_live_tools
 from app.main import app
 
 
@@ -184,3 +184,14 @@ def test_browser_webrtc_patch_normalizes_ice_candidate_dicts(monkeypatch) -> Non
         assert candidate.candidate.startswith("candidate:1 ")
         assert candidate.sdp_mid == "0"
         assert candidate.sdp_mline_index == 0
+
+
+def test_gemini_live_tools_wrap_function_declarations() -> None:
+    declaration = {
+        "name": "search_knowledge_base",
+        "description": "Search the knowledge base.",
+        "parameters": {"type": "OBJECT", "properties": {"query": {"type": "STRING"}}},
+    }
+
+    assert _gemini_live_tools([]) is None
+    assert _gemini_live_tools([declaration]) == [{"function_declarations": [declaration]}]

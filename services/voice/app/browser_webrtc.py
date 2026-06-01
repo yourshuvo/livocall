@@ -202,6 +202,12 @@ def _patch_request_model(imports: PipecatWebRTCImports, body: dict[str, Any]) ->
     return _request_model(imports.SmallWebRTCPatchRequest, normalized)
 
 
+def _gemini_live_tools(declarations: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    if not declarations:
+        return None
+    return [{"function_declarations": declarations}]
+
+
 async def handle_offer(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -310,7 +316,7 @@ async def run_browser_gemini_bot(
     )
     llm = GeminiLiveLLMService(
         api_key=settings.gemini_api_key,
-        tools=tools or None,
+        tools=_gemini_live_tools(tools),
         settings=GeminiLiveLLMService.Settings(
             model=model,
             voice=voice,
