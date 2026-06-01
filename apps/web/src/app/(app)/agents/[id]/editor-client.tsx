@@ -148,6 +148,8 @@ interface LlmChatMessage {
 
 interface BrowserAudioSession {
   stream?: MediaStream
+  remoteStream?: MediaStream
+  remoteAudio?: HTMLAudioElement
   context?: AudioContext
   source?: MediaStreamAudioSourceNode
   processor?: ScriptProcessorNode
@@ -2985,6 +2987,14 @@ function closeBrowserAudioSession(session: BrowserAudioSession | null, closeSock
   for (const track of session.stream?.getTracks() ?? []) {
     track.stop()
   }
+  for (const track of session.remoteStream?.getTracks() ?? []) {
+    track.stop()
+  }
+  if (session.remoteAudio) {
+    session.remoteAudio.pause()
+    session.remoteAudio.srcObject = null
+    session.remoteAudio.remove()
+  }
   if (
     closeSocket &&
     session.socket &&
@@ -3020,6 +3030,16 @@ async function connectBrowserWebrtcSession(
       onBotDisconnected: handlers.onDisconnected,
       onError: handlers.onError,
       onDeviceError: handlers.onError,
+      onTrackStarted: (track) => {
+        attachBrowserWebrtcAudioTrack(audioSession, track)
+      },
+      onTrackStopped: (track) => {
+        if (track.kind !== 'audio') return
+        audioSession.remoteAudio?.pause()
+        audioSession.remoteAudio?.remove()
+        audioSession.remoteAudio = undefined
+        audioSession.remoteStream = undefined
+      },
       onTransportStateChanged: (state) => {
         if (state === 'error') handlers.onError()
       },
@@ -3034,6 +3054,29 @@ async function connectBrowserWebrtcSession(
     iceConfig: {
       iceServers,
     },
+  })
+}
+
+function attachBrowserWebrtcAudioTrack(session: BrowserAudioSession, track: MediaStreamTrack) {
+  if (track.kind !== 'audio') return
+  session.remoteAudio?.pause()
+  session.remoteAudio?.remove()
+
+  const stream = new MediaStream([track])
+  const audio = document.createElement('audio')
+  audio.autoplay = true
+  audio.setAttribute('playsinline', 'true')
+  audio.muted = false
+  audio.volume = 1
+  audio.srcObject = stream
+  audio.style.display = 'none'
+  document.body.appendChild(audio)
+
+  session.remoteStream = stream
+  session.remoteAudio = audio
+  void audio.play().catch(() => {
+    // The call starts from a user gesture, but mobile browsers can still race
+    // the remote track. A later user interaction will unlock the element.
   })
 }
 
