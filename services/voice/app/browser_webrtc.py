@@ -259,7 +259,6 @@ async def run_browser_gemini_bot(
         return
 
     try:
-        from pipecat.audio.vad.silero import SileroVADAnalyzer  # type: ignore[import-not-found]
         from pipecat.frames.frames import LLMRunFrame  # type: ignore[import-not-found]
         from pipecat.pipeline.pipeline import Pipeline  # type: ignore[import-not-found]
         from pipecat.pipeline.worker import (  # type: ignore[import-not-found]
@@ -285,10 +284,12 @@ async def run_browser_gemini_bot(
             SmallWebRTCTransport,  # type: ignore[import-not-found]
         )
         from pipecat.workers.runner import WorkerRunner  # type: ignore[import-not-found]
-    except ImportError:
+    except ImportError as exc:
         log.warning(
             "browser_webrtc.pipecat_missing",
             hint="pip install -e '.[voice]' to enable browser WebRTC",
+            missing_module=getattr(exc, "name", ""),
+            error=str(exc),
         )
         return
 
@@ -351,7 +352,7 @@ async def run_browser_gemini_bot(
     context = LLMContext(initial_messages)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
-        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+        user_params=LLMUserAggregatorParams(),
     )
     pipeline = Pipeline(
         [
