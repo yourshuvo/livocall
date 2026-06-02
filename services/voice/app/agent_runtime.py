@@ -222,6 +222,13 @@ async def build_system_prompt(agent: dict[str, Any], override: str = "", *, kb_q
         "keep most replies under one short sentence, and never silently wait on slow tools. "
         'If a lookup may take time, first say "one moment, I am checking..." then use the tool.'
     )
+    if str(agent.get("tier") or "") == "gemini_live" and _is_bangla_language(
+        str(agent.get("language") or settings.gemini_live_language)
+    ):
+        system_prompt = (
+            f"{system_prompt}\n\nLanguage rule: speak only Bangla/Bengali. "
+            "Do not switch to English except for names, product names, URLs, or unavoidable technical terms."
+        )
     memory = await gemini_memory_context(agent)
     if memory:
         system_prompt = (
@@ -264,6 +271,10 @@ async def build_system_prompt(agent: dict[str, Any], override: str = "", *, kb_q
     elif welcome_mode == "silent":
         system_prompt = f"{system_prompt}\n\nOpening behavior: stay silent until the caller speaks or the dialplan prompts you."
     return system_prompt
+
+
+def _is_bangla_language(language: str) -> bool:
+    return language.strip() in {"bn", "bn-BD"}
 
 
 def configured_tools(agent: dict[str, Any]) -> list[dict[str, Any]]:

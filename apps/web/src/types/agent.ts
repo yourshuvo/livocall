@@ -17,15 +17,19 @@ export type AgentLanguage = (typeof agentLanguageOptions)[number]['k']
 export const defaultAgentLanguageCodes = ['bn-en-mixed', 'bn-BD', 'en-US'] as const
 
 export function languageOptionsForTier(tier: Tier) {
-  return tier === 'grok_voice'
-    ? agentLanguageOptions.filter((l) => l.grokSupported)
-    : agentLanguageOptions.filter((l) =>
-        (defaultAgentLanguageCodes as readonly string[]).includes(l.k),
-      )
+  if (tier === 'grok_voice') return agentLanguageOptions.filter((l) => l.grokSupported)
+  if (tier === 'gemini_live') {
+    return agentLanguageOptions.filter((l) =>
+      (['bn', ...defaultAgentLanguageCodes] as readonly string[]).includes(l.k),
+    )
+  }
+  return agentLanguageOptions.filter((l) =>
+    (defaultAgentLanguageCodes as readonly string[]).includes(l.k),
+  )
 }
 
 export function defaultLanguageForTier(tier: Tier): AgentLanguage {
-  return tier === 'grok_voice' ? 'bn' : 'bn-en-mixed'
+  return tier === 'grok_voice' || tier === 'gemini_live' ? 'bn' : 'bn-en-mixed'
 }
 
 export type AgentStatus = 'draft' | 'live'

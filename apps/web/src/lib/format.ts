@@ -29,9 +29,23 @@ export function fmtPhoneE164(e164: string): string {
 }
 
 export function isBrowserTestCall(metadata: unknown): boolean {
+  return Boolean(browserTestCallLabel(metadata))
+}
+
+export function browserTestCallLabel(metadata: unknown): string {
+  if (typeof metadata !== 'object' || metadata === null) return ''
+  const source = String((metadata as Record<string, unknown>).source || '')
+  if (source === 'dashboard-browser-test') return 'Browser test'
+  if (source === 'landing-webcall') return 'Webcall demo'
+  return ''
+}
+
+export function isNonBillableTestCall(metadata: unknown): boolean {
   return (
     typeof metadata === 'object' &&
     metadata !== null &&
-    String((metadata as Record<string, unknown>).source || '') === 'dashboard-browser-test'
+    ['dashboard-browser-test', 'landing-webcall'].includes(
+      String((metadata as Record<string, unknown>).source || ''),
+    )
   )
 }

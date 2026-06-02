@@ -151,9 +151,9 @@ export const POST = withErrors(async (req: Request) => {
     call.transcript = compliantCall.transcript
     call.metadata = compliantCall.metadata
   }
-  const isBrowserTest = isDashboardBrowserTest(call.metadata)
+  const isTestSession = isNonBillableTestSession(call.metadata)
   const agent = await Agent.findOne({ _id: call.agentId, orgId: call.orgId }).lean()
-  if (!isBrowserTest && data.outcome === 'completed') {
+  if (!isTestSession && data.outcome === 'completed') {
     const analyzed = await analyzeBusinessOutcome(compliantCall || call, agent)
     if (analyzed) {
       call.businessOutcome = toStoredBusinessOutcome(analyzed)
@@ -161,12 +161,12 @@ export const POST = withErrors(async (req: Request) => {
       await updateCampaignAttemptWithBusinessOutcome(call)
     }
   }
-  if (!isBrowserTest) {
+  if (!isTestSession) {
     await completeMissedCallbackAttempt(call)
     await enqueueMissedCallbackForCall(call)
   }
 
-  if (!isBrowserTest && data.cost && data.cost.totalPaisa > 0) {
+  if (!isTestSession && data.cost && data.cost.totalPaisa > 0) {
     await postLedger({
       orgId: String(call.orgId),
       kind: 'usage',
@@ -176,7 +176,7 @@ export const POST = withErrors(async (req: Request) => {
     }).catch(() => {})
   }
 
-  if (isBrowserTest) {
+  if (isTestSession) {
     return NextResponse.json({ ok: true })
   }
 
@@ -203,12 +203,10 @@ export const POST = withErrors(async (req: Request) => {
   return NextResponse.json({ ok: true })
 })
 
-function isDashboardBrowserTest(metadata: unknown): boolean {
-  return (
-    typeof metadata === 'object' &&
-    metadata !== null &&
-    String((metadata as Record<string, unknown>).source || '') === 'dashboard-browser-test'
-  )
+function isNonBillableTestSession(metadata: unknown): boolean {
+  if (typeof metadata !== 'object' || metadata === null) return false
+  const source = String((metadata as Record<string, unknown>).source || '')
+  return source === 'dashboard-browser-test' || source === 'landing-webcall'
 }
 
 function toStoredBusinessOutcome(outcome: Awaited<ReturnType<typeof analyzeBusinessOutcome>>) {

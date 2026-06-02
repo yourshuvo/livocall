@@ -98,6 +98,9 @@ const callSchema = new Schema(
 callSchema.index({ orgId: 1, startedAt: -1 })
 callSchema.index({ orgId: 1, outcome: 1, startedAt: -1 })
 callSchema.index({ fsUuid: 1 })
+callSchema.index({ 'metadata.source': 1, startedAt: -1 })
+callSchema.index({ 'metadata.publicSessionHash': 1, startedAt: -1 })
+callSchema.index({ 'metadata.publicIpHash': 1, startedAt: -1 })
 
 export type CallDoc = InferSchemaType<typeof callSchema> & {
   _id: mongoose.Types.ObjectId

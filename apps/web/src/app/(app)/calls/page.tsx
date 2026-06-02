@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/icon'
 import { connectMongo, isMongoConfigured } from '@/lib/db'
 import { getSession } from '@/lib/session'
 import { Call, type CallLean } from '@/models/Call'
-import { fmtBdt, fmtDate, fmtDuration, fmtPhoneE164, isBrowserTestCall } from '@/lib/format'
+import { browserTestCallLabel, fmtBdt, fmtDate, fmtDuration, fmtPhoneE164 } from '@/lib/format'
 import { tierBadge } from '@/types/agent'
 import { cn } from '@/lib/cn'
 import { CreateAgentButton } from '../agents/create-agent-button'
@@ -201,7 +201,7 @@ export default async function CallsPage({
                   </thead>
                   <tbody>
                     {calls.map((c) => {
-                      const browserTest = isBrowserTestCall(c.metadata)
+                      const browserTestLabel = browserTestCallLabel(c.metadata)
                       return (
                         <tr
                           key={String(c._id)}
@@ -217,8 +217,8 @@ export default async function CallsPage({
                           </td>
                           <td className="px-5 py-3 font-mono text-xs">
                             <Link href={`/calls/${c._id}`}>
-                              {browserTest ? (
-                                <span className="text-fg">Browser test</span>
+                              {browserTestLabel ? (
+                                <span className="text-fg">{browserTestLabel}</span>
                               ) : (
                                 <>
                                   <span className="text-fg">{fmtPhoneE164(c.fromE164)}</span>

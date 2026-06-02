@@ -10,7 +10,7 @@ import { connectMongo, isMongoConfigured } from '@/lib/db'
 import { getSession } from '@/lib/session'
 import { Agent, type AgentLean } from '@/models/Agent'
 import { Call, type CallLean } from '@/models/Call'
-import { fmtBdt, fmtDuration, fmtDate, isBrowserTestCall } from '@/lib/format'
+import { browserTestCallLabel, fmtBdt, fmtDuration, fmtDate } from '@/lib/format'
 import { tierBadge, tierLabel } from '@/types/agent'
 import { CreateAgentButton } from '../agents/create-agent-button'
 
@@ -193,7 +193,7 @@ export default async function OverviewPage() {
                     >
                       <td className="px-5 py-3 text-fg-muted">{fmtDate(c.startedAt)}</td>
                       <td className="px-5 py-3 font-mono text-xs text-fg">
-                        {isBrowserTestCall(c.metadata) ? 'Browser test' : c.fromE164}
+                        {browserTestCallLabel(c.metadata) || c.fromE164}
                       </td>
                       <td className="px-5 py-3">
                         <Badge variant="outline">{tierBadge[c.tier]}</Badge>

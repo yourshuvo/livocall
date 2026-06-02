@@ -153,6 +153,57 @@ body {
   }
 }
 
+.webcall-orb-shell {
+  --webcall-level: 0;
+  transform: scale(calc(1 + (var(--webcall-level) * 0.14)));
+  transition:
+    filter 160ms ease,
+    transform 80ms linear;
+  will-change: transform;
+}
+
+.webcall-orb-shell::before,
+.webcall-orb-shell::after {
+  border-radius: 9999px;
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.webcall-orb-shell::before {
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  box-shadow:
+    0 0 calc(20px + (var(--webcall-level) * 42px)) rgba(37, 99, 235, 0.22),
+    inset 0 0 calc(16px + (var(--webcall-level) * 28px)) rgba(125, 211, 252, 0.16);
+  opacity: calc(0.42 + (var(--webcall-level) * 0.5));
+}
+
+.webcall-orb-shell::after {
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  transform: scale(calc(0.86 + (var(--webcall-level) * 0.18)));
+}
+
+.webcall-orb--connecting::before {
+  animation: webcall-orb-pulse 1.4s ease-in-out infinite;
+}
+
+.webcall-orb--speaking {
+  filter: saturate(calc(1.02 + (var(--webcall-level) * 0.35)));
+}
+
+@keyframes webcall-orb-pulse {
+  0%, 100% {
+    opacity: 0.24;
+    transform: scale(0.92);
+  }
+
+  50% {
+    opacity: 0.62;
+    transform: scale(1.04);
+  }
+}
+
 .live-demo-orb {
   animation:
     live-demo-orb-float 6.4s ease-in-out infinite,
@@ -375,6 +426,7 @@ body {
   .landing-stagger > *,
   .live-demo-orb,
   .live-demo-orb::after,
+  .webcall-orb--connecting::before,
   .mockup-bar,
   .mockup-float,
   .mockup-glow-row,
@@ -387,5 +439,10 @@ body {
   .landing-motion-card {
     transition: none;
     translate: 0;
+  }
+
+  .webcall-orb-shell {
+    transform: none;
+    transition: none;
   }
 }

@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # Gemini Live
     gemini_live_model: str = Field(default="models/gemini-3.1-flash-live-preview")
     gemini_live_voice: str = Field(default="Puck")
-    gemini_live_language: str = Field(default="bn-BD")
+    gemini_live_language: str = Field(default="bn")
     gemini_live_temperature: float = Field(default=0.25)
     gemini_live_max_tokens: int = Field(default=512)
     gemini_live_vad_silence_ms: int = Field(default=600)

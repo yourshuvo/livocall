@@ -8,6 +8,10 @@ from app import browser_webrtc, ws_auth
 from app.browser_webrtc import (
     PipecatWebRTCImports,
     _gemini_live_tools,
+    _is_non_billable_test_session,
+    _metadata_gemini_language,
+    _metadata_gemini_model,
+    _public_webcall_max_duration_sec,
     _register_live_tool_handler,
     _supports_non_blocking_live_tools,
 )
@@ -162,6 +166,51 @@ def test_browser_webrtc_offer_starts_background_bot(monkeypatch) -> None:
             "metadata": {"source": "browser-webrtc"},
         }
     ]
+
+
+def test_browser_webrtc_offer_passes_landing_webcall_metadata(monkeypatch) -> None:
+    _enable_browser_webrtc(monkeypatch)
+    started: list[dict[str, Any]] = []
+
+    async def fake_run_bot(connection: Any, **kwargs: Any) -> None:
+        started.append({"connection": connection, **kwargs})
+
+    monkeypatch.setattr(browser_webrtc, "run_browser_gemini_bot", fake_run_bot)
+    token = ws_auth.sign("call-1")
+
+    with TestClient(app) as client:
+        res = client.post(
+            (
+                "/webrtc/browser-offer?call_id=call-1&agent_id=agent-1&tier=gemini_live"
+                f"&auth={token}&meta=source:landing-webcall&meta=maxDurationSec:300"
+                "&meta=model:models/gemini-3.1-flash-live-preview&meta=language:bn"
+            ),
+            json={"sdp": "offer-sdp", "type": "offer"},
+        )
+
+    assert res.status_code == 200
+    assert started[0]["metadata"] == {
+        "source": "landing-webcall",
+        "maxDurationSec": "300",
+        "model": "models/gemini-3.1-flash-live-preview",
+        "language": "bn",
+    }
+
+
+def test_landing_webcall_metadata_controls_model_language_and_limit() -> None:
+    metadata = {
+        "source": "landing-webcall",
+        "maxDurationSec": "300",
+        "model": "models/gemini-3.1-flash-live-preview",
+        "language": "en-US",
+    }
+
+    assert _is_non_billable_test_session({"source": "dashboard-browser-test"}) is True
+    assert _is_non_billable_test_session(metadata) is True
+    assert _public_webcall_max_duration_sec(metadata) == 120
+    assert _public_webcall_max_duration_sec({"source": "landing-webcall", "maxDurationSec": "4"}) == 15
+    assert _metadata_gemini_model(metadata) == "models/gemini-3.1-flash-live-preview"
+    assert _metadata_gemini_language(metadata) == "bn"
 
 
 def test_browser_webrtc_patch_normalizes_ice_candidate_dicts(monkeypatch) -> None:

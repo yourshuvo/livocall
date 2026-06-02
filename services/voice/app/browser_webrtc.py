@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -245,6 +246,47 @@ def _is_dashboard_browser_test(metadata: dict[str, str] | None) -> bool:
     return (metadata or {}).get("source") == "dashboard-browser-test"
 
 
+def _is_landing_webcall(metadata: dict[str, str] | None) -> bool:
+    return (metadata or {}).get("source") == "landing-webcall"
+
+
+def _is_non_billable_test_session(metadata: dict[str, str] | None) -> bool:
+    return _is_dashboard_browser_test(metadata) or _is_landing_webcall(metadata)
+
+
+def _public_webcall_max_duration_sec(metadata: dict[str, str] | None) -> int:
+    if not _is_landing_webcall(metadata):
+        return 0
+    try:
+        raw = int(float((metadata or {}).get("maxDurationSec", "60")))
+    except (TypeError, ValueError):
+        raw = 60
+    return min(120, max(15, raw))
+
+
+def _metadata_gemini_model(metadata: dict[str, str] | None) -> str:
+    if not _is_landing_webcall(metadata):
+        return ""
+    model = str((metadata or {}).get("model") or "").strip()
+    return model if model.startswith("models/") else f"models/{model}" if model else ""
+
+
+def _metadata_gemini_language(metadata: dict[str, str] | None) -> str:
+    language = str((metadata or {}).get("language") or "").strip()
+    if _is_landing_webcall(metadata):
+        return "bn"
+    return language
+
+
+def _with_bangla_only_guard(system_prompt: str) -> str:
+    if "Language rule: speak only Bangla/Bengali" in system_prompt:
+        return system_prompt
+    return (
+        f"{system_prompt}\n\nLanguage rule: speak only Bangla/Bengali. "
+        "Do not switch to English except for names, product names, URLs, or unavoidable technical terms."
+    )
+
+
 async def handle_offer(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -352,8 +394,11 @@ async def run_browser_gemini_bot(
 
     agent = await fetch_agent_for_call(agent_id, call_id)
     system_prompt = await build_system_prompt(agent, prompt)
-    model = gemini_live_model(agent)
+    if _is_landing_webcall(metadata) or (metadata or {}).get("banglaOnly") == "true":
+        system_prompt = _with_bangla_only_guard(system_prompt)
+    model = _metadata_gemini_model(metadata) or gemini_live_model(agent)
     voice = gemini_voice(agent)
+    language = _metadata_gemini_language(metadata) or settings.gemini_live_language
     tools = gemini_tool_declarations(agent)
     transcript = TranscriptBuffer(call_id)
     started_at = datetime.now(UTC)
@@ -375,7 +420,7 @@ async def run_browser_gemini_bot(
             model=model,
             voice=voice,
             system_instruction=system_prompt,
-            language=settings.gemini_live_language,
+            language=language,
             temperature=settings.gemini_live_temperature,
             max_tokens=settings.gemini_live_max_tokens,
             vad=GeminiVADParams(
@@ -453,8 +498,21 @@ async def run_browser_gemini_bot(
         log.info("browser_webrtc.disconnected", call_id=call_id)
         await worker.cancel()
 
+    async def cancel_after_public_limit() -> None:
+        nonlocal hangup_cause
+        limit_sec = _public_webcall_max_duration_sec(metadata)
+        if limit_sec <= 0:
+            return
+        await asyncio.sleep(limit_sec)
+        hangup_cause = "public_webcall_duration_limit"
+        log.info("browser_webrtc.public_limit_reached", call_id=call_id, limit_sec=limit_sec)
+        await worker.cancel()
+
     runner = WorkerRunner(handle_sigint=False)
+    limit_task: asyncio.Task[None] | None = None
     try:
+        if _is_landing_webcall(metadata):
+            limit_task = asyncio.create_task(cancel_after_public_limit())
         await runner.add_workers(worker)
         await runner.run()
     except Exception as exc:  # noqa: BLE001
@@ -462,7 +520,9 @@ async def run_browser_gemini_bot(
         hangup_cause = "browser_webrtc_error"
         log.exception("browser_webrtc.error", call_id=call_id, error=str(exc))
     finally:
-        if _is_dashboard_browser_test(metadata):
+        if limit_task is not None and not limit_task.done():
+            limit_task.cancel()
+        if _is_non_billable_test_session(metadata):
             ended_at = datetime.now(UTC)
             await post_voice_event(
                 {

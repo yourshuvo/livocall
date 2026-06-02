@@ -9,7 +9,7 @@ import { connectMongo, isMongoConfigured } from '@/lib/db'
 import { getSession } from '@/lib/session'
 import { Call, type CallLean } from '@/models/Call'
 import { Agent, type AgentLean } from '@/models/Agent'
-import { fmtBdt, fmtDate, fmtDuration, fmtPhoneE164, isBrowserTestCall } from '@/lib/format'
+import { browserTestCallLabel, fmtBdt, fmtDate, fmtDuration, fmtPhoneE164 } from '@/lib/format'
 import { tierBadge, tierLabel } from '@/types/agent'
 import { cn } from '@/lib/cn'
 
@@ -50,14 +50,14 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
     unknown
   >
   const businessOutcome = call.businessOutcome
-  const browserTest = isBrowserTestCall(metadata)
+  const browserTestLabel = browserTestCallLabel(metadata)
 
   return (
     <>
       <TopBar
         title={
-          browserTest
-            ? 'Browser test'
+          browserTestLabel
+            ? browserTestLabel
             : `${fmtPhoneE164(call.fromE164)} → ${fmtPhoneE164(call.toE164)}`
         }
         searchPlaceholder="Search transcript..."
@@ -109,7 +109,7 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
             <Badge variant="outline" className="capitalize">
               {call.direction}
             </Badge>
-            {browserTest && <Badge variant="outline">Browser test</Badge>}
+            {browserTestLabel && <Badge variant="outline">{browserTestLabel}</Badge>}
             {call.sentiment && (
               <Badge variant="outline" className="capitalize">
                 {call.sentiment}
@@ -302,8 +302,8 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
               <CardBody className="text-fg-muted space-y-2 text-[12.5px]">
                 <KV label="Tier" value={tierBadge[call.tier]} />
                 <KV label="Direction" value={call.direction} />
-                {browserTest ? (
-                  <KV label="Channel" value="Browser test" />
+                {browserTestLabel ? (
+                  <KV label="Channel" value={browserTestLabel} />
                 ) : (
                   <>
                     <KV label="From" value={fmtPhoneE164(call.fromE164)} mono />

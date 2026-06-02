@@ -4,6 +4,7 @@ import { Show, UserButton } from '@clerk/nextjs'
 import type { ReactNode } from 'react'
 import { LangSwitcher } from '@/components/lang-switcher'
 import { MarketingFooter } from '@/components/marketing/footer'
+import { PublicWebcallDemo } from '@/components/marketing/public-webcall-demo'
 import { BrandIcon, Wordmark } from '@/components/wordmark'
 import { Button } from '@/components/ui/button'
 import { Icon, type IconName } from '@/components/ui/icon'
@@ -1290,52 +1291,9 @@ function BuyerQuestionsSection() {
 
 function LiveDemoSection() {
   return (
-    <section id="pricing" className="border-b border-line bg-white">
-      <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
-        <h2 className="landing-reveal mx-auto max-w-2xl text-center font-serif text-[60px] font-normal leading-[0.9] tracking-tight text-fg md:text-[112px]">
-          Try Our<br />Live Demo
-        </h2>
-
-        <div className="landing-stagger mt-20 grid gap-4 lg:grid-cols-2">
-          <div className="landing-motion-card rounded-[10px] border border-[#D2D4D6] bg-white p-8">
-            <div className="grid min-h-[430px] place-items-center">
-              <div className="live-demo-orb relative size-56 overflow-hidden rounded-full bg-[radial-gradient(circle_at_30%_20%,#7dd3fc,transparent_34%),radial-gradient(circle_at_70%_30%,#f5d0fe,transparent_32%),radial-gradient(circle_at_45%_65%,#2563eb,transparent_36%),radial-gradient(circle_at_72%_72%,#67e8f9,transparent_34%)] opacity-90" />
-            </div>
-            <div className="mx-auto grid max-w-lg grid-cols-2 gap-2 text-center text-[12px] font-semibold sm:grid-cols-3">
-              {DEMO_TAGS.map((tag) => (
-                <span key={tag} className="mockup-glow-row rounded-[6px] border border-[#D2D4D6] bg-[#F5F5F7] px-3 py-2 text-fg">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="landing-motion-card rounded-[10px] border border-[#D2D4D6] bg-[#f1f1f7] p-8 md:p-12">
-            <h3 className="max-w-lg font-display text-[28px] font-medium leading-[1.05] tracking-tight text-[#001238] md:text-[36px]">
-              Receive a live call from our agent and discover how our AI caller transforms
-              customer conversations.
-            </h3>
-            <DemoField label="Use Case" value="Select your use case" icon="chevron-up-down" />
-            <DemoField label="Name" value="Your Name" />
-            <DemoField label="Phone Number" value="+15551234567" />
-            <Button asChild size="lg" className="mt-16 px-6">
-              <Link href="/signup">Start demo</Link>
-            </Button>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function DemoField({ label, value, icon }: { label: string; value: string; icon?: IconName }) {
-  return (
-    <div className="mt-10 border-b border-[#c6cad0] pb-4">
-      <p className="text-[12px] font-semibold text-blue-600">{label}</p>
-      <div className="mt-6 flex items-center justify-between gap-4 text-[20px] font-medium text-[#001238]">
-        <span>{value}</span>
-        {icon && <Icon name={icon} size="xs" square={false} />}
-      </div>
-    </div>
+    <PublicWebcallDemo
+      tags={DEMO_TAGS}
+      configured
+    />
   )
 }

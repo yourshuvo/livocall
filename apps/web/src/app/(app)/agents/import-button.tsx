@@ -3,13 +3,14 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@/components/ui/icon'
 import { api } from '@/lib/api-fetch'
+import type { AgentLanguage } from '@/types/agent'
 
 interface ImportPayload {
   name?: string
   description?: string
   tier?: 'gemini_live' | 'grok_voice' | 'pipeline' | 'dtmf'
   model?: string
-  language?: 'bn-BD' | 'en-US' | 'bn-en-mixed'
+  language?: AgentLanguage
   voice?: { provider?: string; voiceId?: string; style?: string }
   prompt?: { system?: string; firstMessage?: string; guardrails?: string }
   postCallWebhook?: string
