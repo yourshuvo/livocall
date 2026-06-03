@@ -26,6 +26,7 @@ interface PublicWebcallSession {
   analyserSource?: MediaStreamAudioSourceNode
   analyserFrame?: number
   limitTimer?: number
+  micResumeTimer?: number
 }
 
 type AudioContextWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }
@@ -107,10 +108,19 @@ export function PublicWebcallDemo({
             }
           },
           onBotOutput: (data) => {
-            if (data.spoken) setSpeaking(true)
+            if (data.spoken) {
+              setSpeaking(true)
+              setPublicWebcallMic(nextSession, false)
+            }
           },
-          onBotStartedSpeaking: () => setSpeaking(true),
-          onBotStoppedSpeaking: () => setSpeaking(false),
+          onBotStartedSpeaking: () => {
+            setSpeaking(true)
+            setPublicWebcallMic(nextSession, false)
+          },
+          onBotStoppedSpeaking: () => {
+            setSpeaking(false)
+            schedulePublicWebcallMicResume(nextSession)
+          },
           onTrackStarted: (track) => {
             if (isLocalPipecatAudioTrack(client, track)) return
             attachPublicWebcallAudioTrack(nextSession, track, setLevel)
@@ -314,6 +324,7 @@ async function startPublicWebcall(): Promise<PublicWebcallStartResult> {
 function closePublicWebcallSession(session: PublicWebcallSession | null, disconnectClient = true) {
   if (!session) return
   if (session.limitTimer) window.clearTimeout(session.limitTimer)
+  if (session.micResumeTimer) window.clearTimeout(session.micResumeTimer)
   if (session.analyserFrame) window.cancelAnimationFrame(session.analyserFrame)
   try {
     session.analyserSource?.disconnect()
@@ -356,6 +367,26 @@ function attachPublicWebcallAudioTrack(
   session.remoteAudio = audio
   startPublicWebcallAnalyser(session, stream, setLevel)
   void audio.play().catch(() => {})
+}
+
+function setPublicWebcallMic(session: PublicWebcallSession, enabled: boolean) {
+  if (session.micResumeTimer) {
+    window.clearTimeout(session.micResumeTimer)
+    session.micResumeTimer = undefined
+  }
+  try {
+    session.pipecat?.enableMic(enabled)
+  } catch {}
+}
+
+function schedulePublicWebcallMicResume(session: PublicWebcallSession) {
+  if (session.micResumeTimer) window.clearTimeout(session.micResumeTimer)
+  session.micResumeTimer = window.setTimeout(() => {
+    session.micResumeTimer = undefined
+    try {
+      session.pipecat?.enableMic(true)
+    } catch {}
+  }, 350)
 }
 
 function detachPublicWebcallAudio(session: PublicWebcallSession, setLevel: (level: number) => void) {

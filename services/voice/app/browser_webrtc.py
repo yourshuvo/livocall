@@ -283,7 +283,8 @@ def _with_bangla_only_guard(system_prompt: str) -> str:
         return system_prompt
     return (
         f"{system_prompt}\n\nLanguage rule: speak only Bangla/Bengali. "
-        "Do not switch to English except for names, product names, URLs, or unavoidable technical terms."
+        "Do not switch to English except for names, product names, URLs, or unavoidable technical terms. "
+        "Do not repeat the caller's words verbatim; answer naturally and move the conversation forward."
     )
 
 

@@ -93,6 +93,7 @@ async def test_build_system_prompt_adds_bangla_only_rule_for_gemini_live(
 
     assert "Language rule: speak only Bangla/Bengali." in prompt
     assert "Do not switch to English" in prompt
+    assert "Do not repeat the caller's words verbatim" in prompt
 
 
 @pytest.mark.asyncio

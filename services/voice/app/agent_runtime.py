@@ -229,7 +229,8 @@ async def build_system_prompt(agent: dict[str, Any], override: str = "", *, kb_q
     ):
         system_prompt = (
             f"{system_prompt}\n\nLanguage rule: speak only Bangla/Bengali. "
-            "Do not switch to English except for names, product names, URLs, or unavoidable technical terms."
+            "Do not switch to English except for names, product names, URLs, or unavoidable technical terms. "
+            "Do not repeat the caller's words verbatim; answer naturally and move the conversation forward."
         )
     memory = await gemini_memory_context(agent)
     if memory:
