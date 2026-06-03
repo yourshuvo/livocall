@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/cn'
 
 type WebcallStatus = 'idle' | 'connecting' | 'live' | 'limited'
+type WebcallInputState = 'idle' | 'listening' | 'hearing'
 
 interface PublicWebcallStartResult {
   callId: string
@@ -40,6 +41,8 @@ export function PublicWebcallDemo({
   const [error, setError] = useState('')
   const [level, setLevel] = useState(0)
   const [speaking, setSpeaking] = useState(false)
+  const [inputState, setInputState] = useState<WebcallInputState>('idle')
+  const [lastHeard, setLastHeard] = useState('')
   const sessionRef = useRef<PublicWebcallSession | null>(null)
 
   useEffect(() => {
@@ -62,6 +65,8 @@ export function PublicWebcallDemo({
 
     setError('')
     setSpeaking(false)
+    setInputState('idle')
+    setLastHeard('')
     setLevel(0)
     setStatus('connecting')
     const nextSession: PublicWebcallSession = {}
@@ -84,6 +89,26 @@ export function PublicWebcallDemo({
           onDeviceError: () => failWebcall('Microphone permission is needed for Webcall.'),
           onDisconnected: () => stopWebcall(),
           onBotDisconnected: () => stopWebcall(),
+          onConnected: () => {
+            client.enableMic(true)
+            setInputState('listening')
+          },
+          onBotReady: () => {
+            client.enableMic(true)
+            setInputState('listening')
+          },
+          onUserStartedSpeaking: () => setInputState('hearing'),
+          onUserStoppedSpeaking: () => setInputState('listening'),
+          onUserTranscript: (data) => {
+            const text = String(data.text || '').trim()
+            if (text) {
+              setInputState('listening')
+              setLastHeard(text)
+            }
+          },
+          onBotOutput: (data) => {
+            if (data.spoken) setSpeaking(true)
+          },
           onBotStartedSpeaking: () => setSpeaking(true),
           onBotStoppedSpeaking: () => setSpeaking(false),
           onTrackStarted: (track) => attachPublicWebcallAudioTrack(nextSession, track, setLevel),
@@ -122,6 +147,8 @@ export function PublicWebcallDemo({
     sessionRef.current = null
     setStatus('idle')
     setSpeaking(false)
+    setInputState('idle')
+    setLastHeard('')
     setLevel(0)
     if (message) setError(message)
   }
@@ -131,6 +158,8 @@ export function PublicWebcallDemo({
     sessionRef.current = null
     setStatus('idle')
     setSpeaking(false)
+    setInputState('idle')
+    setLastHeard('')
     setLevel(0)
     setError(message)
   }
@@ -152,6 +181,12 @@ export function PublicWebcallDemo({
         : status === 'limited'
           ? 'Limit reached'
           : 'Ready'
+  const liveInputLabel =
+    inputState === 'hearing'
+      ? 'Hearing you...'
+      : lastHeard
+        ? `Heard: ${lastHeard}`
+        : 'Listening...'
 
   return (
     <section id="pricing" className="border-b border-line bg-white">
@@ -214,6 +249,11 @@ export function PublicWebcallDemo({
             {(!configured || error) && (
               <p className="mt-6 rounded-[6px] border border-[#D2D4D6] bg-white/70 px-3 py-2 text-[13px] text-[#334155]">
                 {configured ? error : 'Public Webcall is not configured yet.'}
+              </p>
+            )}
+            {status === 'live' && (
+              <p className="mt-6 min-h-9 rounded-[6px] border border-[#D2D4D6] bg-white/70 px-3 py-2 text-[13px] text-[#334155]">
+                {liveInputLabel}
               </p>
             )}
             <Button

@@ -51,6 +51,29 @@ async def test_build_system_prompt_prefers_stored_gemini_memory(
 
 
 @pytest.mark.asyncio
+async def test_build_system_prompt_uses_ready_gemini_memory_without_kb_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fail_knowledge_context(*args: Any, **kwargs: Any) -> str:
+        raise AssertionError("public built-in memory should not need vector KB IDs")
+
+    monkeypatch.setattr(agent_runtime, "knowledge_context", fail_knowledge_context)
+    agent = {
+        "prompt": {"system": "You are concise."},
+        "runtimeSettings": {"geminiMemoryEnabled": True},
+        "geminiMemory": {
+            "status": "ready",
+            "text": "- office: Our office is in Kurigram.",
+        },
+    }
+
+    prompt = await agent_runtime.build_system_prompt(agent)
+
+    assert "Gemini memory for low-latency answers" in prompt
+    assert "Kurigram" in prompt
+
+
+@pytest.mark.asyncio
 async def test_build_system_prompt_adds_bangla_only_rule_for_gemini_live(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

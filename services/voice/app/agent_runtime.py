@@ -197,13 +197,15 @@ async def knowledge_context(agent: dict[str, Any], *, query: str = "", limit: in
 
 
 async def gemini_memory_context(agent: dict[str, Any]) -> str:
-    if not gemini_memory_enabled(agent) or not agent.get("knowledgeBaseIds"):
+    if not gemini_memory_enabled(agent):
         return ""
     stored = agent.get("geminiMemory") if isinstance(agent.get("geminiMemory"), dict) else {}
     status = str(stored.get("status") or "")
     text = str(stored.get("text") or "").strip()
     if status == "ready" and text:
         return _format_gemini_memory(text)
+    if not agent.get("knowledgeBaseIds"):
+        return ""
     return await _build_and_store_gemini_memory(agent)
 
 
