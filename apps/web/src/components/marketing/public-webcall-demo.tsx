@@ -111,8 +111,12 @@ export function PublicWebcallDemo({
           },
           onBotStartedSpeaking: () => setSpeaking(true),
           onBotStoppedSpeaking: () => setSpeaking(false),
-          onTrackStarted: (track) => attachPublicWebcallAudioTrack(nextSession, track, setLevel),
+          onTrackStarted: (track) => {
+            if (isLocalPipecatAudioTrack(client, track)) return
+            attachPublicWebcallAudioTrack(nextSession, track, setLevel)
+          },
           onTrackStopped: (track) => {
+            if (isLocalPipecatAudioTrack(client, track)) return
             if (track.kind === 'audio') detachPublicWebcallAudio(nextSession, setLevel)
           },
           onTransportStateChanged: (state) => {
@@ -376,6 +380,15 @@ function detachPublicWebcallAudio(session: PublicWebcallSession, setLevel: (leve
   }
   session.remoteAudio = undefined
   setLevel(0)
+}
+
+function isLocalPipecatAudioTrack(client: PipecatClient, track: MediaStreamTrack) {
+  if (track.kind !== 'audio') return false
+  try {
+    return client.tracks().local.audio?.id === track.id
+  } catch {
+    return false
+  }
 }
 
 function startPublicWebcallAnalyser(

@@ -3342,9 +3342,11 @@ async function connectBrowserWebrtcSession(
         finalizeBotTranscript()
       },
       onTrackStarted: (track) => {
+        if (isLocalPipecatAudioTrack(client, track)) return
         attachBrowserWebrtcAudioTrack(audioSession, track)
       },
       onTrackStopped: (track) => {
+        if (isLocalPipecatAudioTrack(client, track)) return
         if (track.kind !== 'audio') return
         audioSession.remoteAudio?.pause()
         audioSession.remoteAudio?.remove()
@@ -3392,6 +3394,15 @@ function attachBrowserWebrtcAudioTrack(session: BrowserAudioSession, track: Medi
     // The call starts from a user gesture, but mobile browsers can still race
     // the remote track. A later user interaction will unlock the element.
   })
+}
+
+function isLocalPipecatAudioTrack(client: PipecatClient, track: MediaStreamTrack) {
+  if (track.kind !== 'audio') return false
+  try {
+    return client.tracks().local.audio?.id === track.id
+  } catch {
+    return false
+  }
 }
 
 function waitForSocketOpen(socket: WebSocket): Promise<void> {

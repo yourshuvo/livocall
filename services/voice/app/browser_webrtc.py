@@ -258,10 +258,10 @@ def _public_webcall_max_duration_sec(metadata: dict[str, str] | None) -> int:
     if not _is_landing_webcall(metadata):
         return 0
     try:
-        raw = int(float((metadata or {}).get("maxDurationSec", "60")))
+        raw = int(float((metadata or {}).get("maxDurationSec", "240")))
     except (TypeError, ValueError):
-        raw = 60
-    return min(120, max(15, raw))
+        raw = 240
+    return min(240, max(15, raw))
 
 
 def _metadata_gemini_model(metadata: dict[str, str] | None) -> str:

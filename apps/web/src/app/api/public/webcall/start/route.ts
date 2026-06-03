@@ -16,9 +16,9 @@ import { Org } from '@/models/Org'
 const SESSION_COOKIE = 'livocall_public_webcall_id'
 const PUBLIC_SOURCE = 'landing-webcall'
 const GEMINI_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview'
-const DEFAULT_MAX_DURATION_SEC = 60
+const DEFAULT_MAX_DURATION_SEC = 240
 const MIN_MAX_DURATION_SEC = 15
-const HARD_MAX_DURATION_SEC = 120
+const HARD_MAX_DURATION_SEC = 240
 const ACTIVE_WINDOW_MS = 90_000
 const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000
 const BUILTIN_AGENT_NAME = 'LivoCall Built-in Webcall Demo'
@@ -223,7 +223,7 @@ function builtInPublicAgentPatch() {
       text: [
         '- LivoCall হলো Bangla-first AI voice/webcall platform for customer calls.',
         '- এই ডেমোটি Gemini 3.1 Flash Live দিয়ে চলে।',
-        '- Public demo সর্বোচ্চ 60 seconds চলে এবং billing হয় না।',
+        '- Public demo সর্বোচ্চ 4 minutes চলে এবং billing হয় না।',
         '- LivoCall appointment, customer support, lead qualification, survey, and order confirmation use cases support করে।',
         '- Company location context: Kurigram.',
       ].join('\n'),

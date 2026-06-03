@@ -207,7 +207,7 @@ def test_landing_webcall_metadata_controls_model_language_and_limit() -> None:
 
     assert _is_non_billable_test_session({"source": "dashboard-browser-test"}) is True
     assert _is_non_billable_test_session(metadata) is True
-    assert _public_webcall_max_duration_sec(metadata) == 120
+    assert _public_webcall_max_duration_sec(metadata) == 240
     assert _public_webcall_max_duration_sec({"source": "landing-webcall", "maxDurationSec": "4"}) == 15
     assert _metadata_gemini_model(metadata) == "models/gemini-3.1-flash-live-preview"
     assert _metadata_gemini_language(metadata) == "bn"
