@@ -27,6 +27,10 @@ interface PublicWebcallSession {
   analyserFrame?: number
   limitTimer?: number
   micResumeTimer?: number
+  playbackDisableTimer?: number
+  playbackEnabled?: boolean
+  micDuckedByRemoteAudio?: boolean
+  remoteAudioQuietSince?: number
 }
 
 type AudioContextWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }
@@ -70,7 +74,7 @@ export function PublicWebcallDemo({
     setLastHeard('')
     setLevel(0)
     setStatus('connecting')
-    const nextSession: PublicWebcallSession = {}
+    const nextSession: PublicWebcallSession = { playbackEnabled: true }
 
     try {
       const start = await startPublicWebcall()
@@ -98,7 +102,10 @@ export function PublicWebcallDemo({
             client.enableMic(true)
             setInputState('listening')
           },
-          onUserStartedSpeaking: () => setInputState('hearing'),
+          onUserStartedSpeaking: () => {
+            setInputState('hearing')
+            setPublicWebcallPlayback(nextSession, false)
+          },
           onUserStoppedSpeaking: () => setInputState('listening'),
           onUserTranscript: (data) => {
             const text = String(data.text || '').trim()
@@ -110,15 +117,18 @@ export function PublicWebcallDemo({
           onBotOutput: (data) => {
             if (data.spoken) {
               setSpeaking(true)
+              setPublicWebcallPlayback(nextSession, true)
               setPublicWebcallMic(nextSession, false)
             }
           },
           onBotStartedSpeaking: () => {
             setSpeaking(true)
+            setPublicWebcallPlayback(nextSession, true)
             setPublicWebcallMic(nextSession, false)
           },
           onBotStoppedSpeaking: () => {
             setSpeaking(false)
+            schedulePublicWebcallPlaybackPause(nextSession)
             schedulePublicWebcallMicResume(nextSession)
           },
           onTrackStarted: (track) => {
@@ -325,6 +335,7 @@ function closePublicWebcallSession(session: PublicWebcallSession | null, disconn
   if (!session) return
   if (session.limitTimer) window.clearTimeout(session.limitTimer)
   if (session.micResumeTimer) window.clearTimeout(session.micResumeTimer)
+  if (session.playbackDisableTimer) window.clearTimeout(session.playbackDisableTimer)
   if (session.analyserFrame) window.cancelAnimationFrame(session.analyserFrame)
   try {
     session.analyserSource?.disconnect()
@@ -357,7 +368,7 @@ function attachPublicWebcallAudioTrack(
   const audio = document.createElement('audio')
   audio.autoplay = true
   audio.setAttribute('playsinline', 'true')
-  audio.muted = false
+  audio.muted = session.playbackEnabled === false
   audio.volume = 1
   audio.srcObject = stream
   audio.style.display = 'none'
@@ -379,6 +390,26 @@ function setPublicWebcallMic(session: PublicWebcallSession, enabled: boolean) {
   } catch {}
 }
 
+function setPublicWebcallPlayback(session: PublicWebcallSession, enabled: boolean) {
+  if (session.playbackDisableTimer) {
+    window.clearTimeout(session.playbackDisableTimer)
+    session.playbackDisableTimer = undefined
+  }
+  session.playbackEnabled = enabled
+  if (session.remoteAudio) {
+    session.remoteAudio.muted = !enabled
+    if (enabled) void session.remoteAudio.play().catch(() => {})
+  }
+}
+
+function schedulePublicWebcallPlaybackPause(session: PublicWebcallSession) {
+  if (session.playbackDisableTimer) window.clearTimeout(session.playbackDisableTimer)
+  session.playbackDisableTimer = window.setTimeout(() => {
+    session.playbackDisableTimer = undefined
+    setPublicWebcallPlayback(session, false)
+  }, 250)
+}
+
 function schedulePublicWebcallMicResume(session: PublicWebcallSession) {
   if (session.micResumeTimer) window.clearTimeout(session.micResumeTimer)
   session.micResumeTimer = window.setTimeout(() => {
@@ -396,6 +427,8 @@ function detachPublicWebcallAudio(session: PublicWebcallSession, setLevel: (leve
     session.analyserSource?.disconnect()
   } catch {}
   session.analyserSource = undefined
+  session.micDuckedByRemoteAudio = false
+  session.remoteAudioQuietSince = undefined
   if (session.audioContext && session.audioContext.state !== 'closed') {
     void session.audioContext.close().catch(() => {})
   }
@@ -451,6 +484,7 @@ function startPublicWebcallAnalyser(
       const rms = Math.sqrt(sum / samples.length)
       smoothed = smoothed * 0.72 + Math.min(1, rms * 7) * 0.28
       setLevel(smoothed)
+      duckPublicWebcallMicFromRemoteAudio(session, smoothed)
       session.analyserFrame = window.requestAnimationFrame(tick)
     }
     void context.resume().catch(() => {})
@@ -458,4 +492,29 @@ function startPublicWebcallAnalyser(
   } catch {
     setLevel(0)
   }
+}
+
+function duckPublicWebcallMicFromRemoteAudio(session: PublicWebcallSession, level: number) {
+  const now = performance.now()
+  if (level > 0.035) {
+    session.remoteAudioQuietSince = undefined
+    if (!session.micDuckedByRemoteAudio) {
+      session.micDuckedByRemoteAudio = true
+      setPublicWebcallMic(session, false)
+    }
+    return
+  }
+
+  if (!session.micDuckedByRemoteAudio) return
+  if (level > 0.015) {
+    session.remoteAudioQuietSince = undefined
+    return
+  }
+
+  session.remoteAudioQuietSince ??= now
+  if (now - session.remoteAudioQuietSince < 550) return
+
+  session.micDuckedByRemoteAudio = false
+  session.remoteAudioQuietSince = undefined
+  schedulePublicWebcallMicResume(session)
 }
