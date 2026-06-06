@@ -7,7 +7,6 @@ import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/cn'
 
 type WebcallStatus = 'idle' | 'connecting' | 'live' | 'limited'
-type WebcallInputState = 'idle' | 'listening' | 'hearing'
 
 interface PublicWebcallStartResult {
   callId: string
@@ -29,6 +28,28 @@ interface PublicWebcallSession {
 }
 
 type AudioContextWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }
+type DailyStartCameraOptions = {
+  inputSettings?: {
+    audio?: {
+      settings?: MediaTrackConstraints | { customTrack: MediaStreamTrack }
+      processor?: { type: 'none' | 'noise-cancellation' }
+    }
+  }
+  dailyConfig?: {
+    userMediaAudioConstraints?: MediaTrackConstraints
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+type DailyStartCamera = (options?: DailyStartCameraOptions) => Promise<unknown>
+type DailyMediaManagerWithCallObject = { _daily?: { startCamera?: DailyStartCamera } }
+
+const PUBLIC_WEBCALL_MIC_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: { ideal: true },
+  noiseSuppression: { ideal: true },
+  autoGainControl: { ideal: true },
+  channelCount: { ideal: 1 },
+}
 
 export function PublicWebcallDemo({
   tags,
@@ -41,8 +62,6 @@ export function PublicWebcallDemo({
   const [error, setError] = useState('')
   const [level, setLevel] = useState(0)
   const [speaking, setSpeaking] = useState(false)
-  const [inputState, setInputState] = useState<WebcallInputState>('idle')
-  const [lastHeard, setLastHeard] = useState('')
   const sessionRef = useRef<PublicWebcallSession | null>(null)
 
   useEffect(() => {
@@ -65,22 +84,23 @@ export function PublicWebcallDemo({
 
     setError('')
     setSpeaking(false)
-    setInputState('idle')
-    setLastHeard('')
     setLevel(0)
     setStatus('connecting')
     const nextSession: PublicWebcallSession = {}
 
     try {
       const start = await startPublicWebcall()
-      const [{ PipecatClient }, { SmallWebRTCTransport }] = await Promise.all([
+      const [{ PipecatClient }, { SmallWebRTCTransport, DailyMediaManager }] = await Promise.all([
         import('@pipecat-ai/client-js'),
         import('@pipecat-ai/small-webrtc-transport'),
       ])
+      const mediaManager = new DailyMediaManager(false, false)
+      forcePublicWebcallMicProcessing(mediaManager)
       const client = new PipecatClient({
         transport: new SmallWebRTCTransport({
           iceServers: start.iceServers ?? [],
           waitForICEGathering: false,
+          mediaManager,
         }),
         enableMic: true,
         enableCam: false,
@@ -89,35 +109,13 @@ export function PublicWebcallDemo({
           onDeviceError: () => failWebcall('Microphone permission is needed for Webcall.'),
           onDisconnected: () => stopWebcall(),
           onBotDisconnected: () => stopWebcall(),
-          onConnected: () => {
-            client.enableMic(true)
-            setInputState('listening')
-          },
-          onBotReady: () => {
-            client.enableMic(true)
-            setInputState('listening')
-          },
-          onUserStartedSpeaking: () => setInputState('hearing'),
-          onUserStoppedSpeaking: () => setInputState('listening'),
-          onUserTranscript: (data) => {
-            const text = String(data.text || '').trim()
-            if (text) {
-              setInputState('listening')
-              setLastHeard(text)
-            }
-          },
-          onBotOutput: (data) => {
-            if (data.spoken) setSpeaking(true)
-          },
-          onBotStartedSpeaking: () => setSpeaking(true),
-          onBotStoppedSpeaking: () => setSpeaking(false),
           onTrackStarted: (track) => {
             if (isLocalPipecatAudioTrack(client, track)) return
-            attachPublicWebcallAudioTrack(nextSession, track, setLevel)
+            attachPublicWebcallAudioTrack(nextSession, track, setLevel, setSpeaking)
           },
           onTrackStopped: (track) => {
             if (isLocalPipecatAudioTrack(client, track)) return
-            if (track.kind === 'audio') detachPublicWebcallAudio(nextSession, setLevel)
+            if (track.kind === 'audio') detachPublicWebcallAudio(nextSession, setLevel, setSpeaking)
           },
           onTransportStateChanged: (state) => {
             if (state === 'error') failWebcall('Webcall connection failed.')
@@ -151,8 +149,6 @@ export function PublicWebcallDemo({
     sessionRef.current = null
     setStatus('idle')
     setSpeaking(false)
-    setInputState('idle')
-    setLastHeard('')
     setLevel(0)
     if (message) setError(message)
   }
@@ -162,8 +158,6 @@ export function PublicWebcallDemo({
     sessionRef.current = null
     setStatus('idle')
     setSpeaking(false)
-    setInputState('idle')
-    setLastHeard('')
     setLevel(0)
     setError(message)
   }
@@ -185,12 +179,7 @@ export function PublicWebcallDemo({
         : status === 'limited'
           ? 'Limit reached'
           : 'Ready'
-  const liveInputLabel =
-    inputState === 'hearing'
-      ? 'Hearing you...'
-      : lastHeard
-        ? `Heard: ${lastHeard}`
-        : 'Listening...'
+  const liveInputLabel = 'Gemini VAD is listening — speak naturally.'
 
   return (
     <section id="pricing" className="border-b border-line bg-white">
@@ -311,6 +300,41 @@ async function startPublicWebcall(): Promise<PublicWebcallStartResult> {
   return data as PublicWebcallStartResult
 }
 
+function forcePublicWebcallMicProcessing(mediaManager: unknown) {
+  const daily = (mediaManager as DailyMediaManagerWithCallObject)._daily
+  if (!daily?.startCamera) return
+  const startCamera = daily.startCamera.bind(daily)
+  daily.startCamera = (options = {}) => {
+    const existingAudio = options.inputSettings?.audio ?? {}
+    const existingSettings = existingAudio.settings
+    const audioSettings =
+      existingSettings && 'customTrack' in existingSettings
+        ? existingSettings
+        : {
+            ...PUBLIC_WEBCALL_MIC_CONSTRAINTS,
+            ...(existingSettings ?? {}),
+          }
+
+    return startCamera({
+      ...options,
+      inputSettings: {
+        ...options.inputSettings,
+        audio: {
+          ...existingAudio,
+          settings: audioSettings,
+        },
+      },
+      dailyConfig: {
+        ...options.dailyConfig,
+        userMediaAudioConstraints: {
+          ...PUBLIC_WEBCALL_MIC_CONSTRAINTS,
+          ...(options.dailyConfig?.userMediaAudioConstraints ?? {}),
+        },
+      },
+    })
+  }
+}
+
 function closePublicWebcallSession(session: PublicWebcallSession | null, disconnectClient = true) {
   if (!session) return
   if (session.limitTimer) window.clearTimeout(session.limitTimer)
@@ -338,9 +362,10 @@ function attachPublicWebcallAudioTrack(
   session: PublicWebcallSession,
   track: MediaStreamTrack,
   setLevel: (level: number) => void,
+  setSpeaking: (speaking: boolean) => void,
 ) {
   if (track.kind !== 'audio') return
-  detachPublicWebcallAudio(session, setLevel)
+  detachPublicWebcallAudio(session, setLevel, setSpeaking)
 
   const stream = new MediaStream([track])
   const audio = document.createElement('audio')
@@ -354,11 +379,15 @@ function attachPublicWebcallAudioTrack(
 
   session.remoteStream = stream
   session.remoteAudio = audio
-  startPublicWebcallAnalyser(session, stream, setLevel)
+  startPublicWebcallAnalyser(session, stream, setLevel, setSpeaking)
   void audio.play().catch(() => {})
 }
 
-function detachPublicWebcallAudio(session: PublicWebcallSession, setLevel: (level: number) => void) {
+function detachPublicWebcallAudio(
+  session: PublicWebcallSession,
+  setLevel: (level: number) => void,
+  setSpeaking: (speaking: boolean) => void,
+) {
   if (session.analyserFrame) window.cancelAnimationFrame(session.analyserFrame)
   session.analyserFrame = undefined
   try {
@@ -380,6 +409,7 @@ function detachPublicWebcallAudio(session: PublicWebcallSession, setLevel: (leve
   }
   session.remoteAudio = undefined
   setLevel(0)
+  setSpeaking(false)
 }
 
 function isLocalPipecatAudioTrack(client: PipecatClient, track: MediaStreamTrack) {
@@ -395,6 +425,7 @@ function startPublicWebcallAnalyser(
   session: PublicWebcallSession,
   stream: MediaStream,
   setLevel: (level: number) => void,
+  setSpeaking: (speaking: boolean) => void,
 ) {
   try {
     const AudioCtor =
@@ -420,11 +451,13 @@ function startPublicWebcallAnalyser(
       const rms = Math.sqrt(sum / samples.length)
       smoothed = smoothed * 0.72 + Math.min(1, rms * 7) * 0.28
       setLevel(smoothed)
+      setSpeaking(smoothed > 0.035)
       session.analyserFrame = window.requestAnimationFrame(tick)
     }
     void context.resume().catch(() => {})
     tick()
   } catch {
     setLevel(0)
+    setSpeaking(false)
   }
 }
