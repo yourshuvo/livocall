@@ -93,6 +93,34 @@ def _local_recording_path(call_id: str) -> Path:
     return Path(settings.recordings_local_dir) / f"{call_id}.wav"
 
 
+def _recordings_bucket() -> str:
+    return settings.s3_recordings_bucket or os.environ.get("FILE_STORAGE_BUCKET", "")
+
+
+def _recordings_region() -> str:
+    return settings.s3_region or os.environ.get("FILE_STORAGE_REGION", "")
+
+
+def _recordings_endpoint_url() -> str:
+    return settings.s3_endpoint_url or os.environ.get("FILE_STORAGE_ENDPOINT", "")
+
+
+def _recordings_public_base_url() -> str:
+    return settings.s3_recordings_public_base_url or os.environ.get(
+        "FILE_STORAGE_PUBLIC_BASE_URL", ""
+    )
+
+
+def _recordings_access_key_id() -> str:
+    return settings.aws_access_key_id or os.environ.get("FILE_STORAGE_ACCESS_KEY_ID", "")
+
+
+def _recordings_secret_access_key() -> str:
+    return settings.aws_secret_access_key or os.environ.get(
+        "FILE_STORAGE_SECRET_ACCESS_KEY", ""
+    )
+
+
 async def upload_recording(call_id: str) -> str | None:
     """Upload the local FreeSWITCH recording to S3 and update ``audioUrl``.
 
@@ -105,7 +133,7 @@ async def upload_recording(call_id: str) -> str | None:
         return None
 
     url: str | None = None
-    if settings.s3_recordings_bucket:
+    if _recordings_bucket():
         try:
             url = await _upload_to_s3(path)
         except Exception as exc:  # noqa: BLE001
@@ -133,30 +161,44 @@ async def _upload_to_s3(path: Path) -> str | None:
     except ImportError:
         log.warning(
             "recording.boto3_missing",
-            hint="pip install boto3 or set S3_RECORDINGS_BUCKET='' to skip",
+            hint="pip install boto3 or leave S3_RECORDINGS_BUCKET/FILE_STORAGE_BUCKET unset to skip",
         )
         return None
 
     loop = asyncio.get_running_loop()
 
     def _do_upload() -> str:
+        bucket = _recordings_bucket()
+        region = _recordings_region()
+        endpoint_url = _recordings_endpoint_url()
+        access_key_id = _recordings_access_key_id()
+        secret_access_key = _recordings_secret_access_key()
+        public_base_url = _recordings_public_base_url().rstrip("/")
+
         kwargs: dict[str, Any] = {}
-        if settings.s3_region:
-            kwargs["region_name"] = settings.s3_region
-        if settings.s3_endpoint_url:
-            kwargs["endpoint_url"] = settings.s3_endpoint_url
-        if settings.aws_access_key_id:
-            kwargs["aws_access_key_id"] = settings.aws_access_key_id
-        if settings.aws_secret_access_key:
-            kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+        if region:
+            kwargs["region_name"] = region
+        if endpoint_url:
+            kwargs["endpoint_url"] = endpoint_url
+        if access_key_id:
+            kwargs["aws_access_key_id"] = access_key_id
+        if secret_access_key:
+            kwargs["aws_secret_access_key"] = secret_access_key
         client = boto3.client("s3", **kwargs)
         key = f"recordings/{path.name}"
-        client.upload_file(str(path), settings.s3_recordings_bucket, key)
-        if settings.s3_endpoint_url:
-            return f"{settings.s3_endpoint_url.rstrip('/')}/{settings.s3_recordings_bucket}/{key}"
-        host = f"{settings.s3_recordings_bucket}.s3"
-        if settings.s3_region:
-            host += f".{settings.s3_region}"
+        client.upload_file(
+            str(path),
+            bucket,
+            key,
+            ExtraArgs={"ContentType": "audio/wav"},
+        )
+        if public_base_url:
+            return f"{public_base_url}/{key}"
+        if endpoint_url:
+            return f"{endpoint_url.rstrip('/')}/{bucket}/{key}"
+        host = f"{bucket}.s3"
+        if region:
+            host += f".{region}"
         host += ".amazonaws.com"
         return f"https://{host}/{key}"
 

@@ -118,6 +118,7 @@ class Settings(BaseSettings):
     s3_recordings_bucket: str = Field(default="")
     s3_region: str = Field(default="")
     s3_endpoint_url: str = Field(default="")
+    s3_recordings_public_base_url: str = Field(default="")
     aws_access_key_id: str = Field(default="")
     aws_secret_access_key: str = Field(default="")
     summarizer_enabled: bool = Field(default=True)

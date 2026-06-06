@@ -1023,7 +1023,6 @@ export function AgentEditor({
             toast('Browser test disconnected', 'error')
             stopBrowserTest(false)
           },
-          onTranscript: (turn) => handleBrowserTranscriptTurn(session.callId, turn, true),
         })
 
         closeBrowserAudioSession(browserAudioRef.current)
@@ -3227,7 +3226,6 @@ async function connectBrowserWebrtcSession(
   handlers: {
     onDisconnected: () => void
     onError: () => void
-    onTranscript: (turn: LiveTranscriptTurn) => void
   },
 ) {
   const [{ PipecatClient }, { SmallWebRTCTransport }] = await Promise.all([
@@ -3235,63 +3233,6 @@ async function connectBrowserWebrtcSession(
     import('@pipecat-ai/small-webrtc-transport'),
   ])
   const iceServers = session.iceServers ?? []
-  let botTurnSeq = 0
-  let botTurnId = ''
-  let botTurnAt = ''
-  let botText = ''
-  let botFlushTimer: number | undefined
-
-  function clearBotFlushTimer() {
-    if (!botFlushTimer) return
-    window.clearTimeout(botFlushTimer)
-    botFlushTimer = undefined
-  }
-
-  function ensureBotTurn() {
-    if (botTurnId) return
-    botTurnSeq += 1
-    botTurnAt = new Date().toISOString()
-    botTurnId = `browser-agent-${botTurnSeq}`
-    botText = ''
-  }
-
-  function emitBotTranscript(final: boolean) {
-    const text = botText.trim()
-    if (!botTurnId || !text) return
-    handlers.onTranscript({
-      id: botTurnId,
-      role: 'agent',
-      text,
-      at: botTurnAt,
-      final,
-    })
-    if (final) {
-      botTurnId = ''
-      botTurnAt = ''
-      botText = ''
-    }
-  }
-
-  function appendBotTranscript(chunk: string) {
-    const text = chunk.trim()
-    if (!text) return
-    ensureBotTurn()
-    botText = mergeTranscriptChunk(botText, text)
-    const previewText = botText.trim()
-    if (/[.!?\u0964]$/u.test(previewText) || previewText.length >= 180) {
-      emitBotTranscript(false)
-    }
-    clearBotFlushTimer()
-    botFlushTimer = window.setTimeout(() => {
-      emitBotTranscript(true)
-      clearBotFlushTimer()
-    }, 1200)
-  }
-
-  function finalizeBotTranscript() {
-    clearBotFlushTimer()
-    emitBotTranscript(true)
-  }
 
   const client = new PipecatClient({
     transport: new SmallWebRTCTransport({
@@ -3302,44 +3243,16 @@ async function connectBrowserWebrtcSession(
     enableCam: false,
     callbacks: {
       onError: () => {
-        finalizeBotTranscript()
         handlers.onError()
       },
       onDeviceError: () => {
-        finalizeBotTranscript()
         handlers.onError()
       },
       onDisconnected: () => {
-        finalizeBotTranscript()
         handlers.onDisconnected()
       },
       onBotDisconnected: () => {
-        finalizeBotTranscript()
         handlers.onDisconnected()
-      },
-      onUserTranscript: (data) => {
-        const text = String(data.text || '').trim()
-        if (!text) return
-        const at = normalizeTranscriptAt(data.timestamp)
-        const final = Boolean(data.final)
-        handlers.onTranscript({
-          id: final ? transcriptTurnId('user', at, text) : USER_INTERIM_TURN_ID,
-          role: 'user',
-          text,
-          at,
-          final,
-        })
-      },
-      onBotOutput: (data) => {
-        if (!data.spoken) return
-        const text = String(data.text || '').trim()
-        appendBotTranscript(text)
-      },
-      onBotStartedSpeaking: () => {
-        ensureBotTurn()
-      },
-      onBotStoppedSpeaking: () => {
-        finalizeBotTranscript()
       },
       onTrackStarted: (track) => {
         if (isLocalPipecatAudioTrack(client, track)) return
@@ -3355,7 +3268,6 @@ async function connectBrowserWebrtcSession(
       },
       onTransportStateChanged: (state) => {
         if (state === 'error') {
-          finalizeBotTranscript()
           handlers.onError()
         }
       },
@@ -3518,17 +3430,6 @@ function normalizeTranscriptAt(value?: string) {
 
 function transcriptTurnId(role: LiveTranscriptRole, at: string, text: string) {
   return `browser-${role}-${hashString(`${role}:${at}:${text}`)}`
-}
-
-function mergeTranscriptChunk(current: string, chunk: string) {
-  const text = chunk.trim()
-  const existing = current.trim()
-  if (!existing) return text
-  if (text.startsWith(existing)) return text
-  if (existing.endsWith(text)) return existing
-  if (/^[,.;:!?)]/.test(text)) return `${existing}${text}`
-  if (/[(]$/.test(existing)) return `${existing}${text}`
-  return `${existing} ${text}`
 }
 
 function hashString(value: string) {

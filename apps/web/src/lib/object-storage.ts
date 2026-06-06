@@ -37,8 +37,29 @@ export function objectStorageIsRemote(): boolean {
 
 export function objectKeyFromUrl(urlOrKey: string): string {
   if (urlOrKey.startsWith('s3://')) return urlOrKey.split('/').slice(3).join('/')
-  if (urlOrKey.startsWith('file://')) return path.relative(path.join(process.cwd(), LOCAL_ROOT), urlOrKey.slice('file://'.length))
-  return urlOrKey.replace(/^\/+/, '')
+  if (urlOrKey.startsWith('file://')) {
+    return path.relative(path.join(process.cwd(), LOCAL_ROOT), urlOrKey.slice('file://'.length))
+  }
+
+  const base = publicBaseUrl()
+  if (base && urlOrKey.startsWith(`${base}/`)) {
+    return decodeURIComponent(urlOrKey.slice(base.length + 1)).replace(/^\/+/, '')
+  }
+
+  try {
+    const url = new URL(urlOrKey)
+    const endpointUrl = endpoint()
+    if (endpointUrl) {
+      const endpointHost = new URL(endpointUrl).host
+      if (url.host === endpointHost) {
+        const parts = url.pathname.split('/').filter(Boolean)
+        if (parts[0] === bucket()) return decodeURIComponent(parts.slice(1).join('/'))
+      }
+    }
+    return decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+  } catch {
+    return urlOrKey.replace(/^\/+/, '')
+  }
 }
 
 function client(): S3Client {
