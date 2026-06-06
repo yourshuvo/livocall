@@ -93,7 +93,7 @@ def test_bridge_modes_keep_phone_and_browser_separate() -> None:
 
     assert phone.wire_format == "pcmu"
     assert phone.input_queue_frames == 2
-    assert phone.barge_in_enabled
+    assert not phone.barge_in_enabled
     assert browser.wire_format == "pcm16"
     assert browser.input_queue_frames > phone.input_queue_frames
     assert not browser.barge_in_enabled

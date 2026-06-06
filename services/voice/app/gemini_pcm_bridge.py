@@ -116,7 +116,11 @@ class GeminiPcmBridge:
         return cls(
             wire_format="pcmu",
             input_queue_frames=2,
-            barge_in_enabled=True,
+            # Let Gemini Live's native automatic_activity_detection own turn-taking.
+            # A local PCM energy gate can mistake echo/noise for caller speech and
+            # suppress model audio, which sounds like the agent is repeating or
+            # resounding the caller.
+            barge_in_enabled=False,
             bridge_mode="phone",
         )
 

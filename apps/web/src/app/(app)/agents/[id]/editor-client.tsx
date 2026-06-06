@@ -173,6 +173,7 @@ interface BrowserAudioSession {
   context?: AudioContext
   source?: MediaStreamAudioSourceNode
   processor?: ScriptProcessorNode
+  processorSink?: GainNode
   socket?: WebSocket
   pipecat?: PipecatClient
   playbackTime: number
@@ -1053,9 +1054,12 @@ export function AgentEditor({
 
       const source = context.createMediaStreamSource(stream)
       const processor = context.createScriptProcessor(4096, 1, 1)
+      const processorSink = context.createGain()
+      processorSink.gain.value = 0
       const inputSampleRate = session.inputSampleRate || 16000
       audioSession.source = source
       audioSession.processor = processor
+      audioSession.processorSink = processorSink
       audioSession.outputSampleRate = session.outputSampleRate || 16000
 
       processor.onaudioprocess = (event) => {
@@ -1066,7 +1070,10 @@ export function AgentEditor({
         if (pcm.byteLength > 0) socket.send(pcm)
       }
       source.connect(processor)
-      processor.connect(context.destination)
+      // ScriptProcessor must be connected to run, but never route mic audio to
+      // speakers; that makes browser tests sound like the caller is echoing.
+      processor.connect(processorSink)
+      processorSink.connect(context.destination)
 
       socket.onmessage = (event) => {
         if (typeof event.data === 'string') {
@@ -3192,6 +3199,9 @@ function closeBrowserAudioSession(session: BrowserAudioSession | null, closeSock
   }
   try {
     session.processor?.disconnect()
+  } catch {}
+  try {
+    session.processorSink?.disconnect()
   } catch {}
   try {
     session.source?.disconnect()
