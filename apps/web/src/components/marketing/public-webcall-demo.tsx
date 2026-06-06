@@ -28,28 +28,6 @@ interface PublicWebcallSession {
 }
 
 type AudioContextWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }
-type DailyStartCameraOptions = {
-  inputSettings?: {
-    audio?: {
-      settings?: MediaTrackConstraints | { customTrack: MediaStreamTrack }
-      processor?: { type: 'none' | 'noise-cancellation' }
-    }
-  }
-  dailyConfig?: {
-    userMediaAudioConstraints?: MediaTrackConstraints
-    [key: string]: unknown
-  }
-  [key: string]: unknown
-}
-type DailyStartCamera = (options?: DailyStartCameraOptions) => Promise<unknown>
-type DailyMediaManagerWithCallObject = { _daily?: { startCamera?: DailyStartCamera } }
-
-const PUBLIC_WEBCALL_MIC_CONSTRAINTS: MediaTrackConstraints = {
-  echoCancellation: { ideal: true },
-  noiseSuppression: { ideal: true },
-  autoGainControl: { ideal: true },
-  channelCount: { ideal: 1 },
-}
 
 export function PublicWebcallDemo({
   tags,
@@ -90,17 +68,14 @@ export function PublicWebcallDemo({
 
     try {
       const start = await startPublicWebcall()
-      const [{ PipecatClient }, { SmallWebRTCTransport, DailyMediaManager }] = await Promise.all([
+      const [{ PipecatClient }, { SmallWebRTCTransport }] = await Promise.all([
         import('@pipecat-ai/client-js'),
         import('@pipecat-ai/small-webrtc-transport'),
       ])
-      const mediaManager = new DailyMediaManager(false, false)
-      forcePublicWebcallMicProcessing(mediaManager)
       const client = new PipecatClient({
         transport: new SmallWebRTCTransport({
           iceServers: start.iceServers ?? [],
           waitForICEGathering: false,
-          mediaManager,
         }),
         enableMic: true,
         enableCam: false,
@@ -298,41 +273,6 @@ async function startPublicWebcall(): Promise<PublicWebcallStartResult> {
     throw err
   }
   return data as PublicWebcallStartResult
-}
-
-function forcePublicWebcallMicProcessing(mediaManager: unknown) {
-  const daily = (mediaManager as DailyMediaManagerWithCallObject)._daily
-  if (!daily?.startCamera) return
-  const startCamera = daily.startCamera.bind(daily)
-  daily.startCamera = (options = {}) => {
-    const existingAudio = options.inputSettings?.audio ?? {}
-    const existingSettings = existingAudio.settings
-    const audioSettings =
-      existingSettings && 'customTrack' in existingSettings
-        ? existingSettings
-        : {
-            ...PUBLIC_WEBCALL_MIC_CONSTRAINTS,
-            ...(existingSettings ?? {}),
-          }
-
-    return startCamera({
-      ...options,
-      inputSettings: {
-        ...options.inputSettings,
-        audio: {
-          ...existingAudio,
-          settings: audioSettings,
-        },
-      },
-      dailyConfig: {
-        ...options.dailyConfig,
-        userMediaAudioConstraints: {
-          ...PUBLIC_WEBCALL_MIC_CONSTRAINTS,
-          ...(options.dailyConfig?.userMediaAudioConstraints ?? {}),
-        },
-      },
-    })
-  }
 }
 
 function closePublicWebcallSession(session: PublicWebcallSession | null, disconnectClient = true) {
