@@ -93,6 +93,7 @@ export async function putObject(key: string, body: Buffer, contentType: string):
       Key: key,
       Body: body,
       ContentType: contentType || 'application/octet-stream',
+      ACL: publicBaseUrl() ? 'public-read' : undefined,
     }),
   )
   const base = publicBaseUrl()

@@ -186,11 +186,14 @@ async def _upload_to_s3(path: Path) -> str | None:
             kwargs["aws_secret_access_key"] = secret_access_key
         client = boto3.client("s3", **kwargs)
         key = f"recordings/{path.name}"
+        extra_args = {"ContentType": "audio/wav"}
+        if public_base_url:
+            extra_args["ACL"] = "public-read"
         client.upload_file(
             str(path),
             bucket,
             key,
-            ExtraArgs={"ContentType": "audio/wav"},
+            ExtraArgs=extra_args,
         )
         if public_base_url:
             return f"{public_base_url}/{key}"
