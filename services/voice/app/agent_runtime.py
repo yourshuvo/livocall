@@ -95,7 +95,9 @@ def runtime_bool(agent: dict[str, Any], key: str, default: bool) -> bool:
 
 def gemini_live_vad_silence_ms(agent: dict[str, Any]) -> int:
     value = runtime_int(agent, "geminiLiveVadSilenceMs", settings.gemini_live_vad_silence_ms)
-    return max(300, min(2000, value))
+    # Keep Gemini Live as the sole VAD owner, but prevent over-aggressive
+    # endpointing that cuts Bangla/live callers off during short pauses.
+    return max(700, min(2000, value))
 
 
 def gemini_live_vad_prefix_padding_ms(agent: dict[str, Any]) -> int:
@@ -104,7 +106,7 @@ def gemini_live_vad_prefix_padding_ms(agent: dict[str, Any]) -> int:
         "geminiLiveVadPrefixPaddingMs",
         settings.gemini_live_vad_prefix_padding_ms,
     )
-    return max(0, min(1000, value))
+    return max(150, min(1000, value))
 
 
 def gemini_kb_tool_timeout_ms(agent: dict[str, Any]) -> int:

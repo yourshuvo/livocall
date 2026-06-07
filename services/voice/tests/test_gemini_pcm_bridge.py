@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 from typing import Any
 
@@ -74,7 +73,7 @@ def test_live_config_enables_audio_transcription(monkeypatch: pytest.MonkeyPatch
     assert config["output_audio_transcription"] == {}
     assert config["realtime_input_config"]["automatic_activity_detection"] == {
         "disabled": False,
-        "prefix_padding_ms": 100,
+        "prefix_padding_ms": 150,
         "silence_duration_ms": 700,
     }
     assert config["context_window_compression"] == {"sliding_window": {}}
@@ -82,9 +81,21 @@ def test_live_config_enables_audio_transcription(monkeypatch: pytest.MonkeyPatch
     assert config["thinking_config"] == {"thinking_level": "minimal"}
 
 
-def test_pcm16_has_speech_ignores_silence() -> None:
-    assert not bridge._pcm16_has_speech(b"\x00\x00" * 320)
-    assert bridge._pcm16_has_speech((1200).to_bytes(2, "little", signed=True) * 320)
+def test_live_config_enforces_safe_gemini_vad_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bridge.settings, "gemini_live_vad_silence_ms", 250)
+    monkeypatch.setattr(bridge.settings, "gemini_live_vad_prefix_padding_ms", 25)
+
+    config = bridge._live_config(FakeTypes, "Answer fast.", "Puck", {})
+
+    assert config["realtime_input_config"]["automatic_activity_detection"] == {
+        "disabled": False,
+        "prefix_padding_ms": 150,
+        "silence_duration_ms": 700,
+    }
+
+
+def test_bridge_removes_local_pcm_vad() -> None:
+    assert not hasattr(bridge, "_pcm16_has_speech")
 
 
 def test_bridge_modes_keep_phone_and_browser_separate() -> None:
@@ -93,10 +104,10 @@ def test_bridge_modes_keep_phone_and_browser_separate() -> None:
 
     assert phone.wire_format == "pcmu"
     assert phone.input_queue_frames == 2
-    assert not phone.barge_in_enabled
+    assert not hasattr(phone, "barge_in_enabled")
     assert browser.wire_format == "pcm16"
     assert browser.input_queue_frames > phone.input_queue_frames
-    assert not browser.barge_in_enabled
+    assert not hasattr(browser, "barge_in_enabled")
 
 
 @pytest.mark.asyncio
@@ -229,7 +240,6 @@ async def test_receive_model_audio_sends_pcm16_for_browser_wire_format() -> None
     await bridge._receive_model_audio(
         FakeSession([_response(content)]),
         ws,  # type: ignore[arg-type]
-        asyncio.Event(),
         "64b64b64b64b64b64b64b64b",
         {},
         bridge.PcmuLatency("64b64b64b64b64b64b64b64b"),
@@ -257,7 +267,6 @@ async def test_receive_model_audio_converts_pcmu_for_phone_wire_format() -> None
     await bridge._receive_model_audio(
         FakeSession([_response(content)]),
         ws,  # type: ignore[arg-type]
-        asyncio.Event(),
         "64b64b64b64b64b64b64b64b",
         {},
         bridge.PcmuLatency("64b64b64b64b64b64b64b64b"),

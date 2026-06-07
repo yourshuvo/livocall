@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PipecatClient } from '@pipecat-ai/client-js'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -21,13 +21,8 @@ interface PublicWebcallSession {
   pipecat?: PipecatClient
   remoteStream?: MediaStream
   remoteAudio?: HTMLAudioElement
-  audioContext?: AudioContext
-  analyserSource?: MediaStreamAudioSourceNode
-  analyserFrame?: number
   limitTimer?: number
 }
-
-type AudioContextWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }
 
 export function PublicWebcallDemo({
   tags,
@@ -38,8 +33,6 @@ export function PublicWebcallDemo({
 }) {
   const [status, setStatus] = useState<WebcallStatus>('idle')
   const [error, setError] = useState('')
-  const [level, setLevel] = useState(0)
-  const [speaking, setSpeaking] = useState(false)
   const sessionRef = useRef<PublicWebcallSession | null>(null)
 
   useEffect(() => {
@@ -61,8 +54,6 @@ export function PublicWebcallDemo({
     }
 
     setError('')
-    setSpeaking(false)
-    setLevel(0)
     setStatus('connecting')
     const nextSession: PublicWebcallSession = {}
 
@@ -86,11 +77,11 @@ export function PublicWebcallDemo({
           onBotDisconnected: () => stopWebcall(),
           onTrackStarted: (track) => {
             if (isLocalPipecatAudioTrack(client, track)) return
-            attachPublicWebcallAudioTrack(nextSession, track, setLevel, setSpeaking)
+            attachPublicWebcallAudioTrack(nextSession, track)
           },
           onTrackStopped: (track) => {
             if (isLocalPipecatAudioTrack(client, track)) return
-            if (track.kind === 'audio') detachPublicWebcallAudio(nextSession, setLevel, setSpeaking)
+            if (track.kind === 'audio') detachPublicWebcallAudio(nextSession)
           },
           onTransportStateChanged: (state) => {
             if (state === 'error') failWebcall('Webcall connection failed.')
@@ -114,8 +105,6 @@ export function PublicWebcallDemo({
       const limited = Boolean((err as Error & { limited?: boolean }).limited)
       setStatus(limited ? 'limited' : 'idle')
       setError(err instanceof Error ? err.message : 'Could not start Webcall.')
-      setSpeaking(false)
-      setLevel(0)
     }
   }
 
@@ -123,8 +112,6 @@ export function PublicWebcallDemo({
     closePublicWebcallSession(sessionRef.current)
     sessionRef.current = null
     setStatus('idle')
-    setSpeaking(false)
-    setLevel(0)
     if (message) setError(message)
   }
 
@@ -132,8 +119,6 @@ export function PublicWebcallDemo({
     closePublicWebcallSession(sessionRef.current, false)
     sessionRef.current = null
     setStatus('idle')
-    setSpeaking(false)
-    setLevel(0)
     setError(message)
   }
 
@@ -144,7 +129,6 @@ export function PublicWebcallDemo({
       : status === 'connecting'
         ? 'Connecting'
         : 'Start Webcall'
-  const orbStyle = { '--webcall-level': level.toFixed(3) } as CSSProperties
   const statusLabel = !configured
     ? 'Unavailable'
     : status === 'live'
@@ -171,9 +155,7 @@ export function PublicWebcallDemo({
                   'webcall-orb-shell relative grid size-64 place-items-center rounded-full',
                   status === 'connecting' && 'webcall-orb--connecting',
                   status === 'live' && 'webcall-orb--live',
-                  speaking && 'webcall-orb--speaking',
                 )}
-                style={orbStyle}
               >
                 <div className="live-demo-orb relative size-56 overflow-hidden rounded-full bg-[radial-gradient(circle_at_30%_20%,#7dd3fc,transparent_34%),radial-gradient(circle_at_70%_30%,#f5d0fe,transparent_32%),radial-gradient(circle_at_45%_65%,#2563eb,transparent_36%),radial-gradient(circle_at_72%_72%,#67e8f9,transparent_34%)] opacity-90" />
               </div>
@@ -278,10 +260,6 @@ async function startPublicWebcall(): Promise<PublicWebcallStartResult> {
 function closePublicWebcallSession(session: PublicWebcallSession | null, disconnectClient = true) {
   if (!session) return
   if (session.limitTimer) window.clearTimeout(session.limitTimer)
-  if (session.analyserFrame) window.cancelAnimationFrame(session.analyserFrame)
-  try {
-    session.analyserSource?.disconnect()
-  } catch {}
   for (const track of session.remoteStream?.getTracks() ?? []) {
     track.stop()
   }
@@ -290,22 +268,14 @@ function closePublicWebcallSession(session: PublicWebcallSession | null, disconn
     session.remoteAudio.srcObject = null
     session.remoteAudio.remove()
   }
-  if (session.audioContext && session.audioContext.state !== 'closed') {
-    void session.audioContext.close().catch(() => {})
-  }
   if (disconnectClient && session.pipecat) {
     void session.pipecat.disconnect().catch(() => {})
   }
 }
 
-function attachPublicWebcallAudioTrack(
-  session: PublicWebcallSession,
-  track: MediaStreamTrack,
-  setLevel: (level: number) => void,
-  setSpeaking: (speaking: boolean) => void,
-) {
+function attachPublicWebcallAudioTrack(session: PublicWebcallSession, track: MediaStreamTrack) {
   if (track.kind !== 'audio') return
-  detachPublicWebcallAudio(session, setLevel, setSpeaking)
+  detachPublicWebcallAudio(session)
 
   const stream = new MediaStream([track])
   const audio = document.createElement('audio')
@@ -319,25 +289,10 @@ function attachPublicWebcallAudioTrack(
 
   session.remoteStream = stream
   session.remoteAudio = audio
-  startPublicWebcallAnalyser(session, stream, setLevel, setSpeaking)
   void audio.play().catch(() => {})
 }
 
-function detachPublicWebcallAudio(
-  session: PublicWebcallSession,
-  setLevel: (level: number) => void,
-  setSpeaking: (speaking: boolean) => void,
-) {
-  if (session.analyserFrame) window.cancelAnimationFrame(session.analyserFrame)
-  session.analyserFrame = undefined
-  try {
-    session.analyserSource?.disconnect()
-  } catch {}
-  session.analyserSource = undefined
-  if (session.audioContext && session.audioContext.state !== 'closed') {
-    void session.audioContext.close().catch(() => {})
-  }
-  session.audioContext = undefined
+function detachPublicWebcallAudio(session: PublicWebcallSession) {
   for (const track of session.remoteStream?.getTracks() ?? []) {
     track.stop()
   }
@@ -348,8 +303,6 @@ function detachPublicWebcallAudio(
     session.remoteAudio.remove()
   }
   session.remoteAudio = undefined
-  setLevel(0)
-  setSpeaking(false)
 }
 
 function isLocalPipecatAudioTrack(client: PipecatClient, track: MediaStreamTrack) {
@@ -358,46 +311,5 @@ function isLocalPipecatAudioTrack(client: PipecatClient, track: MediaStreamTrack
     return client.tracks().local.audio?.id === track.id
   } catch {
     return false
-  }
-}
-
-function startPublicWebcallAnalyser(
-  session: PublicWebcallSession,
-  stream: MediaStream,
-  setLevel: (level: number) => void,
-  setSpeaking: (speaking: boolean) => void,
-) {
-  try {
-    const AudioCtor =
-      window.AudioContext || (window as AudioContextWindow).webkitAudioContext || null
-    if (!AudioCtor) return
-    const context = new AudioCtor()
-    const source = context.createMediaStreamSource(stream)
-    const analyser = context.createAnalyser()
-    analyser.fftSize = 256
-    analyser.smoothingTimeConstant = 0.55
-    source.connect(analyser)
-    session.audioContext = context
-    session.analyserSource = source
-    const samples = new Uint8Array(analyser.fftSize)
-    let smoothed = 0
-    const tick = () => {
-      analyser.getByteTimeDomainData(samples)
-      let sum = 0
-      for (const sample of samples) {
-        const centered = (sample - 128) / 128
-        sum += centered * centered
-      }
-      const rms = Math.sqrt(sum / samples.length)
-      smoothed = smoothed * 0.72 + Math.min(1, rms * 7) * 0.28
-      setLevel(smoothed)
-      setSpeaking(smoothed > 0.035)
-      session.analyserFrame = window.requestAnimationFrame(tick)
-    }
-    void context.resume().catch(() => {})
-    tick()
-  } catch {
-    setLevel(0)
-    setSpeaking(false)
   }
 }

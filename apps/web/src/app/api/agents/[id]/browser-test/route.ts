@@ -11,7 +11,7 @@ import {
   requireDashboardSession,
 } from '@/lib/api-helpers'
 import { apiError, withErrors } from '@/lib/errors'
-import { browserIceServers, browserWebrtcUrl, browserWsBaseUrl, signWsAuth } from '@/lib/browser-webrtc'
+import { browserIceServers, browserWebrtcUrl, signWsAuth } from '@/lib/browser-webrtc'
 import { Agent } from '@/models/Agent'
 import { Call } from '@/models/Call'
 
@@ -32,50 +32,32 @@ export const POST = withErrors(async (_req: Request, ctx: { params: Promise<{ id
   if (!agent) return apiError('not_found', 'agent not found')
 
   const callId = new Types.ObjectId().toString()
-  if (agent.tier === 'gemini_live') {
-    const webrtcUrl = browserWebrtcUrl()
-    if (!webrtcUrl) {
-      return apiError('upstream_error', 'browser WebRTC is not configured')
-    }
-    await createBrowserTestCall({
-      callId,
-      orgId: session.orgId,
-      agentId: oid,
-      tier: agent.tier,
-    })
-    webrtcUrl.searchParams.set('call_id', callId)
-    webrtcUrl.searchParams.set('agent_id', String(oid))
-    webrtcUrl.searchParams.set('tier', agent.tier)
-    webrtcUrl.searchParams.append('meta', 'source:dashboard-browser-test')
-    const auth = signWsAuth(callId)
-    if (auth) webrtcUrl.searchParams.set('auth', auth)
-
-    return NextResponse.json({
-      callId,
-      transport: 'small-webrtc',
-      webrtcUrl: webrtcUrl.toString(),
-      iceServers: browserIceServers(),
-    })
+  if (agent.tier !== 'gemini_live') {
+    return apiError('invalid_input', 'browser voice test currently supports Gemini Live agents only')
   }
 
-  const wsBase = browserWsBaseUrl()
-  if (!wsBase) {
-    return apiError('upstream_error', 'browser voice test websocket is not configured')
+  const webrtcUrl = browserWebrtcUrl()
+  if (!webrtcUrl) {
+    return apiError('upstream_error', 'browser WebRTC is not configured')
   }
-  const wsUrl = new URL(wsBase)
-  wsUrl.searchParams.set('call_id', callId)
-  wsUrl.searchParams.set('agent_id', String(oid))
-  wsUrl.searchParams.set('tier', agent.tier)
-  wsUrl.searchParams.append('meta', 'source:dashboard-browser-test')
+  await createBrowserTestCall({
+    callId,
+    orgId: session.orgId,
+    agentId: oid,
+    tier: agent.tier,
+  })
+  webrtcUrl.searchParams.set('call_id', callId)
+  webrtcUrl.searchParams.set('agent_id', String(oid))
+  webrtcUrl.searchParams.set('tier', agent.tier)
+  webrtcUrl.searchParams.append('meta', 'source:dashboard-browser-test')
   const auth = signWsAuth(callId)
-  if (auth) wsUrl.searchParams.set('auth', auth)
+  if (auth) webrtcUrl.searchParams.set('auth', auth)
 
   return NextResponse.json({
     callId,
-    transport: 'raw-websocket',
-    wsUrl: wsUrl.toString(),
-    inputSampleRate: 16000,
-    outputSampleRate: agent.tier === 'grok_voice' || agent.tier === 'dtmf' ? 16000 : 24000,
+    transport: 'small-webrtc',
+    webrtcUrl: webrtcUrl.toString(),
+    iceServers: browserIceServers(),
   })
 })
 

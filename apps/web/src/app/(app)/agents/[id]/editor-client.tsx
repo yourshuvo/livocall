@@ -133,15 +133,7 @@ interface BrowserWebrtcStartResult {
   iceServers?: RTCIceServer[]
 }
 
-interface BrowserRawWebsocketStartResult {
-  callId: string
-  transport?: 'raw-websocket'
-  wsUrl: string
-  inputSampleRate: number
-  outputSampleRate: number
-}
-
-type BrowserTestStartResult = BrowserWebrtcStartResult | BrowserRawWebsocketStartResult
+type BrowserTestStartResult = BrowserWebrtcStartResult
 
 interface LlmTestResult {
   response: string
@@ -156,14 +148,8 @@ interface LlmChatMessage {
 }
 
 interface BrowserAudioSession {
-  stream?: MediaStream
   remoteStream?: MediaStream
   remoteAudio?: HTMLAudioElement
-  context?: AudioContext
-  source?: MediaStreamAudioSourceNode
-  processor?: ScriptProcessorNode
-  processorSink?: GainNode
-  socket?: WebSocket
   pipecat?: PipecatClient
   recorder?: MediaRecorder
   recordingChunks?: Blob[]
@@ -172,8 +158,6 @@ interface BrowserAudioSession {
   remoteRecordTrack?: MediaStreamTrack
   recordingCallId?: string
   recordingUploadStarted?: boolean
-  playbackTime: number
-  outputSampleRate: number
 }
 
 /* ----------------------------- Engine catalog ----------------------------- */
@@ -946,7 +930,7 @@ export function AgentEditor({
       if (!ok) return
     }
 
-    const audioSession: BrowserAudioSession = { playbackTime: 0, outputSampleRate: 16000 }
+    const audioSession: BrowserAudioSession = {}
     setBrowserTestStatus('connecting')
     setTab('simulation')
     setTestPanel('audio')
@@ -956,93 +940,20 @@ export function AgentEditor({
         `/api/agents/${initial.id}/browser-test`,
         {},
       )
-      if (session.transport === 'small-webrtc') {
-        await connectBrowserWebrtcSession(session, audioSession, {
-          onDisconnected: () => {
-            if (browserAudioRef.current !== audioSession) return
-            browserAudioRef.current = null
-            closeBrowserAudioSession(audioSession, false)
-            setBrowserTestStatus('idle')
-            setBrowserTestCallId('')
-          },
-          onError: () => {
-            if (browserAudioRef.current !== audioSession) return
-            toast('Browser test disconnected', 'error')
-            stopBrowserTest(false)
-          },
-        })
-
-        closeBrowserAudioSession(browserAudioRef.current)
-        browserAudioRef.current = audioSession
-        setBrowserTestStatus('live')
-        setBrowserTestCallId(session.callId)
-        setTestOpen(false)
-        toast('Browser test connected in this tab', 'success')
-        return
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+      await connectBrowserWebrtcSession(session, audioSession, {
+        onDisconnected: () => {
+          if (browserAudioRef.current !== audioSession) return
+          browserAudioRef.current = null
+          closeBrowserAudioSession(audioSession, false)
+          setBrowserTestStatus('idle')
+          setBrowserTestCallId('')
+        },
+        onError: () => {
+          if (browserAudioRef.current !== audioSession) return
+          toast('Browser test disconnected', 'error')
+          stopBrowserTest(false)
         },
       })
-      audioSession.stream = stream
-      const context = new AudioContext()
-      audioSession.context = context
-      await context.resume()
-      if (!session.wsUrl) throw new Error('Browser voice test websocket is not configured')
-      const socket = new WebSocket(session.wsUrl)
-      audioSession.socket = socket
-      socket.binaryType = 'arraybuffer'
-      await waitForSocketOpen(socket)
-
-      const source = context.createMediaStreamSource(stream)
-      const processor = context.createScriptProcessor(4096, 1, 1)
-      const processorSink = context.createGain()
-      processorSink.gain.value = 0
-      const inputSampleRate = session.inputSampleRate || 16000
-      audioSession.source = source
-      audioSession.processor = processor
-      audioSession.processorSink = processorSink
-      audioSession.outputSampleRate = session.outputSampleRate || 16000
-
-      processor.onaudioprocess = (event) => {
-        if (socket.readyState !== WebSocket.OPEN) return
-        const input = event.inputBuffer.getChannelData(0)
-        const resampled = resampleFloat32(input, context.sampleRate, inputSampleRate)
-        const pcm = floatTo16BitPcm(resampled)
-        if (pcm.byteLength > 0) socket.send(pcm)
-      }
-      source.connect(processor)
-      // ScriptProcessor must be connected to run, but never route mic audio to
-      // speakers; that makes browser tests sound like the caller is echoing.
-      processor.connect(processorSink)
-      processorSink.connect(context.destination)
-
-      socket.onmessage = (event) => {
-        if (typeof event.data === 'string') return
-        if (event.data instanceof ArrayBuffer) {
-          playPcmChunk(audioSession, event.data)
-          return
-        }
-        if (event.data instanceof Blob) {
-          void event.data.arrayBuffer().then((buffer) => playPcmChunk(audioSession, buffer))
-        }
-      }
-      socket.onclose = () => {
-        if (browserAudioRef.current !== audioSession) return
-        browserAudioRef.current = null
-        closeBrowserAudioSession(audioSession, false)
-        setBrowserTestStatus('idle')
-        setBrowserTestCallId('')
-      }
-      socket.onerror = () => {
-        if (browserAudioRef.current !== audioSession) return
-        toast('Browser test disconnected', 'error')
-        stopBrowserTest(false)
-      }
 
       closeBrowserAudioSession(browserAudioRef.current)
       browserAudioRef.current = audioSession
@@ -3073,23 +2984,11 @@ function Divider() {
   return <div className="bg-line my-3 h-px" />
 }
 
-function closeBrowserAudioSession(session: BrowserAudioSession | null, closeSocket = true) {
+function closeBrowserAudioSession(session: BrowserAudioSession | null, disconnectClient = true) {
   if (!session) return
   stopAndUploadBrowserRecording(session)
-  if (session.pipecat) {
+  if (disconnectClient && session.pipecat) {
     void session.pipecat.disconnect().catch(() => {})
-  }
-  try {
-    session.processor?.disconnect()
-  } catch {}
-  try {
-    session.processorSink?.disconnect()
-  } catch {}
-  try {
-    session.source?.disconnect()
-  } catch {}
-  for (const track of session.stream?.getTracks() ?? []) {
-    track.stop()
   }
   for (const track of session.remoteStream?.getTracks() ?? []) {
     track.stop()
@@ -3098,17 +2997,6 @@ function closeBrowserAudioSession(session: BrowserAudioSession | null, closeSock
     session.remoteAudio.pause()
     session.remoteAudio.srcObject = null
     session.remoteAudio.remove()
-  }
-  if (
-    closeSocket &&
-    session.socket &&
-    (session.socket.readyState === WebSocket.OPEN ||
-      session.socket.readyState === WebSocket.CONNECTING)
-  ) {
-    session.socket.close(1000, 'browser test stopped')
-  }
-  if (session.context && session.context.state !== 'closed') {
-    void session.context.close().catch(() => {})
   }
 }
 
@@ -3289,82 +3177,6 @@ function isLocalPipecatAudioTrack(client: PipecatClient, track: MediaStreamTrack
   } catch {
     return false
   }
-}
-
-function waitForSocketOpen(socket: WebSocket): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      cleanup()
-      reject(new Error('Browser test connection timed out'))
-    }, 10000)
-
-    function cleanup() {
-      window.clearTimeout(timeout)
-      socket.removeEventListener('open', handleOpen)
-      socket.removeEventListener('error', handleError)
-    }
-    function handleOpen() {
-      cleanup()
-      resolve()
-    }
-    function handleError() {
-      cleanup()
-      reject(new Error('Could not connect to the browser test service'))
-    }
-
-    socket.addEventListener('open', handleOpen)
-    socket.addEventListener('error', handleError)
-  })
-}
-
-function resampleFloat32(input: Float32Array, fromRate: number, toRate: number): Float32Array {
-  if (fromRate === toRate) return new Float32Array(input)
-  const ratio = fromRate / toRate
-  const outputLength = Math.max(1, Math.round(input.length / ratio))
-  const output = new Float32Array(outputLength)
-  for (let i = 0; i < outputLength; i += 1) {
-    const sourceIndex = i * ratio
-    const left = Math.floor(sourceIndex)
-    const right = Math.min(input.length - 1, left + 1)
-    const weight = sourceIndex - left
-    output[i] = input[left] * (1 - weight) + input[right] * weight
-  }
-  return output
-}
-
-function floatTo16BitPcm(input: Float32Array): ArrayBuffer {
-  const buffer = new ArrayBuffer(input.length * 2)
-  const view = new DataView(buffer)
-  for (let i = 0; i < input.length; i += 1) {
-    const sample = Math.max(-1, Math.min(1, input[i]))
-    view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true)
-  }
-  return buffer
-}
-
-function playPcmChunk(session: BrowserAudioSession, buffer: ArrayBuffer) {
-  if (!session.context || buffer.byteLength < 2) return
-  const aligned = buffer.byteLength % 2 === 0 ? buffer : buffer.slice(0, buffer.byteLength - 1)
-  const samples = new Int16Array(aligned)
-  if (samples.length === 0) return
-  const sampleRate = inferPcmSampleRate(aligned.byteLength, session.outputSampleRate)
-  const audioBuffer = session.context.createBuffer(1, samples.length, sampleRate)
-  const channel = audioBuffer.getChannelData(0)
-  for (let i = 0; i < samples.length; i += 1) {
-    channel[i] = samples[i] / (samples[i] < 0 ? 0x8000 : 0x7fff)
-  }
-  const source = session.context.createBufferSource()
-  source.buffer = audioBuffer
-  source.connect(session.context.destination)
-  const startAt = Math.max(session.context.currentTime + 0.02, session.playbackTime)
-  source.start(startAt)
-  session.playbackTime = startAt + audioBuffer.duration
-}
-
-function inferPcmSampleRate(byteLength: number, fallback: number) {
-  if (byteLength % 960 === 0 && byteLength % 640 !== 0) return 24000
-  if (byteLength % 640 === 0 && byteLength % 960 !== 0) return 16000
-  return fallback
 }
 
 function formatTime(d: Date) {

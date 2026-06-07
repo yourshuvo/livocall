@@ -101,14 +101,12 @@ class GeminiPcmBridge:
         *,
         wire_format: str = "pcmu",
         input_queue_frames: int = 2,
-        barge_in_enabled: bool = True,
         bridge_mode: str = "phone",
     ) -> None:
         if wire_format not in {"pcmu", "pcm16"}:
             raise ValueError(f"unknown wire_format: {wire_format}")
         self.wire_format = wire_format
         self.input_queue_frames = max(1, input_queue_frames)
-        self.barge_in_enabled = barge_in_enabled
         self.bridge_mode = bridge_mode
 
     @classmethod
@@ -116,11 +114,6 @@ class GeminiPcmBridge:
         return cls(
             wire_format="pcmu",
             input_queue_frames=2,
-            # Let Gemini Live's native automatic_activity_detection own turn-taking.
-            # A local PCM energy gate can mistake echo/noise for caller speech and
-            # suppress model audio, which sounds like the agent is repeating or
-            # resounding the caller.
-            barge_in_enabled=False,
             bridge_mode="phone",
         )
 
@@ -129,7 +122,6 @@ class GeminiPcmBridge:
         return cls(
             wire_format="pcm16",
             input_queue_frames=8,
-            barge_in_enabled=False,
             bridge_mode="browser",
         )
 
@@ -171,7 +163,6 @@ class GeminiPcmBridge:
         client = genai.Client(api_key=settings.gemini_api_key)
 
         input_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=self.input_queue_frames)
-        barge_in = asyncio.Event()
         latency = PcmuLatency(call_id)
         transcript = TranscriptBuffer(call_id)
         session_state: dict[str, str] = {}
@@ -183,11 +174,9 @@ class GeminiPcmBridge:
                 _read_wire_audio(
                     ws,
                     input_queue,
-                    barge_in,
                     call_id,
                     latency,
                     wire_format=self.wire_format,
-                    barge_in_enabled=self.barge_in_enabled,
                 )
             )
             for reconnect_attempt in range(3):
@@ -215,19 +204,15 @@ class GeminiPcmBridge:
                             bridge_mode=self.bridge_mode,
                             wire_format=self.wire_format,
                             input_queue_frames=self.input_queue_frames,
-                            barge_in_enabled=self.barge_in_enabled,
                         )
                         latency.mark("gemini_ws_connected")
                         sender = asyncio.create_task(
-                            _send_caller_audio(
-                                session, types, input_queue, barge_in, call_id, latency
-                            )
+                            _send_caller_audio(session, types, input_queue, call_id, latency)
                         )
                         receiver = asyncio.create_task(
                             _receive_model_audio_loop(
                                 session,
                                 ws,
-                                barge_in,
                                 call_id,
                                 agent,
                                 latency,
@@ -347,12 +332,10 @@ def _live_config(
 async def _read_wire_audio(
     ws: WebSocket,
     input_queue: asyncio.Queue[bytes | None],
-    barge_in: asyncio.Event,
     call_id: str,
     latency: PcmuLatency,
     *,
     wire_format: str,
-    barge_in_enabled: bool,
 ) -> None:
     try:
         while True:
@@ -370,11 +353,8 @@ async def _read_wire_audio(
                 ]
             else:
                 chunks = split_pcm16_16k_20ms(bytes(data))
-            if barge_in_enabled and any(_pcm16_has_speech(chunk) for chunk in chunks):
+            if chunks:
                 latency.mark("first_caller_audio")
-                barge_in.set()
-            else:
-                barge_in.clear()
             for pcm_chunk in chunks:
                 if input_queue.full():
                     input_queue.get_nowait()
@@ -388,7 +368,6 @@ async def _send_caller_audio(
     session: Any,
     types: Any,
     input_queue: asyncio.Queue[bytes | None],
-    barge_in: asyncio.Event,
     call_id: str,
     latency: PcmuLatency,
 ) -> None:
@@ -400,14 +379,12 @@ async def _send_caller_audio(
             audio=types.Blob(data=chunk, mime_type="audio/pcm;rate=16000")
         )
         latency.mark("first_gemini_audio_send")
-        barge_in.clear()
     log.info("gemini_pcm.sender_done", call_id=call_id)
 
 
 async def _receive_model_audio(
     session: Any,
     ws: WebSocket,
-    barge_in: asyncio.Event,
     call_id: str,
     agent: dict[str, Any],
     latency: PcmuLatency,
@@ -441,11 +418,7 @@ async def _receive_model_audio(
                 continue
             audio = item
             latency.mark("first_model_audio")
-            if barge_in.is_set():
-                continue
             for pcm24_chunk in split_pcm16_24k_20ms(audio):
-                if barge_in.is_set():
-                    break
                 if wire_format == "pcmu":
                     await ws.send_bytes(pcm16_24k_to_pcmu(pcm24_chunk))
                 else:
@@ -458,21 +431,9 @@ async def _receive_model_audio(
     return saw_item
 
 
-def _pcm16_has_speech(audio: bytes, *, min_avg_abs: int = 220) -> bool:
-    if len(audio) < 2:
-        return False
-    total = 0
-    count = 0
-    for i in range(0, len(audio) - 1, 2):
-        total += abs(int.from_bytes(audio[i : i + 2], "little", signed=True))
-        count += 1
-    return count > 0 and (total / count) >= min_avg_abs
-
-
 async def _receive_model_audio_loop(
     session: Any,
     ws: WebSocket,
-    barge_in: asyncio.Event,
     call_id: str,
     agent: dict[str, Any],
     latency: PcmuLatency,
@@ -485,7 +446,6 @@ async def _receive_model_audio_loop(
         saw_item = await _receive_model_audio(
             session,
             ws,
-            barge_in,
             call_id,
             agent,
             latency,
