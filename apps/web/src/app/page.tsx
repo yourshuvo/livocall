@@ -20,7 +20,9 @@ const NAV_ITEMS = [
 
 const TRUST_MARKS = ['E-commerce', 'Clinics', 'Education', 'Finance', 'Logistics']
 
-const HERO_IMAGE_URL = '/assets/landing/frosted-hero.png'
+const HERO_IMAGE_URL = 'https://cdn.hackclub.com/019ea144-8633-7feb-9924-f88a8610d274/frosted-hero.png'
+const HERO_MOBILE_IMAGE_URL =
+  'https://user-cdn.hackclub-assets.com/019ea1a6-67d3-71f4-849e-1e3aacf43408/1780828220898.png'
 
 const USE_CASE_CARDS = [
   {
@@ -294,10 +296,16 @@ function Hero({ locale }: { locale: Locale }) {
     <section className="relative isolate flex min-h-screen overflow-hidden border-b border-line">
       <div className="absolute inset-0 -z-20 overflow-hidden bg-bg">
         <img
+          src={HERO_MOBILE_IMAGE_URL}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover sm:hidden"
+        />
+        <img
           src={HERO_IMAGE_URL}
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 hidden h-full w-full object-cover sm:block"
         />
       </div>
 

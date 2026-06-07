@@ -4,6 +4,8 @@ import { Icon } from '@/components/ui/icon'
 import type { Locale } from '@/lib/i18n'
 import { cn } from '@/lib/cn'
 
+const HERO_CARD_BACKGROUND_URL = 'https://cdn.hackclub.com/019ea144-8633-7feb-9924-f88a8610d274/frosted-hero.png'
+
 interface Turn {
   role: 'agent' | 'caller'
   en: string
@@ -37,7 +39,7 @@ export function HeroProductCard({ locale }: { locale: Locale }) {
       <span className="absolute inset-0 cross-tl cross-tr cross-bl cross-br pointer-events-none" />
       <div className="relative overflow-hidden rounded-xl border border-line bg-bg shadow-pop">
         <img
-          src="/assets/landing/frosted-hero.png"
+          src={HERO_CARD_BACKGROUND_URL}
           alt=""
           aria-hidden="true"
           className="absolute inset-0 h-full w-full object-cover opacity-90"
