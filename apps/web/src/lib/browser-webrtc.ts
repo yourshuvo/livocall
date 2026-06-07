@@ -20,6 +20,20 @@ export function browserWebrtcUrl() {
   }
 }
 
+export function browserWebrtcPrewarmUrl() {
+  const direct = process.env.VOICE_BROWSER_WEBRTC_PREWARM_URL || ''
+  const serviceUrl = process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || process.env.VOICE_SERVICE_URL || ''
+  const value = direct || (serviceUrl ? `${serviceUrl.replace(/\/+$/, '')}/webrtc/browser-prewarm` : '')
+  if (!value) return null
+  try {
+    const url = new URL(value.trim())
+    if (!/^https?:$/.test(url.protocol)) return null
+    return url
+  } catch {
+    return null
+  }
+}
+
 export function browserIceServers(): BrowserIceServer[] {
   const servers: BrowserIceServer[] = (
     process.env.WEBRTC_ICE_SERVERS || 'stun:stun.l.google.com:19302'

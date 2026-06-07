@@ -29,6 +29,9 @@ from app.browser_webrtc import (
     handle_offer as handle_browser_webrtc_offer,
 )
 from app.browser_webrtc import (
+    prewarm as prewarm_browser_webrtc,
+)
+from app.browser_webrtc import (
     public_ice_servers,
 )
 from app.latency import LatencyTrace
@@ -161,6 +164,11 @@ async def browser_webrtc_config() -> dict[str, object]:
         "enabled": settings.browser_webrtc_enabled,
         "iceServers": public_ice_servers(),
     }
+
+
+@app.post("/webrtc/browser-prewarm")
+async def browser_webrtc_prewarm() -> dict[str, object]:
+    return prewarm_browser_webrtc()
 
 
 @app.post("/webrtc/browser-offer")

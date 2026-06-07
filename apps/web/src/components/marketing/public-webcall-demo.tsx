@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PipecatClient } from '@pipecat-ai/client-js'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -34,15 +34,31 @@ export function PublicWebcallDemo({
   const [status, setStatus] = useState<WebcallStatus>('idle')
   const [error, setError] = useState('')
   const sessionRef = useRef<PublicWebcallSession | null>(null)
+  const prewarmStartedRef = useRef(false)
+
+  const prewarmWebcall = useCallback(() => {
+    if (!configured || prewarmStartedRef.current) return
+    prewarmStartedRef.current = true
+    void fetch('/api/voice/browser-prewarm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    }).catch(() => {
+      // Best-effort only. The actual Webcall start path still creates the
+      // real Gemini/WebRTC session if prewarm fails or times out.
+    })
+  }, [configured])
 
   useEffect(() => {
+    if (configured) prewarmWebcall()
     return () => {
       closePublicWebcallSession(sessionRef.current)
       sessionRef.current = null
     }
-  }, [])
+  }, [configured, prewarmWebcall])
 
   async function startWebcall() {
+    prewarmWebcall()
     if (status === 'live') {
       stopWebcall('Webcall stopped.')
       return
@@ -211,6 +227,8 @@ export function PublicWebcallDemo({
               size="lg"
               className="mt-12 px-6"
               disabled={!configured || status === 'connecting' || status === 'limited'}
+              onPointerEnter={prewarmWebcall}
+              onFocus={prewarmWebcall}
               onClick={() => void startWebcall()}
             >
               <Icon name={status === 'live' ? 'x' : 'phone'} size="xs" square={false} />
@@ -289,7 +307,21 @@ function attachPublicWebcallAudioTrack(session: PublicWebcallSession, track: Med
 
   session.remoteStream = stream
   session.remoteAudio = audio
-  void audio.play().catch(() => {})
+  playHiddenRemoteAudio(audio)
+}
+
+function playHiddenRemoteAudio(audio: HTMLAudioElement) {
+  void audio.play().catch(() => {
+    const retry = () => {
+      document.removeEventListener('pointerdown', retry)
+      document.removeEventListener('touchend', retry)
+      document.removeEventListener('keydown', retry)
+      void audio.play().catch(() => undefined)
+    }
+    document.addEventListener('pointerdown', retry, { once: true })
+    document.addEventListener('touchend', retry, { once: true })
+    document.addEventListener('keydown', retry, { once: true })
+  })
 }
 
 function detachPublicWebcallAudio(session: PublicWebcallSession) {

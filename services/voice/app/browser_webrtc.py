@@ -288,6 +288,20 @@ def _with_bangla_only_guard(system_prompt: str) -> str:
     )
 
 
+def prewarm() -> dict[str, object]:
+    if not settings.browser_webrtc_enabled:
+        return {
+            "ok": False,
+            "enabled": False,
+            "handlerReady": False,
+            "iceServers": public_ice_servers(),
+        }
+    imports = _load_webrtc_imports()
+    _get_handler(imports)
+    log.info("browser_webrtc.prewarmed")
+    return {"ok": True, "enabled": True, "handlerReady": True, "iceServers": public_ice_servers()}
+
+
 async def handle_offer(
     request: Request,
     background_tasks: BackgroundTasks,

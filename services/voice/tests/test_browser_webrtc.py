@@ -121,6 +121,29 @@ def test_browser_webrtc_offer_rejects_bad_auth(monkeypatch) -> None:
     assert res.status_code == 403
 
 
+def test_browser_webrtc_prewarm_initializes_handler(monkeypatch) -> None:
+    _enable_browser_webrtc(monkeypatch)
+
+    with TestClient(app) as client:
+        res = client.post("/webrtc/browser-prewarm")
+
+    assert res.status_code == 200
+    assert res.json() == {
+        "ok": True,
+        "enabled": True,
+        "handlerReady": True,
+        "iceServers": [
+            {"urls": "stun:one"},
+            {"urls": "stun:two"},
+            {
+                "urls": "turn:turn.example.com:3478",
+                "username": "turn-user",
+                "credential": "turn-pass",
+            },
+        ],
+    }
+
+
 def test_browser_webrtc_offer_allows_cors_preflight(monkeypatch) -> None:
     _enable_browser_webrtc(monkeypatch)
 

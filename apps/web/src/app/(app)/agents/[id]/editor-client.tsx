@@ -665,6 +665,7 @@ export function AgentEditor({
   const [toolTesting, setToolTesting] = useState<number | null>(null)
   const [toolResults, setToolResults] = useState<Record<number, string>>({})
   const browserAudioRef = useRef<BrowserAudioSession | null>(null)
+  const browserPrewarmStartedRef = useRef(false)
 
   // Open accordions (matches the Retell screenshot defaults)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -911,7 +912,20 @@ export function AgentEditor({
     if (showToast) toast('Browser test stopped', 'success')
   }
 
+  function prewarmBrowserTest() {
+    if (tier !== 'gemini_live' || browserPrewarmStartedRef.current) return
+    browserPrewarmStartedRef.current = true
+    void fetch('/api/voice/browser-prewarm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    }).catch(() => {
+      // Best-effort only. runBrowserTest still creates the real session.
+    })
+  }
+
   async function runBrowserTest() {
+    prewarmBrowserTest()
     if (browserTestStatus === 'live') {
       stopBrowserTest(true)
       return
@@ -2295,7 +2309,10 @@ export function AgentEditor({
               <div className="border-line bg-bg grid w-full grid-cols-2 rounded-[5px] border p-0.5">
                 <button
                   type="button"
-                  onClick={() => setTestMode('browser')}
+                  onClick={() => {
+                    setTestMode('browser')
+                    prewarmBrowserTest()
+                  }}
                   className={cn(
                     'inline-flex h-7 items-center justify-center gap-1 rounded-[4px] text-[11.5px] font-medium transition',
                     testMode === 'browser'
@@ -2327,6 +2344,12 @@ export function AgentEditor({
               </p>
               <button
                 type="button"
+                onPointerEnter={() => {
+                  if (testMode === 'browser') prewarmBrowserTest()
+                }}
+                onFocus={() => {
+                  if (testMode === 'browser') prewarmBrowserTest()
+                }}
                 onClick={() =>
                   testMode === 'browser' ? void runBrowserTest() : setTestOpen(true)
                 }
@@ -3099,9 +3122,20 @@ function attachBrowserWebrtcAudioTrack(
 
   session.remoteStream = stream
   session.remoteAudio = audio
+  playHiddenRemoteAudio(audio)
+}
+
+function playHiddenRemoteAudio(audio: HTMLAudioElement) {
   void audio.play().catch(() => {
-    // The call starts from a user gesture, but mobile browsers can still race
-    // the remote track. A later user interaction will unlock the element.
+    const retry = () => {
+      document.removeEventListener('pointerdown', retry)
+      document.removeEventListener('touchend', retry)
+      document.removeEventListener('keydown', retry)
+      void audio.play().catch(() => undefined)
+    }
+    document.addEventListener('pointerdown', retry, { once: true })
+    document.addEventListener('touchend', retry, { once: true })
+    document.addEventListener('keydown', retry, { once: true })
   })
 }
 
