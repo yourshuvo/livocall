@@ -65,7 +65,7 @@ def test_live_config_enables_audio_transcription(monkeypatch: pytest.MonkeyPatch
         FakeTypes,
         "Answer fast.",
         "Puck",
-        {"runtimeSettings": {"geminiLiveVadSilenceMs": 700}},
+        {"runtimeSettings": {"geminiLiveVadSilenceMs": 600}},
     )
 
     assert config["response_modalities"] == ["AUDIO"]
@@ -73,8 +73,8 @@ def test_live_config_enables_audio_transcription(monkeypatch: pytest.MonkeyPatch
     assert config["output_audio_transcription"] == {}
     assert config["realtime_input_config"]["automatic_activity_detection"] == {
         "disabled": False,
-        "prefix_padding_ms": 150,
-        "silence_duration_ms": 700,
+        "prefix_padding_ms": 100,
+        "silence_duration_ms": 600,
     }
     assert config["context_window_compression"] == {"sliding_window": {}}
     assert config["session_resumption"] == {"handle": None}
@@ -89,8 +89,8 @@ def test_live_config_enforces_safe_gemini_vad_floor(monkeypatch: pytest.MonkeyPa
 
     assert config["realtime_input_config"]["automatic_activity_detection"] == {
         "disabled": False,
-        "prefix_padding_ms": 150,
-        "silence_duration_ms": 700,
+        "prefix_padding_ms": 100,
+        "silence_duration_ms": 500,
     }
 
 
@@ -153,7 +153,9 @@ async def test_iter_model_output_clears_interrupted_agent_transcript() -> None:
         turn_complete=True,
         generation_complete=False,
         interrupted=True,
-        model_turn=None,
+        model_turn=SimpleNamespace(
+            parts=[SimpleNamespace(inline_data=SimpleNamespace(data=b"stale audio"))]
+        ),
     )
     completed = SimpleNamespace(
         input_transcription=None,

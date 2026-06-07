@@ -523,6 +523,7 @@ async def _iter_model_output(
         if getattr(content, "interrupted", False):
             output_transcript_chunks.clear()
             log.info("gemini_pcm.interrupted", call_id=call_id)
+            continue
         if output_transcript_chunks and (
             getattr(content, "turn_complete", False)
             or getattr(content, "generation_complete", False)
