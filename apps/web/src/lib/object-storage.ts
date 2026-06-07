@@ -12,19 +12,19 @@ export interface StoredObject {
 }
 
 function bucket(): string {
-  return process.env.FILE_STORAGE_BUCKET || process.env.S3_BUCKET || ''
+  return process.env.FILE_STORAGE_BUCKET || process.env.S3_RECORDINGS_BUCKET || process.env.S3_BUCKET || ''
 }
 
 function endpoint(): string | undefined {
-  return process.env.FILE_STORAGE_ENDPOINT || process.env.S3_ENDPOINT || undefined
+  return process.env.FILE_STORAGE_ENDPOINT || process.env.S3_ENDPOINT_URL || process.env.S3_ENDPOINT || undefined
 }
 
 function region(): string {
-  return process.env.FILE_STORAGE_REGION || process.env.AWS_REGION || 'auto'
+  return process.env.FILE_STORAGE_REGION || process.env.S3_REGION || process.env.AWS_REGION || 'auto'
 }
 
 function publicBaseUrl(): string {
-  return (process.env.FILE_STORAGE_PUBLIC_BASE_URL || '').replace(/\/+$/, '')
+  return (process.env.FILE_STORAGE_PUBLIC_BASE_URL || process.env.S3_RECORDINGS_PUBLIC_BASE_URL || '').replace(/\/+$/, '')
 }
 
 function isS3Configured(): boolean {

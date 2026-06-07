@@ -125,17 +125,6 @@ interface NumberOption {
 
 type TestRunMode = 'browser' | 'call'
 type BrowserTestStatus = 'idle' | 'connecting' | 'live'
-type LiveTranscriptRole = 'user' | 'agent'
-
-interface LiveTranscriptTurn {
-  id: string
-  role: LiveTranscriptRole
-  text: string
-  at: string
-  final: boolean
-}
-
-const USER_INTERIM_TURN_ID = 'browser-user-interim'
 
 interface BrowserWebrtcStartResult {
   callId: string
@@ -176,6 +165,13 @@ interface BrowserAudioSession {
   processorSink?: GainNode
   socket?: WebSocket
   pipecat?: PipecatClient
+  recorder?: MediaRecorder
+  recordingChunks?: Blob[]
+  recordingStream?: MediaStream
+  localRecordTrack?: MediaStreamTrack
+  remoteRecordTrack?: MediaStreamTrack
+  recordingCallId?: string
+  recordingUploadStarted?: boolean
   playbackTime: number
   outputSampleRate: number
 }
@@ -674,7 +670,6 @@ export function AgentEditor({
   const [testMode, setTestMode] = useState<TestRunMode>('browser')
   const [browserTestStatus, setBrowserTestStatus] = useState<BrowserTestStatus>('idle')
   const [browserTestCallId, setBrowserTestCallId] = useState('')
-  const [browserTranscript, setBrowserTranscript] = useState<LiveTranscriptTurn[]>([])
   const [builderOpen, setBuilderOpen] = useState(false)
   const [testPanel, setTestPanel] = useState<'audio' | 'llm' | 'json'>('audio')
   const [toE164, setToE164] = useState('')
@@ -686,8 +681,6 @@ export function AgentEditor({
   const [toolTesting, setToolTesting] = useState<number | null>(null)
   const [toolResults, setToolResults] = useState<Record<number, string>>({})
   const browserAudioRef = useRef<BrowserAudioSession | null>(null)
-  const browserTranscriptEndRef = useRef<HTMLDivElement | null>(null)
-  const persistedBrowserTranscriptRef = useRef<Set<string>>(new Set())
 
   // Open accordions (matches the Retell screenshot defaults)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -702,10 +695,6 @@ export function AgentEditor({
     dtmfFlow: true,
   })
   const toggleSec = (k: string) => setOpenSections((s) => ({ ...s, [k]: !s[k] }))
-
-  useEffect(() => {
-    browserTranscriptEndRef.current?.scrollIntoView({ block: 'end' })
-  }, [browserTranscript])
 
   // When the engine changes, reset model + voice provider + voice id to the
   // first valid option so we never persist an out-of-range combo.
@@ -938,48 +927,6 @@ export function AgentEditor({
     if (showToast) toast('Browser test stopped', 'success')
   }
 
-  function resetBrowserTranscript() {
-    persistedBrowserTranscriptRef.current.clear()
-    setBrowserTranscript([])
-  }
-
-  function handleBrowserTranscriptTurn(
-    callId: string,
-    turn: LiveTranscriptTurn,
-    persist = true,
-  ) {
-    const text = turn.text.trim()
-    if (!text) return
-    const normalized = { ...turn, text }
-    setBrowserTranscript((items) => {
-      const base =
-        normalized.final && normalized.role === 'user'
-          ? items.filter((item) => item.id !== USER_INTERIM_TURN_ID)
-          : items
-      const existing = base.findIndex((item) => item.id === normalized.id)
-      if (existing >= 0) {
-        const next = [...base]
-        next[existing] = normalized
-        return next.slice(-80)
-      }
-      return [...base, normalized].slice(-80)
-    })
-
-    if (!persist || !normalized.final || !callId) return
-    if (persistedBrowserTranscriptRef.current.has(normalized.id)) return
-    persistedBrowserTranscriptRef.current.add(normalized.id)
-    void api
-      .post(`/api/calls/${callId}/transcript`, {
-        role: normalized.role,
-        text: normalized.text,
-        at: normalized.at,
-        clientTurnId: normalized.id,
-      })
-      .catch(() => {
-        persistedBrowserTranscriptRef.current.delete(normalized.id)
-      })
-  }
-
   async function runBrowserTest() {
     if (browserTestStatus === 'live') {
       stopBrowserTest(true)
@@ -1000,7 +947,6 @@ export function AgentEditor({
     }
 
     const audioSession: BrowserAudioSession = { playbackTime: 0, outputSampleRate: 16000 }
-    resetBrowserTranscript()
     setBrowserTestStatus('connecting')
     setTab('simulation')
     setTestPanel('audio')
@@ -1076,11 +1022,7 @@ export function AgentEditor({
       processorSink.connect(context.destination)
 
       socket.onmessage = (event) => {
-        if (typeof event.data === 'string') {
-          const turn = parseBrowserTranscriptMessage(event.data)
-          if (turn) handleBrowserTranscriptTurn(session.callId, turn, false)
-          return
-        }
+        if (typeof event.data === 'string') return
         if (event.data instanceof ArrayBuffer) {
           playPcmChunk(audioSession, event.data)
           return
@@ -2489,67 +2431,6 @@ export function AgentEditor({
                       : 'Run Test'
                   : 'Test Call'}
               </button>
-              {testMode === 'browser' && (
-                <div className="border-line bg-bg flex min-h-[180px] w-full flex-1 flex-col overflow-hidden rounded-[5px] border">
-                  <div className="border-line flex items-center justify-between border-b px-3 py-2">
-                    <span className="text-fg flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.12em]">
-                      <Icon name="message-square" size="xs" className="text-fg-muted" />
-                      Live transcript
-                    </span>
-                    {browserTranscript.length > 0 && (
-                      <span className="text-fg-faint font-mono text-[10px]">
-                        {browserTranscript.length}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2"
-                    aria-live="polite"
-                  >
-                    {browserTranscript.length === 0 ? (
-                      <div className="grid h-full min-h-24 place-items-center">
-                        <p className="text-fg-faint text-center text-[12px]">Waiting for speech...</p>
-                      </div>
-                    ) : (
-                      browserTranscript.map((turn) => (
-                        <div
-                          key={turn.id}
-                          className={cn(
-                            'rounded-[5px] border px-2.5 py-2',
-                            turn.role === 'agent'
-                              ? 'border-status-live/25 bg-status-live/5'
-                              : 'border-line bg-bg-subtle/60',
-                          )}
-                        >
-                          <div className="mb-1 flex items-center justify-between gap-2">
-                            <span
-                              className={cn(
-                                'font-mono text-[10px] uppercase tracking-[0.12em]',
-                                turn.role === 'agent' ? 'text-status-live' : 'text-fg-muted',
-                              )}
-                            >
-                              {turn.role === 'agent' ? 'Agent' : 'Caller'}
-                            </span>
-                            <span className="text-fg-faint font-mono text-[10px]">
-                              {formatTranscriptTime(turn.at)}
-                              {!turn.final ? ' live' : ''}
-                            </span>
-                          </div>
-                          <p
-                            className={cn(
-                              'text-[12.5px] leading-relaxed',
-                              turn.final ? 'text-fg' : 'text-fg-muted italic',
-                            )}
-                          >
-                            {turn.text}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                    <div ref={browserTranscriptEndRef} />
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -3194,6 +3075,7 @@ function Divider() {
 
 function closeBrowserAudioSession(session: BrowserAudioSession | null, closeSocket = true) {
   if (!session) return
+  stopAndUploadBrowserRecording(session)
   if (session.pipecat) {
     void session.pipecat.disconnect().catch(() => {})
   }
@@ -3265,8 +3147,14 @@ async function connectBrowserWebrtcSession(
         handlers.onDisconnected()
       },
       onTrackStarted: (track) => {
-        if (isLocalPipecatAudioTrack(client, track)) return
-        attachBrowserWebrtcAudioTrack(audioSession, track)
+        if (isLocalPipecatAudioTrack(client, track)) {
+          if (track.kind === 'audio') {
+            audioSession.localRecordTrack = track
+            maybeStartBrowserRecording(audioSession, session.callId)
+          }
+          return
+        }
+        attachBrowserWebrtcAudioTrack(audioSession, track, session.callId)
       },
       onTrackStopped: (track) => {
         if (isLocalPipecatAudioTrack(client, track)) return
@@ -3293,10 +3181,21 @@ async function connectBrowserWebrtcSession(
       iceServers,
     },
   })
+  const localAudioTrack = client.tracks().local.audio
+  if (localAudioTrack) {
+    audioSession.localRecordTrack = localAudioTrack
+    maybeStartBrowserRecording(audioSession, session.callId)
+  }
 }
 
-function attachBrowserWebrtcAudioTrack(session: BrowserAudioSession, track: MediaStreamTrack) {
+function attachBrowserWebrtcAudioTrack(
+  session: BrowserAudioSession,
+  track: MediaStreamTrack,
+  callId: string,
+) {
   if (track.kind !== 'audio') return
+  session.remoteRecordTrack = track
+  maybeStartBrowserRecording(session, callId)
   session.remoteAudio?.pause()
   session.remoteAudio?.remove()
 
@@ -3316,6 +3215,71 @@ function attachBrowserWebrtcAudioTrack(session: BrowserAudioSession, track: Medi
     // The call starts from a user gesture, but mobile browsers can still race
     // the remote track. A later user interaction will unlock the element.
   })
+}
+
+function browserRecordingMimeType(): string {
+  if (typeof MediaRecorder === 'undefined') return ''
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || ''
+}
+
+function maybeStartBrowserRecording(session: BrowserAudioSession, callId: string) {
+  if (session.recorder || typeof MediaRecorder === 'undefined') return
+  const tracks = [session.localRecordTrack, session.remoteRecordTrack].filter(
+    (track): track is MediaStreamTrack => track != null && track.kind === 'audio',
+  )
+  if (!tracks.length || !session.remoteRecordTrack) return
+
+  try {
+    const stream = new MediaStream(tracks)
+    const mimeType = browserRecordingMimeType()
+    const chunks: Blob[] = []
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data)
+    }
+    recorder.onstop = () => {
+      if (!chunks.length || session.recordingUploadStarted) return
+      session.recordingUploadStarted = true
+      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' })
+      void uploadBrowserTestRecording(callId, blob)
+    }
+    session.recordingStream = stream
+    session.recordingChunks = chunks
+    session.recordingCallId = callId
+    session.recorder = recorder
+    recorder.start(1000)
+  } catch {
+    // Recording is best-effort; do not break the live test if the browser
+    // refuses MediaRecorder for the active WebRTC tracks.
+  }
+}
+
+function stopAndUploadBrowserRecording(session: BrowserAudioSession) {
+  const recorder = session.recorder
+  if (!recorder || recorder.state === 'inactive') return
+  try {
+    recorder.requestData()
+  } catch {}
+  try {
+    recorder.stop()
+  } catch {}
+}
+
+async function uploadBrowserTestRecording(callId: string, blob: Blob) {
+  if (!callId || blob.size === 0) return
+  const form = new FormData()
+  const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'
+  form.append('file', blob, `browser-test-${callId}.${ext}`)
+  try {
+    await fetch(`/api/calls/${callId}/recording`, {
+      method: 'POST',
+      body: form,
+    })
+  } catch {
+    // The call remains usable even if recording upload fails; the dashboard
+    // just won't show a playback link for that browser-test session.
+  }
 }
 
 function isLocalPipecatAudioTrack(client: PipecatClient, track: MediaStreamTrack) {
@@ -3401,59 +3365,6 @@ function inferPcmSampleRate(byteLength: number, fallback: number) {
   if (byteLength % 960 === 0 && byteLength % 640 !== 0) return 24000
   if (byteLength % 640 === 0 && byteLength % 960 !== 0) return 16000
   return fallback
-}
-
-function parseBrowserTranscriptMessage(message: string): LiveTranscriptTurn | null {
-  try {
-    const data = JSON.parse(message) as Record<string, unknown>
-    const type = String(data.type || data.event || 'transcript')
-    if (!['call.transcript', 'transcript', 'transcript.final'].includes(type)) return null
-    const role = normalizeTranscriptRole(data.role)
-    const text = String(data.text || data.transcript || '').trim()
-    if (!role || !text) return null
-    const at = normalizeTranscriptAt(typeof data.at === 'string' ? data.at : undefined)
-    const final = data.final !== false
-    const rawClientTurnId = typeof data.clientTurnId === 'string' ? data.clientTurnId.trim() : ''
-    return {
-      id: rawClientTurnId || transcriptTurnId(role, at, text),
-      role,
-      text,
-      at,
-      final,
-    }
-  } catch {
-    return null
-  }
-}
-
-function normalizeTranscriptRole(value: unknown): LiveTranscriptRole | null {
-  const role = String(value || '').toLowerCase()
-  if (role === 'agent' || role === 'assistant' || role === 'bot') return 'agent'
-  if (role === 'user' || role === 'caller' || role === 'customer') return 'user'
-  return null
-}
-
-function normalizeTranscriptAt(value?: string) {
-  const date = value ? new Date(value) : new Date()
-  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString()
-}
-
-function transcriptTurnId(role: LiveTranscriptRole, at: string, text: string) {
-  return `browser-${role}-${hashString(`${role}:${at}:${text}`)}`
-}
-
-function hashString(value: string) {
-  let hash = 0
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 31 + value.charCodeAt(i)) | 0
-  }
-  return Math.abs(hash).toString(36)
-}
-
-function formatTranscriptTime(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return formatTime(date)
 }
 
 function formatTime(d: Date) {
