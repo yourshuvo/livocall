@@ -15,6 +15,7 @@ interface PublicWebcallStartResult {
   iceServers?: RTCIceServer[]
   maxDurationSec: number
   expiresAt: string
+  recordingUploadToken?: string
 }
 
 interface PublicWebcallSession {
@@ -22,6 +23,14 @@ interface PublicWebcallSession {
   remoteStream?: MediaStream
   remoteAudio?: HTMLAudioElement
   limitTimer?: number
+  recorder?: MediaRecorder
+  recordingChunks?: Blob[]
+  recordingStream?: MediaStream
+  localRecordTrack?: MediaStreamTrack
+  remoteRecordTrack?: MediaStreamTrack
+  recordingCallId?: string
+  recordingUploadToken?: string
+  recordingUploadStarted?: boolean
 }
 
 export function PublicWebcallDemo({
@@ -92,8 +101,14 @@ export function PublicWebcallDemo({
           onDisconnected: () => stopWebcall(),
           onBotDisconnected: () => stopWebcall(),
           onTrackStarted: (track) => {
-            if (isLocalPipecatAudioTrack(client, track)) return
-            attachPublicWebcallAudioTrack(nextSession, track)
+            if (isLocalPipecatAudioTrack(client, track)) {
+              if (track.kind === 'audio') {
+                nextSession.localRecordTrack = track
+                maybeStartPublicWebcallRecording(nextSession, start.callId, start.recordingUploadToken)
+              }
+              return
+            }
+            attachPublicWebcallAudioTrack(nextSession, track, start.callId, start.recordingUploadToken)
           },
           onTrackStopped: (track) => {
             if (isLocalPipecatAudioTrack(client, track)) return
@@ -111,6 +126,11 @@ export function PublicWebcallDemo({
         webrtcRequestParams: { endpoint: start.webrtcUrl },
         iceConfig: { iceServers: start.iceServers ?? [] },
       })
+      const localAudioTrack = client.tracks().local.audio
+      if (localAudioTrack) {
+        nextSession.localRecordTrack = localAudioTrack
+        maybeStartPublicWebcallRecording(nextSession, start.callId, start.recordingUploadToken)
+      }
       setStatus('live')
       nextSession.limitTimer = window.setTimeout(() => {
         stopWebcall('This demo reached its time limit.')
@@ -277,6 +297,7 @@ async function startPublicWebcall(): Promise<PublicWebcallStartResult> {
 
 function closePublicWebcallSession(session: PublicWebcallSession | null, disconnectClient = true) {
   if (!session) return
+  stopAndUploadPublicWebcallRecording(session)
   if (session.limitTimer) window.clearTimeout(session.limitTimer)
   for (const track of session.remoteStream?.getTracks() ?? []) {
     track.stop()
@@ -291,8 +312,16 @@ function closePublicWebcallSession(session: PublicWebcallSession | null, disconn
   }
 }
 
-function attachPublicWebcallAudioTrack(session: PublicWebcallSession, track: MediaStreamTrack) {
+function attachPublicWebcallAudioTrack(
+  session: PublicWebcallSession,
+  track: MediaStreamTrack,
+  callId: string,
+  recordingUploadToken?: string,
+) {
   if (track.kind !== 'audio') return
+  session.remoteRecordTrack = track
+  addPublicWebcallRecordingTrack(session, track)
+  maybeStartPublicWebcallRecording(session, callId, recordingUploadToken)
   detachPublicWebcallAudio(session)
 
   const stream = new MediaStream([track])
@@ -308,6 +337,81 @@ function attachPublicWebcallAudioTrack(session: PublicWebcallSession, track: Med
   session.remoteStream = stream
   session.remoteAudio = audio
   playHiddenRemoteAudio(audio)
+}
+
+function publicWebcallRecordingMimeType(): string {
+  if (typeof MediaRecorder === 'undefined') return ''
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || ''
+}
+
+function addPublicWebcallRecordingTrack(session: PublicWebcallSession, track: MediaStreamTrack) {
+  if (!session.recordingStream || track.kind !== 'audio') return
+  const alreadyAdded = session.recordingStream.getAudioTracks().some((current) => current.id === track.id)
+  if (!alreadyAdded) session.recordingStream.addTrack(track)
+}
+
+function maybeStartPublicWebcallRecording(
+  session: PublicWebcallSession,
+  callId: string,
+  recordingUploadToken?: string,
+) {
+  if (!recordingUploadToken || session.recorder || typeof MediaRecorder === 'undefined') return
+  const tracks = [session.localRecordTrack, session.remoteRecordTrack].filter(
+    (track): track is MediaStreamTrack => track != null && track.kind === 'audio',
+  )
+  if (!tracks.length) return
+
+  try {
+    const stream = new MediaStream(tracks)
+    const mimeType = publicWebcallRecordingMimeType()
+    const chunks: Blob[] = []
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data)
+    }
+    recorder.onstop = () => {
+      if (!chunks.length || session.recordingUploadStarted) return
+      session.recordingUploadStarted = true
+      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' })
+      void uploadPublicWebcallRecording(callId, recordingUploadToken, blob)
+    }
+    session.recordingStream = stream
+    session.recordingChunks = chunks
+    session.recordingCallId = callId
+    session.recordingUploadToken = recordingUploadToken
+    session.recorder = recorder
+    recorder.start(1000)
+  } catch {
+    // Recording is best-effort; Webcall should still work if MediaRecorder is unavailable.
+  }
+}
+
+function stopAndUploadPublicWebcallRecording(session: PublicWebcallSession) {
+  const recorder = session.recorder
+  if (!recorder || recorder.state === 'inactive') return
+  try {
+    recorder.requestData()
+  } catch {}
+  try {
+    recorder.stop()
+  } catch {}
+}
+
+async function uploadPublicWebcallRecording(callId: string, token: string, blob: Blob) {
+  if (!callId || !token || blob.size === 0) return
+  const form = new FormData()
+  const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'
+  form.append('file', blob, `public-webcall-${callId}.${ext}`)
+  try {
+    await fetch(`/api/public/webcall/${callId}/recording`, {
+      method: 'POST',
+      headers: { 'x-recording-token': token },
+      body: form,
+    })
+  } catch {
+    // The live Webcall remains usable; failed uploads simply leave no recording in Calls.
+  }
 }
 
 function playHiddenRemoteAudio(audio: HTMLAudioElement) {

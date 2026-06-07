@@ -3106,6 +3106,7 @@ function attachBrowserWebrtcAudioTrack(
 ) {
   if (track.kind !== 'audio') return
   session.remoteRecordTrack = track
+  addBrowserRecordingTrack(session, track)
   maybeStartBrowserRecording(session, callId)
   session.remoteAudio?.pause()
   session.remoteAudio?.remove()
@@ -3145,12 +3146,18 @@ function browserRecordingMimeType(): string {
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || ''
 }
 
+function addBrowserRecordingTrack(session: BrowserAudioSession, track: MediaStreamTrack) {
+  if (!session.recordingStream || track.kind !== 'audio') return
+  const alreadyAdded = session.recordingStream.getAudioTracks().some((current) => current.id === track.id)
+  if (!alreadyAdded) session.recordingStream.addTrack(track)
+}
+
 function maybeStartBrowserRecording(session: BrowserAudioSession, callId: string) {
   if (session.recorder || typeof MediaRecorder === 'undefined') return
   const tracks = [session.localRecordTrack, session.remoteRecordTrack].filter(
     (track): track is MediaStreamTrack => track != null && track.kind === 'audio',
   )
-  if (!tracks.length || !session.remoteRecordTrack) return
+  if (!tracks.length) return
 
   try {
     const stream = new MediaStream(tracks)

@@ -8,6 +8,7 @@ import { Types } from 'mongoose'
 import { connectMongo } from '@/lib/db'
 import { apiError, withErrors } from '@/lib/errors'
 import { browserIceServers, browserWebrtcUrl, signWsAuth } from '@/lib/browser-webrtc'
+import { signPublicRecordingToken } from '@/lib/public-recording-token'
 import { rateLimit } from '@/lib/rate-limit'
 import { Agent } from '@/models/Agent'
 import { Call } from '@/models/Call'
@@ -114,6 +115,11 @@ export const POST = withErrors(async (req: Request) => {
   webrtcUrl.searchParams.append('meta', 'banglaOnly:true')
   const auth = signWsAuth(callId)
   if (auth) webrtcUrl.searchParams.set('auth', auth)
+  const recordingUploadToken = signPublicRecordingToken(
+    callId,
+    process.env.VOICE_WS_SHARED_SECRET || '',
+    maxDurationSec + 600,
+  )
 
   return withPublicSessionCookie(
     NextResponse.json({
@@ -123,6 +129,7 @@ export const POST = withErrors(async (req: Request) => {
       iceServers: browserIceServers(),
       maxDurationSec,
       expiresAt: expiresAt.toISOString(),
+      recordingUploadToken,
     }),
     sessionId,
     shouldSetCookie,
