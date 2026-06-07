@@ -359,10 +359,10 @@ function Hero({ locale }: { locale: Locale }) {
 
 function HomepageNav({ locale }: { locale: Locale }) {
   return (
-    <div className="z-50 flex w-full justify-center px-4 py-4 sm:px-6">
-      <header className="flex w-full max-w-5xl items-center justify-between gap-4 rounded-[28px] border border-black/5 bg-white px-4 py-3 shadow-[0_18px_50px_rgb(15,23,42,0.10)] md:rounded-full md:border-white/50 md:bg-white/40 md:px-5 md:py-2 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)] md:backdrop-blur-xl">
+    <div className="fixed inset-x-0 top-0 z-[80] flex w-full justify-center px-3 py-2 sm:px-6 sm:py-4">
+      <header className="flex w-full max-w-5xl items-center justify-between gap-3 rounded-[22px] border border-black/5 bg-white px-3 py-2 shadow-[0_12px_34px_rgb(15,23,42,0.10)] md:rounded-full md:border-white/50 md:bg-white/40 md:px-5 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)] md:backdrop-blur-xl">
         <Link href="/" className="group inline-flex min-w-0 items-center">
-          <Wordmark className="h-6 max-w-[112px] transition-opacity group-hover:opacity-85 sm:h-7 sm:max-w-[132px]" />
+          <Wordmark className="h-5 max-w-[96px] transition-opacity group-hover:opacity-85 sm:h-7 sm:max-w-[132px]" />
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex">
@@ -377,7 +377,7 @@ function HomepageNav({ locale }: { locale: Locale }) {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2.5 md:gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
           <div className="hidden sm:block">
             <LangSwitcher locale={locale} />
           </div>
@@ -395,16 +395,54 @@ function HomepageNav({ locale }: { locale: Locale }) {
             </Link>
             <UserButton />
           </Show>
-          <button
-            type="button"
-            aria-label="Open menu"
-            className="inline-flex size-10 items-center justify-center rounded-full text-fg transition hover:bg-black/[0.04] md:hidden"
-          >
-            <span className="flex w-5 flex-col gap-1.5">
-              <span className="h-0.5 w-full rounded-full bg-current" />
-              <span className="h-0.5 w-full rounded-full bg-current" />
-            </span>
-          </button>
+          <details className="group relative md:hidden">
+            <summary
+              aria-label="Open menu"
+              className="flex size-8 cursor-pointer list-none items-center justify-center rounded-full text-fg transition hover:bg-black/[0.04] [&::-webkit-details-marker]:hidden"
+            >
+              <span className="flex w-4 flex-col gap-1.5">
+                <span className="h-0.5 w-full rounded-full bg-current transition group-open:translate-y-1 group-open:rotate-45" />
+                <span className="h-0.5 w-full rounded-full bg-current transition group-open:-translate-y-1 group-open:-rotate-45" />
+              </span>
+            </summary>
+            <div className="absolute right-0 top-[calc(100%+10px)] w-56 overflow-hidden rounded-[20px] border border-black/5 bg-white p-2 text-left shadow-[0_18px_50px_rgb(15,23,42,0.14)]">
+              <nav className="space-y-1">
+                {NAV_ITEMS.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="block rounded-[14px] px-3 py-2 text-[13px] font-medium text-fg-muted transition hover:bg-black/[0.04] hover:text-fg"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+              <div className="mt-2 border-t border-line pt-2">
+                <Show when="signed-out">
+                  <Link
+                    href="/login"
+                    className="block rounded-[14px] px-3 py-2 text-[13px] font-medium text-fg-muted transition hover:bg-black/[0.04] hover:text-fg"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="mt-1 block rounded-[14px] bg-fg px-3 py-2 text-center text-[13px] font-medium text-bg transition hover:bg-fg-muted"
+                  >
+                    Get Started
+                  </Link>
+                </Show>
+                <Show when="signed-in">
+                  <Link
+                    href="/overview"
+                    className="block rounded-[14px] bg-fg px-3 py-2 text-center text-[13px] font-medium text-bg transition hover:bg-fg-muted"
+                  >
+                    Dashboard
+                  </Link>
+                </Show>
+              </div>
+            </div>
+          </details>
         </div>
       </header>
     </div>
