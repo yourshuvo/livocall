@@ -135,11 +135,6 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
               <CardTitle>Transcript</CardTitle>
             </div>
             <CardBody>
-              {call.audioUrl && (
-                <audio controls src={call.audioUrl} className="mb-4 w-full">
-                  <track kind="captions" />
-                </audio>
-              )}
               {(!call.transcript || call.transcript.length === 0) &&
               (!call.dtmfPath || call.dtmfPath.length === 0) ? (
                 <p className="text-fg-muted text-[13px]">No transcript captured for this call.</p>
@@ -225,6 +220,35 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
                 </CardBody>
               </Card>
             )}
+
+            <Card>
+              <div className="border-line border-b p-5">
+                <CardTitle>Recording</CardTitle>
+              </div>
+              <CardBody className="space-y-3">
+                {call.audioUrl ? (
+                  <>
+                    <audio controls src={call.audioUrl} className="w-full">
+                      <track kind="captions" />
+                    </audio>
+                    <a
+                      href={call.audioUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-status-live inline-flex items-center gap-1.5 text-[12.5px] font-medium hover:underline"
+                    >
+                      <Icon name="speaker" size="xs" /> Open recording file
+                    </a>
+                  </>
+                ) : (
+                  <p className="text-fg-muted text-[13px]">
+                    {call.outcome === 'in_progress'
+                      ? 'Recording will appear here after the call ends and uploads.'
+                      : 'No recording file was saved for this call.'}
+                  </p>
+                )}
+              </CardBody>
+            </Card>
 
             <Card>
               <div className="border-line border-b p-5">

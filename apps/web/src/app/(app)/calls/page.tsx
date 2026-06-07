@@ -194,6 +194,7 @@ export default async function CallsPage({
                       <th className="px-5 py-3 text-left font-medium">Tier</th>
                       <th className="px-5 py-3 text-left font-medium">Outcome</th>
                       <th className="px-5 py-3 text-left font-medium">Business</th>
+                      <th className="px-5 py-3 text-left font-medium">Recording</th>
                       <th className="px-5 py-3 text-right font-medium">Duration</th>
                       <th className="px-5 py-3 text-right font-medium">Cost</th>
                       <th className="px-5 py-3 text-right font-medium" />
@@ -236,6 +237,9 @@ export default async function CallsPage({
                           </td>
                           <td className="px-5 py-3">
                             <BusinessOutcomeBadge outcome={c.businessOutcome} />
+                          </td>
+                          <td className="px-5 py-3">
+                            <RecordingBadge audioUrl={c.audioUrl} />
                           </td>
                           <td className="text-fg px-5 py-3 text-right font-mono text-xs">
                             {fmtDuration(c.durationSec || 0)}
@@ -340,5 +344,16 @@ function BusinessOutcomeBadge({ outcome }: { outcome: CallLean['businessOutcome'
         </span>
       )}
     </div>
+  )
+}
+
+function RecordingBadge({ audioUrl }: { audioUrl?: string | null }) {
+  if (!audioUrl) {
+    return <span className="text-fg-faint font-mono text-[11px]">not saved</span>
+  }
+  return (
+    <span className="text-status-live inline-flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.12em]">
+      <Icon name="speaker" size="xs" /> playable
+    </span>
   )
 }

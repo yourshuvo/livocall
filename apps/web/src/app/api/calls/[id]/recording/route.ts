@@ -7,17 +7,13 @@ import { connectMongo } from '@/lib/db'
 import { isResponse, objectIdOr400, requireDashboardSession } from '@/lib/api-helpers'
 import { apiError, withErrors } from '@/lib/errors'
 import { putObject } from '@/lib/object-storage'
+import {
+  extensionForRecordingContentType,
+  isAllowedRecordingContentType,
+} from '@/lib/recording-content-type'
 import { Call } from '@/models/Call'
 
 const MAX_RECORDING_BYTES = 80 * 1024 * 1024
-const ALLOWED_AUDIO_TYPES = new Set([
-  'audio/webm',
-  'audio/mp4',
-  'audio/mpeg',
-  'audio/ogg',
-  'audio/wav',
-  'audio/x-wav',
-])
 
 type UploadedFile = {
   name: string
@@ -35,14 +31,6 @@ function isUploadedFile(value: unknown): value is UploadedFile {
     typeof candidate.type === 'string' &&
     typeof candidate.arrayBuffer === 'function'
   )
-}
-
-function extensionForContentType(contentType: string): string {
-  if (contentType.includes('mp4')) return 'm4a'
-  if (contentType.includes('mpeg')) return 'mp3'
-  if (contentType.includes('ogg')) return 'ogg'
-  if (contentType.includes('wav')) return 'wav'
-  return 'webm'
 }
 
 export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -68,12 +56,12 @@ export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id:
     return apiError('invalid_input', 'recording must be under 80MB')
   }
   const contentType = file.type || 'audio/webm'
-  if (!ALLOWED_AUDIO_TYPES.has(contentType)) {
+  if (!isAllowedRecordingContentType(contentType)) {
     return apiError('invalid_input', 'upload an audio recording')
   }
 
   const bytes = Buffer.from(await file.arrayBuffer())
-  const ext = extensionForContentType(contentType)
+  const ext = extensionForRecordingContentType(contentType)
   const key = `recordings/${String(session.orgId)}/${String(call._id)}-${Date.now()}-${randomUUID()}.${ext}`
   const stored = await putObject(key, bytes, contentType)
   call.audioUrl = stored.url
