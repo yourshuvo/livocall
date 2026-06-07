@@ -359,9 +359,9 @@ function Hero({ locale }: { locale: Locale }) {
 
 function HomepageNav({ locale }: { locale: Locale }) {
   return (
-    <div className="z-50 px-4 py-4 sm:px-6 w-full flex justify-center">
-      <header className="flex w-full max-w-5xl items-center justify-between gap-4 rounded-full border border-white/50 bg-white/40 px-3 py-2 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl md:px-5">
-        <Link href="/" className="inline-flex min-w-0 items-center group">
+    <div className="z-50 flex w-full justify-center px-4 py-4 sm:px-6">
+      <header className="flex w-full max-w-5xl items-center justify-between gap-4 rounded-[28px] border border-black/5 bg-white px-4 py-3 shadow-[0_18px_50px_rgb(15,23,42,0.10)] md:rounded-full md:border-white/50 md:bg-white/40 md:px-5 md:py-2 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)] md:backdrop-blur-xl">
+        <Link href="/" className="group inline-flex min-w-0 items-center">
           <Wordmark className="h-6 max-w-[112px] transition-opacity group-hover:opacity-85 sm:h-7 sm:max-w-[132px]" />
         </Link>
 
@@ -377,7 +377,7 @@ function HomepageNav({ locale }: { locale: Locale }) {
           ))}
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 md:gap-3">
           <div className="hidden sm:block">
             <LangSwitcher locale={locale} />
           </div>
@@ -385,7 +385,7 @@ function HomepageNav({ locale }: { locale: Locale }) {
             <Link href="/login" className="hidden px-2 text-[13px] font-medium text-fg-muted/90 transition-all hover:text-fg sm:inline">
               Sign in
             </Link>
-            <Button asChild size="sm" className="rounded-full px-5">
+            <Button asChild size="sm" className="hidden rounded-full px-5 sm:inline-flex">
               <Link href="/signup">Get Started</Link>
             </Button>
           </Show>
@@ -395,6 +395,16 @@ function HomepageNav({ locale }: { locale: Locale }) {
             </Link>
             <UserButton />
           </Show>
+          <button
+            type="button"
+            aria-label="Open menu"
+            className="inline-flex size-10 items-center justify-center rounded-full text-fg transition hover:bg-black/[0.04] md:hidden"
+          >
+            <span className="flex w-5 flex-col gap-1.5">
+              <span className="h-0.5 w-full rounded-full bg-current" />
+              <span className="h-0.5 w-full rounded-full bg-current" />
+            </span>
+          </button>
         </div>
       </header>
     </div>
