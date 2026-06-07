@@ -20,8 +20,7 @@ const NAV_ITEMS = [
 
 const TRUST_MARKS = ['E-commerce', 'Clinics', 'Education', 'Finance', 'Logistics']
 
-const HERO_IMAGE_URL =
-  'https://user-cdn.hackclub-assets.com/019e5013-92f3-78b5-bc0c-7452e33dc7f3/frosted-hero.png'
+const HERO_IMAGE_URL = '/assets/landing/frosted-hero.png'
 
 const USE_CASE_CARDS = [
   {

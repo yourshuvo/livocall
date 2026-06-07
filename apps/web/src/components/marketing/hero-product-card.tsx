@@ -35,7 +35,15 @@ export function HeroProductCard({ locale }: { locale: Locale }) {
     <div className="relative w-full max-w-md">
       {/* corner crosshair markers */}
       <span className="absolute inset-0 cross-tl cross-tr cross-bl cross-br pointer-events-none" />
-      <div className="overflow-hidden rounded-xl border border-line bg-bg shadow-pop">
+      <div className="relative overflow-hidden rounded-xl border border-line bg-bg shadow-pop">
+        <img
+          src="/assets/landing/frosted-hero.png"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover opacity-90"
+        />
+        <div className="absolute inset-0 bg-white/72 backdrop-blur-[1px]" />
+        <div className="relative z-10">
         {/* window chrome */}
         <div className="flex items-center justify-between border-b border-line px-3.5 py-2">
           <div className="flex items-center gap-2">
@@ -129,6 +137,7 @@ export function HeroProductCard({ locale }: { locale: Locale }) {
             outcome · confirmed
           </span>
         </div>
+      </div>
       </div>
 
       {/* floating chip */}
