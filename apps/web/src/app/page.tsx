@@ -355,7 +355,7 @@ export default async function LandingPage() {
 
 function Hero() {
   return (
-    <section className="border-line relative isolate flex min-h-[calc(100svh-64px)] overflow-hidden border-b">
+    <section className="border-line relative isolate flex min-h-[100svh] overflow-hidden border-b sm:min-h-[calc(100svh-64px)]">
       <div className="bg-bg absolute inset-0 -z-20 overflow-hidden">
         <img
           src={HERO_MOBILE_IMAGE_URL}
@@ -418,7 +418,7 @@ function Hero() {
 
 function HomepageNav({ locale }: { locale: Locale }) {
   return (
-    <div className="sticky top-0 z-[240] flex w-full justify-center bg-transparent px-3 py-2 sm:px-6 sm:py-4">
+    <div className="fixed inset-x-0 top-0 z-[240] flex w-full justify-center bg-transparent px-3 py-2 sm:sticky sm:px-6 sm:py-4">
       <header className="homepage-nav-shell flex w-full min-w-0 max-w-5xl items-center justify-between gap-2 rounded-[22px] border border-transparent bg-transparent px-2.5 py-2 shadow-none sm:gap-3 sm:px-3 md:rounded-full md:border-white/50 md:bg-white/45 md:px-5 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)] md:backdrop-blur-xl">
         <Link href="/" className="group inline-flex min-w-0 shrink items-center">
           <Wordmark className="h-5 max-w-[88px] transition-opacity group-hover:opacity-85 min-[380px]:max-w-[104px] sm:h-7 sm:max-w-[132px]" />
