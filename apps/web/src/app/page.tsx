@@ -372,7 +372,7 @@ function Hero() {
       </div>
 
       <div className="mx-auto flex w-full max-w-full flex-col overflow-hidden bg-transparent pb-32">
-        <div className="relative flex flex-1 flex-col justify-center px-4 pb-7 pt-9 text-center sm:px-8 sm:pb-9 sm:pt-12 lg:px-12">
+        <div className="relative flex flex-1 flex-col justify-center px-4 pb-7 pt-[92px] text-center sm:px-8 sm:pb-9 sm:pt-12 lg:px-12">
           <Link
             href="/signup"
             className="announcement-animate hero-reveal text-fg relative z-10 mx-auto inline-flex max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-full border border-[#D2D4D6] bg-[#F5F5F7]/90 px-1.5 py-1 text-[11px] font-medium backdrop-blur-xl transition hover:bg-[#ECEDEF] sm:gap-2 sm:px-2.5 sm:py-1.5 sm:text-[13px]"
@@ -419,7 +419,7 @@ function Hero() {
 function HomepageNav({ locale }: { locale: Locale }) {
   return (
     <div className="fixed inset-x-0 top-0 z-[240] flex w-full justify-center bg-transparent px-3 py-2 sm:sticky sm:px-6 sm:py-4">
-      <header className="homepage-nav-shell flex w-full min-w-0 max-w-5xl items-center justify-between gap-2 rounded-[22px] border border-black/5 bg-white/95 px-2.5 py-2 shadow-[0_12px_34px_rgb(15,23,42,0.10)] backdrop-blur-xl sm:gap-3 sm:px-3 md:rounded-full md:border-white/50 md:bg-white/45 md:px-5 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+      <header className="homepage-nav-shell flex w-full min-w-0 max-w-5xl items-center justify-between gap-2 rounded-[22px] border border-white/50 bg-white/70 px-2.5 py-2 shadow-[0_12px_34px_rgb(15,23,42,0.08)] backdrop-blur-2xl sm:gap-3 sm:px-3 md:rounded-full md:border-white/50 md:bg-white/45 md:px-5 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
         <Link href="/" className="group inline-flex min-w-0 shrink items-center">
           <Wordmark className="h-5 max-w-[88px] transition-opacity group-hover:opacity-85 min-[380px]:max-w-[104px] sm:h-7 sm:max-w-[132px]" />
         </Link>
