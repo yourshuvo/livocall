@@ -321,13 +321,27 @@ const KPI_ROWS = [
   { label: 'Handoffs', value: '6', tone: 'warn' },
 ]
 
+const AI_ENGINE_LOGOS = [
+  {
+    name: 'Gemini',
+    src: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/googlegemini.svg',
+  },
+  { name: 'Grok', src: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/x.svg' },
+  { name: 'OpenAI', src: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg' },
+  {
+    name: 'Claude',
+    src: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/anthropic.svg',
+  },
+]
+
 export default async function LandingPage() {
   const cookieStore = await cookies()
   const locale: Locale = getLocaleFromCookie(cookieStore.get('livocall_locale')?.value)
 
   return (
     <main className="bg-bg text-fg min-h-screen">
-      <Hero locale={locale} />
+      <HomepageNav locale={locale} />
+      <Hero />
       <UseCasesSection />
       <IndustryPlaybooksSection />
       <ProofMetricsSection />
@@ -343,9 +357,9 @@ export default async function LandingPage() {
   )
 }
 
-function Hero({ locale }: { locale: Locale }) {
+function Hero() {
   return (
-    <section className="border-line relative isolate flex min-h-screen overflow-hidden border-b">
+    <section className="border-line relative isolate flex min-h-[calc(100svh-64px)] overflow-hidden border-b">
       <div className="bg-bg absolute inset-0 -z-20 overflow-hidden">
         <img
           src={HERO_MOBILE_IMAGE_URL}
@@ -362,23 +376,18 @@ function Hero({ locale }: { locale: Locale }) {
       </div>
 
       <div className="mx-auto flex w-full max-w-full flex-col overflow-hidden bg-transparent pb-32">
-        <HomepageNav locale={locale} />
-
         <div className="relative flex flex-1 flex-col justify-center px-4 pb-7 pt-9 text-center sm:px-8 sm:pb-9 sm:pt-12 lg:px-12">
           <Link
             href="/signup"
-            className="hero-breadcrumb hero-reveal text-fg relative z-10 mx-auto inline-grid max-w-[min(100%,34rem)] grid-cols-[auto_auto] items-center gap-1 rounded-full border border-white/75 bg-white/85 p-1 text-[11px] shadow-[0_14px_40px_rgb(15,23,42,0.12)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5 hover:border-white hover:bg-white sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+            className="announcement-animate hero-reveal text-fg relative z-10 mx-auto inline-flex max-w-full items-center gap-2 rounded-full border border-[#D2D4D6] bg-[#F5F5F7]/90 px-2.5 py-1.5 text-[12px] font-medium backdrop-blur-xl transition hover:bg-[#ECEDEF] sm:text-[13px]"
           >
-            <span className="hero-breadcrumb-chip rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.12em]">
+            <span className="text-fg rounded-full border border-[#D2D4D6] bg-white px-2.5 py-0.5 text-[11px] font-semibold">
               For business teams
             </span>
-            <span className="text-fg-muted hidden min-w-0 truncate px-1.5 sm:block">
+            <span className="truncate">
               Recover missed calls, qualify signup leads, and confirm orders automatically.
             </span>
-            <span className="hero-breadcrumb-action bg-fg text-bg inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium shadow-[inset_0_1px_0_rgb(255,255,255,0.16)]">
-              Start signup
-              <Icon name="arrow-right" size="xs" square={false} className="shrink-0" />
-            </span>
+            <Icon name="arrow-right" size="xs" square={false} className="shrink-0" />
           </Link>
 
           <h1 className="hero-reveal hero-reveal-2 font-display tracking-tightest text-fg relative z-10 mx-auto mt-6 max-w-4xl text-[42px] font-medium leading-[0.95] sm:text-[56px] lg:text-[72px]">
@@ -412,7 +421,7 @@ function Hero({ locale }: { locale: Locale }) {
 
 function HomepageNav({ locale }: { locale: Locale }) {
   return (
-    <div className="sticky top-0 z-[80] flex w-full justify-center px-3 py-2 sm:px-6 sm:py-4">
+    <div className="sticky top-0 z-[80] flex w-full justify-center bg-white/65 px-3 py-2 backdrop-blur-xl sm:px-6 sm:py-4">
       <header className="homepage-nav-shell flex w-full min-w-0 max-w-5xl items-center justify-between gap-2 rounded-[22px] border border-black/5 bg-white/95 px-2.5 py-2 shadow-[0_12px_34px_rgb(15,23,42,0.10)] backdrop-blur-xl sm:gap-3 sm:px-3 md:rounded-full md:border-white/50 md:bg-white/45 md:px-5 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
         <Link href="/" className="group inline-flex min-w-0 shrink items-center">
           <Wordmark className="h-5 max-w-[88px] transition-opacity group-hover:opacity-85 min-[380px]:max-w-[104px] sm:h-7 sm:max-w-[132px]" />
@@ -464,48 +473,87 @@ function HomepageNav({ locale }: { locale: Locale }) {
           <details className="group relative md:hidden">
             <summary
               aria-label="Open menu"
-              className="text-fg flex size-8 cursor-pointer list-none items-center justify-center rounded-full transition duration-300 hover:bg-black/[0.04] group-open:bg-black/[0.05] [&::-webkit-details-marker]:hidden"
+              className="text-fg relative z-[101] flex size-8 cursor-pointer list-none items-center justify-center rounded-full transition duration-300 hover:bg-black/[0.04] group-open:bg-black/[0.05] [&::-webkit-details-marker]:hidden"
             >
               <span className="flex w-4 flex-col gap-1.5">
                 <span className="h-0.5 w-full rounded-full bg-current transition duration-300 group-open:translate-y-1 group-open:rotate-45" />
                 <span className="h-0.5 w-full rounded-full bg-current transition duration-300 group-open:-translate-y-1 group-open:-rotate-45" />
               </span>
             </summary>
-            <div className="mobile-menu-popover absolute right-0 top-[calc(100%+10px)] w-[min(14rem,calc(100vw-1.5rem))] overflow-hidden rounded-[20px] border border-black/5 bg-white p-2 text-left shadow-[0_18px_50px_rgb(15,23,42,0.14)]">
-              <nav className="space-y-1">
-                {NAV_ITEMS.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="text-fg-muted hover:text-fg block rounded-[14px] px-3 py-2 text-[13px] font-medium transition hover:bg-black/[0.04]"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-              <div className="border-line mt-2 border-t pt-2">
-                <Show when="signed-out">
-                  <Link
-                    href="/login"
-                    className="text-fg-muted hover:text-fg block rounded-[14px] px-3 py-2 text-[13px] font-medium transition hover:bg-black/[0.04]"
-                  >
-                    Sign in
-                  </Link>
-                  <Link
-                    href="/signup"
-                    className="bg-fg text-bg hover:bg-fg-muted mt-1 block rounded-[14px] px-3 py-2 text-center text-[13px] font-medium transition"
-                  >
-                    Start signup
-                  </Link>
-                </Show>
-                <Show when="signed-in">
-                  <Link
-                    href="/overview"
-                    className="bg-fg text-bg hover:bg-fg-muted block rounded-[14px] px-3 py-2 text-center text-[13px] font-medium transition"
-                  >
-                    Dashboard
-                  </Link>
-                </Show>
+            <div className="mobile-menu-backdrop fixed inset-0 top-[58px] z-[90] bg-white/70 backdrop-blur-md" />
+            <div className="mobile-menu-popover fixed inset-x-3 bottom-3 top-[68px] z-[100] overflow-hidden rounded-[28px] border border-black/5 bg-white text-left shadow-[0_24px_70px_rgb(15,23,42,0.18)]">
+              <div className="flex h-full flex-col p-4">
+                <div className="border-line bg-bg-subtle/70 rounded-[22px] border p-3">
+                  <p className="text-fg text-[13px] font-semibold">Navigate LivoCall</p>
+                  <p className="text-fg-muted mt-1 text-[12px] leading-relaxed">
+                    Pick a section, explore the AI stack, or start signup from the phone header.
+                  </p>
+                </div>
+
+                <nav className="mt-4 grid gap-2">
+                  {NAV_ITEMS.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="text-fg border-line bg-bg hover:border-fg/20 group flex items-center justify-between rounded-[18px] border px-4 py-3 text-[14px] font-semibold transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgb(15,23,42,0.10)]"
+                    >
+                      {item.label}
+                      <Icon
+                        name="arrow-right"
+                        size="xs"
+                        square={false}
+                        className="text-fg-muted group-hover:text-fg transition duration-300 group-hover:translate-x-0.5"
+                      />
+                    </Link>
+                  ))}
+                </nav>
+
+                <div className="border-line mt-4 rounded-[22px] border bg-[#f7f7f8] p-3">
+                  <p className="text-fg text-[12px] font-semibold">AI engines</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {AI_ENGINE_LOGOS.map((logo) => (
+                      <div
+                        key={logo.name}
+                        className="flex items-center gap-2 rounded-[16px] border border-white bg-white px-3 py-2 shadow-[0_10px_24px_rgb(15,23,42,0.06)]"
+                      >
+                        <span className="grid size-7 place-items-center rounded-full bg-[#f1f1f2]">
+                          <img
+                            src={logo.src}
+                            alt=""
+                            className="size-3.5 object-contain opacity-75"
+                          />
+                        </span>
+                        <span className="text-fg text-[12.5px] font-medium">{logo.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-auto space-y-2 pt-4">
+                  <Show when="signed-out">
+                    <Link
+                      href="/signup"
+                      className="bg-fg text-bg hover:bg-fg-muted flex h-11 items-center justify-center gap-1.5 rounded-full text-[14px] font-semibold transition duration-300 hover:-translate-y-0.5"
+                    >
+                      Start signup
+                      <Icon name="arrow-right" size="xs" square={false} />
+                    </Link>
+                    <Link
+                      href="/login"
+                      className="text-fg-muted hover:text-fg flex h-10 items-center justify-center rounded-full text-[13px] font-medium transition hover:bg-black/[0.04]"
+                    >
+                      Sign in
+                    </Link>
+                  </Show>
+                  <Show when="signed-in">
+                    <Link
+                      href="/overview"
+                      className="bg-fg text-bg hover:bg-fg-muted flex h-11 items-center justify-center rounded-full text-[14px] font-semibold transition duration-300 hover:-translate-y-0.5"
+                    >
+                      Dashboard
+                    </Link>
+                  </Show>
+                </div>
               </div>
             </div>
           </details>

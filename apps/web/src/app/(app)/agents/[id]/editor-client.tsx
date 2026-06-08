@@ -167,12 +167,35 @@ interface EngineInfo {
   label: string
   sub: string
   suggested: boolean
+  logoSrc?: string
 }
 
+const GEMINI_LOGO_SRC = 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/googlegemini.svg'
+const GROK_LOGO_SRC = 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/x.svg'
+const OPENAI_LOGO_SRC = 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg'
+
 const ENGINE_OPTIONS: EngineInfo[] = [
-  { k: 'pipeline', label: 'Pipeline', sub: 'STT → LLM → TTS (most flexible)', suggested: true },
-  { k: 'gemini_live', label: 'Gemini Live', sub: 'Real-time bidirectional', suggested: false },
-  { k: 'grok_voice', label: 'Grok Voice', sub: 'xAI realtime voice agent', suggested: false },
+  {
+    k: 'pipeline',
+    label: 'Pipeline',
+    sub: 'STT → LLM → TTS (most flexible)',
+    suggested: true,
+    logoSrc: OPENAI_LOGO_SRC,
+  },
+  {
+    k: 'gemini_live',
+    label: 'Gemini Live',
+    sub: 'Real-time bidirectional',
+    suggested: false,
+    logoSrc: GEMINI_LOGO_SRC,
+  },
+  {
+    k: 'grok_voice',
+    label: 'Grok Voice',
+    sub: 'xAI realtime voice agent',
+    suggested: false,
+    logoSrc: GROK_LOGO_SRC,
+  },
   { k: 'dtmf', label: 'DTMF / IVR', sub: 'Pre-rendered keypad menus', suggested: false },
 ]
 
@@ -184,6 +207,7 @@ interface ModelOption {
   costPerMin: string
   latency: string
   tokenBudget: string
+  logoSrc?: string
 }
 
 const MODEL_OPTIONS: Record<Tier, ModelOption[]> = {
@@ -196,6 +220,7 @@ const MODEL_OPTIONS: Record<Tier, ModelOption[]> = {
       costPerMin: '$0.060',
       latency: '900-1200ms',
       tokenBudget: '~960 tokens',
+      logoSrc: GEMINI_LOGO_SRC,
     },
   ],
   gemini_live: [
@@ -207,6 +232,7 @@ const MODEL_OPTIONS: Record<Tier, ModelOption[]> = {
       costPerMin: '$0.115',
       latency: '120-200ms',
       tokenBudget: 'streaming',
+      logoSrc: GEMINI_LOGO_SRC,
     },
     {
       k: 'gemini-2.0-flash-live',
@@ -215,6 +241,7 @@ const MODEL_OPTIONS: Record<Tier, ModelOption[]> = {
       costPerMin: '$0.090',
       latency: '160-260ms',
       tokenBudget: 'streaming',
+      logoSrc: GEMINI_LOGO_SRC,
     },
   ],
   grok_voice: [
@@ -226,6 +253,7 @@ const MODEL_OPTIONS: Record<Tier, ModelOption[]> = {
       costPerMin: '$0.050',
       latency: 'sub-second',
       tokenBudget: 'streaming',
+      logoSrc: GROK_LOGO_SRC,
     },
   ],
   dtmf: [
@@ -490,10 +518,7 @@ const DEFAULT_OUTCOME_LABELS: OutcomeLabel[] = [
 ]
 
 function labelFromOutcomeKey(key: string): string {
-  const cleaned = key
-    .trim()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
+  const cleaned = key.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
   if (!cleaned) return ''
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
 }
@@ -1212,7 +1237,7 @@ export function AgentEditor({
             type="button"
             onClick={publish}
             disabled={pending}
-            className="ml-1 inline-flex h-8 items-center gap-1 rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-3 text-[12.5px] font-medium text-fg transition hover:bg-[#ECEDEF] disabled:opacity-60"
+            className="text-fg ml-1 inline-flex h-8 items-center gap-1 rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-3 text-[12.5px] font-medium transition hover:bg-[#ECEDEF] disabled:opacity-60"
           >
             {status === 'live' ? 'Move to draft' : 'Publish'}
           </button>
@@ -1245,6 +1270,7 @@ export function AgentEditor({
             label: o.label,
             sub: o.sub,
             badge: o.suggested ? 'Suggested' : undefined,
+            logoSrc: o.logoSrc,
           }))}
           value={tier}
           onChange={(v) => setTier(v as Tier)}
@@ -1259,6 +1285,7 @@ export function AgentEditor({
               label: m.label,
               sub: m.sub,
               badge: m.badge,
+              logoSrc: m.logoSrc,
             }))}
             value={model}
             onChange={setModel}
@@ -1712,11 +1739,11 @@ export function AgentEditor({
                           setVoiceStyle(first.styles[0] ?? 'conversational')
                         }
                       }}
-                        className={cn(
-                          'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition',
-                          p === voiceProvider
-                            ? 'border-[#D2D4D6] bg-[#F5F5F7] text-fg'
-                            : 'border-line bg-bg text-fg hover:bg-bg-muted',
+                      className={cn(
+                        'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition',
+                        p === voiceProvider
+                          ? 'text-fg border-[#D2D4D6] bg-[#F5F5F7]'
+                          : 'border-line bg-bg text-fg hover:bg-bg-muted',
                       )}
                     >
                       {PROVIDER_LABEL[p] ?? p}
@@ -1766,7 +1793,7 @@ export function AgentEditor({
                         className={cn(
                           'inline-flex h-7 items-center rounded-full border px-2.5 text-[12px] transition',
                           s === voiceStyle
-                            ? 'border-[#D2D4D6] bg-[#F5F5F7] text-fg'
+                            ? 'text-fg border-[#D2D4D6] bg-[#F5F5F7]'
                             : 'border-line bg-bg text-fg hover:bg-bg-muted',
                         )}
                       >
@@ -2316,7 +2343,7 @@ export function AgentEditor({
                   className={cn(
                     'inline-flex h-7 items-center justify-center gap-1 rounded-[4px] text-[11.5px] font-medium transition',
                     testMode === 'browser'
-                      ? 'bg-[#F5F5F7] text-fg shadow-card'
+                      ? 'text-fg shadow-card bg-[#F5F5F7]'
                       : 'text-fg-muted hover:text-fg',
                   )}
                 >
@@ -2328,7 +2355,7 @@ export function AgentEditor({
                   className={cn(
                     'inline-flex h-7 items-center justify-center gap-1 rounded-[4px] text-[11.5px] font-medium transition',
                     testMode === 'call'
-                      ? 'bg-[#F5F5F7] text-fg shadow-card'
+                      ? 'text-fg shadow-card bg-[#F5F5F7]'
                       : 'text-fg-muted hover:text-fg',
                   )}
                 >
@@ -2350,9 +2377,7 @@ export function AgentEditor({
                 onFocus={() => {
                   if (testMode === 'browser') prewarmBrowserTest()
                 }}
-                onClick={() =>
-                  testMode === 'browser' ? void runBrowserTest() : setTestOpen(true)
-                }
+                onClick={() => (testMode === 'browser' ? void runBrowserTest() : setTestOpen(true))}
                 disabled={browserTestStatus === 'connecting'}
                 className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[5px] border px-2 text-[12.5px] font-medium transition"
               >
@@ -2407,7 +2432,7 @@ export function AgentEditor({
                             'max-w-[88%] rounded-[6px] px-2.5 py-2 text-[12px] leading-relaxed',
                             message.role === 'caller'
                               ? 'bg-fg text-bg'
-                              : 'border-line bg-[#F5F5F7] text-fg border',
+                              : 'border-line text-fg border bg-[#F5F5F7]',
                           )}
                         >
                           <p className="whitespace-pre-wrap">{message.text}</p>
@@ -2416,7 +2441,7 @@ export function AgentEditor({
                     ))}
                     {llmTesting && (
                       <div className="flex justify-start">
-                        <div className="border-line bg-[#F5F5F7] text-fg-muted rounded-[6px] border px-2.5 py-2 text-[12px]">
+                        <div className="border-line text-fg-muted rounded-[6px] border bg-[#F5F5F7] px-2.5 py-2 text-[12px]">
                           Thinking...
                         </div>
                       </div>
@@ -2502,7 +2527,10 @@ export function AgentEditor({
                 setOutcomeLabels(generatedOutcomes.labels)
               }
               setBuilderOpen(false)
-              toast('Bangla prompt and revenue outcomes generated. Save changes to publish it.', 'success')
+              toast(
+                'Bangla prompt and revenue outcomes generated. Save changes to publish it.',
+                'success',
+              )
             }}
           />
         </DialogContent>
@@ -2641,9 +2669,7 @@ function SegTab({
       onClick={onClick}
       className={cn(
         'inline-flex h-7 items-center rounded-[4px] px-3 text-[12px] font-medium transition',
-        active
-          ? 'border border-[#D2D4D6] bg-[#F5F5F7] text-fg'
-          : 'text-fg-muted hover:text-fg',
+        active ? 'text-fg border border-[#D2D4D6] bg-[#F5F5F7]' : 'text-fg-muted hover:text-fg',
       )}
     >
       {children}
@@ -2678,11 +2704,12 @@ function ToolSelect({
   label: string
   tag?: string
   avatar?: boolean
-  options: { k: string; label: string; sub?: string; badge?: string }[]
+  options: { k: string; label: string; sub?: string; badge?: string; logoSrc?: string }[]
   value: string
   onChange: (v: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const selectedOption = options.find((o) => o.k === value)
   return (
     <div className="relative">
       <button
@@ -2690,7 +2717,15 @@ function ToolSelect({
         onClick={() => setOpen((v) => !v)}
         className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-7 items-center gap-1.5 rounded-[5px] border px-2 text-[12px] transition"
       >
-        {avatar ? (
+        {selectedOption?.logoSrc ? (
+          <span className="bg-bg-muted grid size-4 place-items-center rounded-full">
+            <img
+              src={selectedOption.logoSrc}
+              alt=""
+              className="size-2.5 object-contain opacity-75"
+            />
+          </span>
+        ) : avatar ? (
           <span className="bg-status-attn-soft text-status-attn grid size-4 place-items-center rounded-full text-[9px] font-semibold">
             {label.charAt(0)}
           </span>
@@ -2722,11 +2757,18 @@ function ToolSelect({
                   o.k === value ? 'bg-bg-subtle' : 'hover:bg-bg-subtle',
                 )}
               >
-                <span className="min-w-0">
-                  <span className="text-fg block truncate">{o.label}</span>
-                  {o.sub && (
-                    <span className="text-fg-muted block truncate text-[10.5px]">{o.sub}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {o.logoSrc && (
+                    <span className="bg-bg-muted grid size-6 shrink-0 place-items-center rounded-full">
+                      <img src={o.logoSrc} alt="" className="size-3.5 object-contain opacity-75" />
+                    </span>
                   )}
+                  <span className="min-w-0">
+                    <span className="text-fg block truncate">{o.label}</span>
+                    {o.sub && (
+                      <span className="text-fg-muted block truncate text-[10.5px]">{o.sub}</span>
+                    )}
+                  </span>
                 </span>
                 {o.badge && (
                   <span className="bg-bg-muted text-fg-muted rounded-sm px-1 text-[9.5px] font-medium uppercase tracking-[0.06em]">
@@ -3148,7 +3190,9 @@ function browserRecordingMimeType(): string {
 
 function addBrowserRecordingTrack(session: BrowserAudioSession, track: MediaStreamTrack) {
   if (!session.recordingStream || track.kind !== 'audio') return
-  const alreadyAdded = session.recordingStream.getAudioTracks().some((current) => current.id === track.id)
+  const alreadyAdded = session.recordingStream
+    .getAudioTracks()
+    .some((current) => current.id === track.id)
   if (!alreadyAdded) session.recordingStream.addTrack(track)
 }
 
