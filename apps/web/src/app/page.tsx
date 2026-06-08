@@ -367,15 +367,18 @@ function Hero({ locale }: { locale: Locale }) {
         <div className="relative flex flex-1 flex-col justify-center px-4 pb-7 pt-9 text-center sm:px-8 sm:pb-9 sm:pt-12 lg:px-12">
           <Link
             href="/signup"
-            className="announcement-animate hero-reveal text-fg relative z-10 mx-auto inline-flex max-w-full items-center gap-2 rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-2.5 py-1.5 text-[11px] backdrop-blur transition hover:bg-[#ECEDEF]"
+            className="hero-breadcrumb hero-reveal text-fg relative z-10 mx-auto inline-grid max-w-[min(100%,34rem)] grid-cols-[auto_auto] items-center gap-1 rounded-full border border-white/75 bg-white/85 p-1 text-[11px] shadow-[0_14px_40px_rgb(15,23,42,0.12)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5 hover:border-white hover:bg-white sm:grid-cols-[auto_minmax(0,1fr)_auto]"
           >
-            <span className="text-fg rounded-full border border-[#D2D4D6] bg-white px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em]">
+            <span className="hero-breadcrumb-chip rounded-full border border-[#D2D4D6] bg-[#F5F5F7] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.12em]">
               For business teams
             </span>
-            <span className="truncate">
+            <span className="text-fg-muted hidden min-w-0 truncate px-1.5 sm:block">
               Recover missed calls, qualify signup leads, and confirm orders automatically.
             </span>
-            <Icon name="arrow-right" size="xs" square={false} className="shrink-0" />
+            <span className="hero-breadcrumb-action bg-fg text-bg inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium shadow-[inset_0_1px_0_rgb(255,255,255,0.16)]">
+              Start signup
+              <Icon name="arrow-right" size="xs" square={false} className="shrink-0" />
+            </span>
           </Link>
 
           <h1 className="hero-reveal hero-reveal-2 font-display tracking-tightest text-fg relative z-10 mx-auto mt-6 max-w-4xl text-[42px] font-medium leading-[0.95] sm:text-[56px] lg:text-[72px]">
@@ -409,10 +412,10 @@ function Hero({ locale }: { locale: Locale }) {
 
 function HomepageNav({ locale }: { locale: Locale }) {
   return (
-    <div className="fixed inset-x-0 top-0 z-[80] flex w-full justify-center px-3 py-2 sm:px-6 sm:py-4">
-      <header className="flex w-full max-w-5xl items-center justify-between gap-3 rounded-[22px] border border-black/5 bg-white px-3 py-2 shadow-[0_12px_34px_rgb(15,23,42,0.10)] md:rounded-full md:border-white/50 md:bg-white/40 md:px-5 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)] md:backdrop-blur-xl">
-        <Link href="/" className="group inline-flex min-w-0 items-center">
-          <Wordmark className="h-5 max-w-[96px] transition-opacity group-hover:opacity-85 sm:h-7 sm:max-w-[132px]" />
+    <div className="sticky top-0 z-[80] flex w-full justify-center px-3 py-2 sm:px-6 sm:py-4">
+      <header className="homepage-nav-shell flex w-full min-w-0 max-w-5xl items-center justify-between gap-2 rounded-[22px] border border-black/5 bg-white/95 px-2.5 py-2 shadow-[0_12px_34px_rgb(15,23,42,0.10)] backdrop-blur-xl sm:gap-3 sm:px-3 md:rounded-full md:border-white/50 md:bg-white/45 md:px-5 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+        <Link href="/" className="group inline-flex min-w-0 shrink items-center">
+          <Wordmark className="h-5 max-w-[88px] transition-opacity group-hover:opacity-85 min-[380px]:max-w-[104px] sm:h-7 sm:max-w-[132px]" />
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex">
@@ -427,7 +430,7 @@ function HomepageNav({ locale }: { locale: Locale }) {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 md:gap-3">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2 md:gap-3">
           <div className="hidden sm:block">
             <LangSwitcher locale={locale} />
           </div>
@@ -438,8 +441,15 @@ function HomepageNav({ locale }: { locale: Locale }) {
             >
               Sign in
             </Link>
-            <Button asChild size="sm" className="hidden rounded-full px-5 sm:inline-flex">
-              <Link href="/signup">Start signup</Link>
+            <Button
+              asChild
+              size="sm"
+              className="rounded-full px-3 text-[12px] sm:px-5 sm:text-[13px]"
+            >
+              <Link href="/signup">
+                <span className="sm:hidden">Signup</span>
+                <span className="hidden sm:inline">Start signup</span>
+              </Link>
             </Button>
           </Show>
           <Show when="signed-in">
@@ -454,14 +464,14 @@ function HomepageNav({ locale }: { locale: Locale }) {
           <details className="group relative md:hidden">
             <summary
               aria-label="Open menu"
-              className="text-fg flex size-8 cursor-pointer list-none items-center justify-center rounded-full transition hover:bg-black/[0.04] [&::-webkit-details-marker]:hidden"
+              className="text-fg flex size-8 cursor-pointer list-none items-center justify-center rounded-full transition duration-300 hover:bg-black/[0.04] group-open:bg-black/[0.05] [&::-webkit-details-marker]:hidden"
             >
               <span className="flex w-4 flex-col gap-1.5">
-                <span className="h-0.5 w-full rounded-full bg-current transition group-open:translate-y-1 group-open:rotate-45" />
-                <span className="h-0.5 w-full rounded-full bg-current transition group-open:-translate-y-1 group-open:-rotate-45" />
+                <span className="h-0.5 w-full rounded-full bg-current transition duration-300 group-open:translate-y-1 group-open:rotate-45" />
+                <span className="h-0.5 w-full rounded-full bg-current transition duration-300 group-open:-translate-y-1 group-open:-rotate-45" />
               </span>
             </summary>
-            <div className="absolute right-0 top-[calc(100%+10px)] w-56 overflow-hidden rounded-[20px] border border-black/5 bg-white p-2 text-left shadow-[0_18px_50px_rgb(15,23,42,0.14)]">
+            <div className="mobile-menu-popover absolute right-0 top-[calc(100%+10px)] w-[min(14rem,calc(100vw-1.5rem))] overflow-hidden rounded-[20px] border border-black/5 bg-white p-2 text-left shadow-[0_18px_50px_rgb(15,23,42,0.14)]">
               <nav className="space-y-1">
                 {NAV_ITEMS.map((item) => (
                   <Link
@@ -540,12 +550,25 @@ function HeroConsole() {
                 <div
                   key={label as string}
                   className={cn(
-                    'flex items-center gap-2 rounded-[6px] px-2 py-1.5 text-[11.5px]',
-                    active ? 'bg-bg text-fg shadow-card' : 'text-fg-muted',
+                    'mockup-side-button group relative flex items-center gap-2 overflow-hidden rounded-full border px-2.5 py-1.5 text-[11.5px] transition duration-300',
+                    active
+                      ? 'bg-bg text-fg border-white shadow-[0_10px_24px_rgb(15,23,42,0.08)]'
+                      : 'text-fg-muted hover:border-line hover:bg-bg/70 hover:text-fg border-transparent',
                   )}
                 >
-                  <Icon name={icon as IconName} size="xs" square={false} />
-                  <span>{label}</span>
+                  <span
+                    className={cn(
+                      'absolute inset-y-1 left-1 w-1 rounded-full transition duration-300',
+                      active ? 'bg-status-live opacity-100' : 'bg-transparent opacity-0',
+                    )}
+                  />
+                  <Icon
+                    name={icon as IconName}
+                    size="xs"
+                    square={false}
+                    className="relative z-10 transition duration-300 group-hover:scale-110"
+                  />
+                  <span className="relative z-10">{label}</span>
                 </div>
               ))}
             </div>

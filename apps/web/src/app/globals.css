@@ -3,10 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-display: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-bangla: "Nirmala UI", "Hind Siliguri", "Bangla MN", "Vrinda", sans-serif;
-  --font-mono: "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  --font-sans: Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-bangla: 'Nirmala UI', 'Hind Siliguri', 'Bangla MN', 'Vrinda', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Consolas, monospace;
   --bg: 255 255 255;
   --bg-subtle: 247 247 247;
   --bg-muted: 238 238 238;
@@ -31,7 +31,9 @@ body {
   min-height: 100vh;
   background: rgb(var(--bg));
   color: rgb(var(--fg));
-  font-feature-settings: 'rlig' 1, 'calt' 1;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
 }
 
 ::selection {
@@ -40,7 +42,8 @@ body {
 }
 
 @keyframes brand-loading-blink {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.32;
     transform: scale(0.98);
   }
@@ -118,7 +121,8 @@ body {
 }
 
 @keyframes live-demo-orb-float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
   }
 
@@ -128,7 +132,8 @@ body {
 }
 
 @keyframes live-demo-orb-shift {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 18% 12%;
   }
 
@@ -143,7 +148,8 @@ body {
     opacity: 0;
   }
 
-  24%, 66% {
+  24%,
+  66% {
     opacity: 0.58;
   }
 
@@ -193,7 +199,8 @@ body {
 }
 
 @keyframes webcall-orb-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.24;
     transform: scale(0.92);
   }
@@ -242,8 +249,58 @@ body {
   }
 }
 
+@keyframes homepage-nav-settle {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mobile-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes breadcrumb-action-glow {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 0 0 rgba(20, 20, 20, 0);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.24),
+      0 8px 24px rgba(20, 20, 20, 0.18);
+  }
+}
+
+@keyframes side-button-sheen {
+  from {
+    transform: translateX(-120%);
+  }
+
+  to {
+    transform: translateX(180%);
+  }
+}
+
 @keyframes mockup-soft-float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
 
@@ -253,7 +310,8 @@ body {
 }
 
 @keyframes mockup-line-glow {
-  0%, 100% {
+  0%,
+  100% {
     border-color: #d2d4d6;
     background: #f5f5f7;
   }
@@ -265,7 +323,8 @@ body {
 }
 
 @keyframes mockup-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -293,7 +352,8 @@ body {
 }
 
 @keyframes tile-breathe {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.72;
     transform: scale(1);
   }
@@ -307,6 +367,62 @@ body {
 .landing-reveal,
 .landing-stagger > * {
   animation: landing-reveal 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.homepage-nav-shell {
+  animation: homepage-nav-settle 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+details[open] .mobile-menu-popover {
+  animation: mobile-menu-enter 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top right;
+}
+
+.hero-breadcrumb {
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.hero-breadcrumb::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.84), transparent);
+  content: '';
+  inset: 0 auto 0 -38%;
+  pointer-events: none;
+  position: absolute;
+  transform: skewX(-18deg);
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  width: 34%;
+  z-index: 0;
+}
+
+.hero-breadcrumb:hover::before {
+  transform: translateX(420%) skewX(-18deg);
+}
+
+.hero-breadcrumb > * {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-breadcrumb-action {
+  animation: breadcrumb-action-glow 3.8s ease-in-out infinite;
+}
+
+.mockup-side-button::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  content: '';
+  inset: 0 auto 0 -45%;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-120%);
+  transition: opacity 180ms ease;
+  width: 42%;
+}
+
+.mockup-side-button:hover::after {
+  animation: side-button-sheen 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 1;
 }
 
 .hero-reveal {
@@ -421,11 +537,14 @@ body {
   .announcement-animate::before,
   .announcement-animate::after,
   .brand-loading-blink,
+  .hero-breadcrumb-action,
   .hero-reveal,
+  .homepage-nav-shell,
   .landing-reveal,
   .landing-stagger > *,
   .live-demo-orb,
   .live-demo-orb::after,
+  .mobile-menu-popover,
   .webcall-orb--connecting::before,
   .mockup-bar,
   .mockup-float,
