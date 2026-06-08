@@ -419,7 +419,7 @@ function Hero() {
 function HomepageNav({ locale }: { locale: Locale }) {
   return (
     <div className="sticky top-0 z-[240] flex w-full justify-center bg-transparent px-3 py-2 sm:px-6 sm:py-4">
-      <header className="homepage-nav-shell flex w-full min-w-0 max-w-5xl items-center justify-between gap-2 rounded-[22px] border border-black/5 bg-white/95 px-2.5 py-2 shadow-[0_12px_34px_rgb(15,23,42,0.10)] backdrop-blur-xl sm:gap-3 sm:px-3 md:rounded-full md:border-white/50 md:bg-white/45 md:px-5 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+      <header className="homepage-nav-shell flex w-full min-w-0 max-w-5xl items-center justify-between gap-2 rounded-[22px] border border-transparent bg-transparent px-2.5 py-2 shadow-none sm:gap-3 sm:px-3 md:rounded-full md:border-white/50 md:bg-white/45 md:px-5 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)] md:backdrop-blur-xl">
         <Link href="/" className="group inline-flex min-w-0 shrink items-center">
           <Wordmark className="h-5 max-w-[88px] transition-opacity group-hover:opacity-85 min-[380px]:max-w-[104px] sm:h-7 sm:max-w-[132px]" />
         </Link>
@@ -477,76 +477,73 @@ function HomepageNav({ locale }: { locale: Locale }) {
                 <span className="h-0.5 w-full rounded-full bg-current transition duration-300 group-open:-translate-y-1 group-open:-rotate-45" />
               </span>
             </summary>
-            <div className="mobile-menu-backdrop fixed inset-0 z-[260] bg-white/80 backdrop-blur-lg" />
-            <div className="mobile-menu-popover fixed inset-0 z-[270] overflow-y-auto bg-white text-left shadow-[0_24px_70px_rgb(15,23,42,0.18)]">
-              <div className="flex min-h-full flex-col px-4 pb-5 pt-[78px]">
-                <div className="border-line bg-bg-subtle/70 rounded-[22px] border p-3">
-                  <p className="text-fg text-[13px] font-semibold">Navigate LivoCall</p>
-                  <p className="text-fg-muted mt-1 text-[12px] leading-relaxed">
-                    Choose a section, compare providers, or start signup.
-                  </p>
-                </div>
+            <div className="mobile-menu-backdrop fixed inset-0 z-[260] bg-black/10 backdrop-blur-[2px]" />
+            <div className="mobile-menu-popover fixed inset-x-3 top-[58px] z-[270] rounded-[24px] border border-black/5 bg-white p-3 text-left shadow-[0_24px_70px_rgb(15,23,42,0.18)]">
+              <div className="border-line bg-bg-subtle/70 rounded-[18px] border px-3 py-2">
+                <p className="text-fg text-[13px] font-semibold">Navigate LivoCall</p>
+              </div>
 
-                <nav className="mt-4 grid gap-2">
-                  {NAV_ITEMS.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="text-fg border-line bg-bg hover:border-fg/20 group flex items-center justify-between rounded-[18px] border px-4 py-3 text-[14px] font-semibold transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgb(15,23,42,0.10)]"
+              <nav className="mt-3 grid grid-cols-2 gap-1.5">
+                {NAV_ITEMS.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="text-fg border-line bg-bg hover:border-fg/20 group flex items-center justify-between rounded-[15px] border px-3 py-2.5 text-[13px] font-semibold transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgb(15,23,42,0.10)]"
+                  >
+                    {item.label}
+                    <Icon
+                      name="arrow-right"
+                      size="xs"
+                      square={false}
+                      className="text-fg-muted group-hover:text-fg transition duration-300 group-hover:translate-x-0.5"
+                    />
+                  </Link>
+                ))}
+              </nav>
+
+              <div className="border-line mt-3 rounded-[18px] border bg-[#f7f7f8] p-2.5">
+                <p className="text-fg text-[12px] font-semibold">AI + voice providers</p>
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  {AI_PROVIDER_LOGOS.map((logo) => (
+                    <div
+                      key={logo.name}
+                      className="flex items-center gap-1.5 rounded-[13px] border border-white bg-white px-2 py-1.5 shadow-[0_8px_18px_rgb(15,23,42,0.05)]"
                     >
-                      {item.label}
-                      <Icon
-                        name="arrow-right"
-                        size="xs"
-                        square={false}
-                        className="text-fg-muted group-hover:text-fg transition duration-300 group-hover:translate-x-0.5"
-                      />
-                    </Link>
+                      <span className="grid size-6 place-items-center rounded-full bg-[#f1f1f2]">
+                        <img src={logo.src} alt="" className="size-4 object-contain" />
+                      </span>
+                      <span className="text-fg truncate text-[11.5px] font-medium">
+                        {logo.name}
+                      </span>
+                    </div>
                   ))}
-                </nav>
-
-                <div className="border-line mt-4 rounded-[22px] border bg-[#f7f7f8] p-3">
-                  <p className="text-fg text-[12px] font-semibold">AI + voice providers</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {AI_PROVIDER_LOGOS.map((logo) => (
-                      <div
-                        key={logo.name}
-                        className="flex items-center gap-2 rounded-[16px] border border-white bg-white px-3 py-2 shadow-[0_10px_24px_rgb(15,23,42,0.06)]"
-                      >
-                        <span className="grid size-7 place-items-center rounded-full bg-[#f1f1f2]">
-                          <img src={logo.src} alt="" className="size-4 object-contain" />
-                        </span>
-                        <span className="text-fg text-[12.5px] font-medium">{logo.name}</span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
+              </div>
 
-                <div className="mt-auto space-y-2 pt-4">
-                  <Show when="signed-out">
-                    <Link
-                      href="/signup"
-                      className="bg-fg text-bg hover:bg-fg-muted flex h-11 items-center justify-center gap-1.5 rounded-full text-[14px] font-semibold transition duration-300 hover:-translate-y-0.5"
-                    >
-                      Start signup
-                      <Icon name="arrow-right" size="xs" square={false} />
-                    </Link>
-                    <Link
-                      href="/login"
-                      className="text-fg-muted hover:text-fg flex h-10 items-center justify-center rounded-full text-[13px] font-medium transition hover:bg-black/[0.04]"
-                    >
-                      Sign in
-                    </Link>
-                  </Show>
-                  <Show when="signed-in">
-                    <Link
-                      href="/overview"
-                      className="bg-fg text-bg hover:bg-fg-muted flex h-11 items-center justify-center rounded-full text-[14px] font-semibold transition duration-300 hover:-translate-y-0.5"
-                    >
-                      Dashboard
-                    </Link>
-                  </Show>
-                </div>
+              <div className="mt-3 grid gap-1.5">
+                <Show when="signed-out">
+                  <Link
+                    href="/signup"
+                    className="bg-fg text-bg hover:bg-fg-muted flex h-10 items-center justify-center gap-1.5 rounded-full text-[13px] font-semibold transition duration-300 hover:-translate-y-0.5"
+                  >
+                    Start signup
+                    <Icon name="arrow-right" size="xs" square={false} />
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="text-fg-muted hover:text-fg flex h-9 items-center justify-center rounded-full text-[12.5px] font-medium transition hover:bg-black/[0.04]"
+                  >
+                    Sign in
+                  </Link>
+                </Show>
+                <Show when="signed-in">
+                  <Link
+                    href="/overview"
+                    className="bg-fg text-bg hover:bg-fg-muted flex h-10 items-center justify-center rounded-full text-[13px] font-semibold transition duration-300 hover:-translate-y-0.5"
+                  >
+                    Dashboard
+                  </Link>
+                </Show>
               </div>
             </div>
           </details>
