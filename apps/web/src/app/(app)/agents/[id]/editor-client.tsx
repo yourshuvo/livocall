@@ -170,9 +170,19 @@ interface EngineInfo {
   logoSrc?: string
 }
 
-const GEMINI_LOGO_SRC = 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/googlegemini.svg'
-const GROK_LOGO_SRC = 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/x.svg'
-const OPENAI_LOGO_SRC = 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg'
+const GEMINI_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64'
+const GROK_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=x.ai&sz=64'
+const OPENAI_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=openai.com&sz=64'
+const CARTESIA_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=cartesia.ai&sz=64'
+const ELEVENLABS_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=elevenlabs.io&sz=64'
+
+const PROVIDER_LOGO_SRC: Record<string, string> = {
+  cartesia: CARTESIA_LOGO_SRC,
+  eleven: ELEVENLABS_LOGO_SRC,
+  'gemini-live': GEMINI_LOGO_SRC,
+  xai: GROK_LOGO_SRC,
+  'gemini-tts': GEMINI_LOGO_SRC,
+}
 
 const ENGINE_OPTIONS: EngineInfo[] = [
   {
@@ -1304,6 +1314,7 @@ export function AgentEditor({
                   k: p,
                   label: PROVIDER_LABEL[p] ?? p,
                   sub: `${VOICE_CATALOG[p]?.length ?? 0} voices`,
+                  logoSrc: PROVIDER_LOGO_SRC[p],
                 }))}
                 value={voiceProvider}
                 onChange={(v) => {
@@ -2718,12 +2729,8 @@ function ToolSelect({
         className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-7 items-center gap-1.5 rounded-[5px] border px-2 text-[12px] transition"
       >
         {selectedOption?.logoSrc ? (
-          <span className="bg-bg-muted grid size-4 place-items-center rounded-full">
-            <img
-              src={selectedOption.logoSrc}
-              alt=""
-              className="size-2.5 object-contain opacity-75"
-            />
+          <span className="bg-bg-muted grid size-5 place-items-center rounded-full">
+            <img src={selectedOption.logoSrc} alt="" className="size-3.5 object-contain" />
           </span>
         ) : avatar ? (
           <span className="bg-status-attn-soft text-status-attn grid size-4 place-items-center rounded-full text-[9px] font-semibold">
@@ -2760,7 +2767,7 @@ function ToolSelect({
                 <span className="flex min-w-0 items-center gap-2">
                   {o.logoSrc && (
                     <span className="bg-bg-muted grid size-6 shrink-0 place-items-center rounded-full">
-                      <img src={o.logoSrc} alt="" className="size-3.5 object-contain opacity-75" />
+                      <img src={o.logoSrc} alt="" className="size-4 object-contain" />
                     </span>
                   )}
                   <span className="min-w-0">
