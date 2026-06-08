@@ -69,12 +69,12 @@ export function PublicWebcallDemo({
   async function startWebcall() {
     prewarmWebcall()
     if (status === 'live') {
-      stopWebcall('Webcall stopped.')
+      stopWebcall('Demo call stopped.')
       return
     }
     if (!configured || status === 'connecting' || status === 'limited') return
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setError('This browser cannot start a Webcall.')
+      setError('This browser cannot start the demo call.')
       return
     }
 
@@ -96,26 +96,35 @@ export function PublicWebcallDemo({
         enableMic: true,
         enableCam: false,
         callbacks: {
-          onError: () => failWebcall('Webcall disconnected.'),
-          onDeviceError: () => failWebcall('Microphone permission is needed for Webcall.'),
+          onError: () => failWebcall('Demo call disconnected.'),
+          onDeviceError: () => failWebcall('Microphone permission is needed for the demo call.'),
           onDisconnected: () => stopWebcall(),
           onBotDisconnected: () => stopWebcall(),
           onTrackStarted: (track) => {
             if (isLocalPipecatAudioTrack(client, track)) {
               if (track.kind === 'audio') {
                 nextSession.localRecordTrack = track
-                maybeStartPublicWebcallRecording(nextSession, start.callId, start.recordingUploadToken)
+                maybeStartPublicWebcallRecording(
+                  nextSession,
+                  start.callId,
+                  start.recordingUploadToken,
+                )
               }
               return
             }
-            attachPublicWebcallAudioTrack(nextSession, track, start.callId, start.recordingUploadToken)
+            attachPublicWebcallAudioTrack(
+              nextSession,
+              track,
+              start.callId,
+              start.recordingUploadToken,
+            )
           },
           onTrackStopped: (track) => {
             if (isLocalPipecatAudioTrack(client, track)) return
             if (track.kind === 'audio') detachPublicWebcallAudio(nextSession)
           },
           onTransportStateChanged: (state) => {
-            if (state === 'error') failWebcall('Webcall connection failed.')
+            if (state === 'error') failWebcall('Demo call connection failed.')
           },
         },
       })
@@ -132,9 +141,12 @@ export function PublicWebcallDemo({
         maybeStartPublicWebcallRecording(nextSession, start.callId, start.recordingUploadToken)
       }
       setStatus('live')
-      nextSession.limitTimer = window.setTimeout(() => {
-        stopWebcall('This demo reached its time limit.')
-      }, Math.max(1, start.maxDurationSec) * 1000)
+      nextSession.limitTimer = window.setTimeout(
+        () => {
+          stopWebcall('This demo reached its time limit.')
+        },
+        Math.max(1, start.maxDurationSec) * 1000,
+      )
     } catch (err) {
       closePublicWebcallSession(nextSession)
       if (sessionRef.current === nextSession) sessionRef.current = null
@@ -159,12 +171,12 @@ export function PublicWebcallDemo({
   }
 
   const buttonLabel = !configured
-    ? 'Webcall unavailable'
+    ? 'Demo unavailable'
     : status === 'live'
-      ? 'Stop Webcall'
+      ? 'Stop demo call'
       : status === 'connecting'
         ? 'Connecting'
-        : 'Start Webcall'
+        : 'Start demo call'
   const statusLabel = !configured
     ? 'Unavailable'
     : status === 'live'
@@ -174,13 +186,15 @@ export function PublicWebcallDemo({
         : status === 'limited'
           ? 'Limit reached'
           : 'Ready'
-  const liveInputLabel = 'Gemini VAD is listening — speak naturally.'
+  const liveInputLabel = 'Speak naturally. The agent will wait for your turn.'
 
   return (
-    <section id="pricing" className="border-b border-line bg-white">
+    <section id="live-demo" className="border-line border-b bg-white">
       <div className="mx-auto max-w-screen-xl px-6 py-20 md:py-28">
-        <h2 className="landing-reveal mx-auto max-w-2xl text-center font-serif text-[60px] font-normal leading-[0.9] tracking-tight text-fg md:text-[112px]">
-          Try Our<br />Webcall
+        <h2 className="landing-reveal text-fg mx-auto max-w-2xl text-center font-serif text-[60px] font-normal leading-[0.9] tracking-tight md:text-[112px]">
+          Try a Bangla
+          <br />
+          AI call
         </h2>
 
         <div className="landing-stagger mt-20 grid gap-4 lg:grid-cols-2">
@@ -200,7 +214,7 @@ export function PublicWebcallDemo({
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  className="mockup-glow-row rounded-[6px] border border-[#D2D4D6] bg-[#F5F5F7] px-3 py-2 text-fg"
+                  className="mockup-glow-row text-fg rounded-[6px] border border-[#D2D4D6] bg-[#F5F5F7] px-3 py-2"
                 >
                   {tag}
                 </span>
@@ -226,15 +240,15 @@ export function PublicWebcallDemo({
                 {statusLabel}
               </span>
             </div>
-            <h3 className="mt-5 max-w-lg font-display text-[28px] font-medium leading-[1.05] tracking-tight text-[#001238] md:text-[36px]">
-              Start a Bangla Webcall with our Gemini 3.1 Flash Live agent.
+            <h3 className="font-display mt-5 max-w-lg text-[28px] font-medium leading-[1.05] tracking-tight text-[#001238] md:text-[36px]">
+              Hear how Livocall handles a real customer conversation.
             </h3>
-            <DemoFact label="Language" value="Bangla only" />
-            <DemoFact label="Model" value="Gemini 3.1 Flash Live" />
-            <DemoFact label="Limit" value="Short public demo with credit guardrails" />
+            <DemoFact label="Language" value="Bangla-first customer experience" />
+            <DemoFact label="Use case" value="Signup follow-up, support, and order confirmation" />
+            <DemoFact label="Safety" value="Short public demo with credit guardrails" />
             {(!configured || error) && (
               <p className="mt-6 rounded-[6px] border border-[#D2D4D6] bg-white/70 px-3 py-2 text-[13px] text-[#334155]">
-                {configured ? error : 'Public Webcall is not configured yet.'}
+                {configured ? error : 'Public demo call is not configured yet.'}
               </p>
             )}
             {status === 'live' && (
@@ -287,7 +301,7 @@ async function startPublicWebcall(): Promise<PublicWebcallStartResult> {
       'message' in data.error &&
       typeof data.error.message === 'string'
         ? data.error.message
-        : 'Could not start Webcall.'
+        : 'Could not start the demo call.'
     const err = new Error(message) as Error & { limited?: boolean }
     err.limited = res.status === 429
     throw err
@@ -347,7 +361,9 @@ function publicWebcallRecordingMimeType(): string {
 
 function addPublicWebcallRecordingTrack(session: PublicWebcallSession, track: MediaStreamTrack) {
   if (!session.recordingStream || track.kind !== 'audio') return
-  const alreadyAdded = session.recordingStream.getAudioTracks().some((current) => current.id === track.id)
+  const alreadyAdded = session.recordingStream
+    .getAudioTracks()
+    .some((current) => current.id === track.id)
   if (!alreadyAdded) session.recordingStream.addTrack(track)
 }
 
