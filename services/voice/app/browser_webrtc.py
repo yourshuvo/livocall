@@ -375,9 +375,10 @@ async def run_browser_gemini_bot(
             LLMRunFrame,
         )
         from pipecat.pipeline.pipeline import Pipeline  # type: ignore[import-not-found]
-        from pipecat.pipeline.worker import (  # type: ignore[import-not-found]
+        from pipecat.pipeline.runner import PipelineRunner  # type: ignore[import-not-found]
+        from pipecat.pipeline.task import (  # type: ignore[import-not-found]
             PipelineParams,
-            PipelineWorker,
+            PipelineTask,
         )
         from pipecat.processors.aggregators.llm_context import (
             LLMContext,  # type: ignore[import-not-found]
@@ -491,7 +492,7 @@ async def run_browser_gemini_bot(
             assistant_aggregator,
         ]
     )
-    worker = PipelineWorker(
+    task = PipelineTask(
         pipeline,
         params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
     )
@@ -506,12 +507,12 @@ async def run_browser_gemini_bot(
             voice=voice,
         )
         if _should_start_with_ai(agent):
-            await worker.queue_frames([LLMRunFrame()])
+            await task.queue_frames([LLMRunFrame()])
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(_transport: Any, _client: Any) -> None:
         log.info("browser_webrtc.disconnected", call_id=call_id)
-        await worker.cancel()
+        await task.cancel()
 
     async def cancel_after_public_limit() -> None:
         nonlocal hangup_cause
@@ -521,15 +522,14 @@ async def run_browser_gemini_bot(
         await asyncio.sleep(limit_sec)
         hangup_cause = "public_webcall_duration_limit"
         log.info("browser_webrtc.public_limit_reached", call_id=call_id, limit_sec=limit_sec)
-        await worker.cancel()
+        await task.cancel()
 
-    runner = WorkerRunner(handle_sigint=False)
+    runner = PipelineRunner(handle_sigint=False)
     limit_task: asyncio.Task[None] | None = None
     try:
         if _is_landing_webcall(metadata):
             limit_task = asyncio.create_task(cancel_after_public_limit())
-        await runner.add_workers(worker)
-        await runner.run()
+        await runner.run(task)
     except Exception as exc:  # noqa: BLE001
         outcome = "failed"
         hangup_cause = "browser_webrtc_error"
