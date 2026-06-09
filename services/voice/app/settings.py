@@ -5,9 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     mongodb_uri: str = Field(default="mongodb://localhost:27017/livocall")
     redis_url: str = Field(default="redis://localhost:6379/0")
@@ -31,6 +29,7 @@ class Settings(BaseSettings):
     deepgram_api_key: str = Field(default="")
     cartesia_api_key: str = Field(default="")
     xai_api_key: str = Field(default="")
+    soniox_api_key: str = Field(default="")
 
     # Telephony
     default_outbound_caller_id: str = Field(default="+8809610000000")
@@ -72,11 +71,24 @@ class Settings(BaseSettings):
     grok_voice_vad_silence_ms: int = Field(default=500)
     grok_voice_vad_prefix_padding_ms: int = Field(default=500)
 
-    # Tier 2 fallback
+    # Tier 2 fallback / Pipecat pipeline. Gemini Live intentionally does not use
+    # these VAD settings because Gemini Live owns turn-taking natively.
     pipeline_llm_model: str = Field(default="gemini-3.1-flash")
+    pipeline_stt_provider: str = Field(default="soniox")
+    pipeline_tts_provider: str = Field(default="soniox")
     deepgram_model: str = Field(default="nova-3")
     deepgram_language: str = Field(default="multi")
     cartesia_voice_id: str = Field(default="")
+    soniox_stt_model: str = Field(default="stt-rt-v4")
+    soniox_stt_url: str = Field(default="wss://stt-rt.soniox.com/transcribe-websocket")
+    soniox_tts_model: str = Field(default="tts-rt-v1")
+    soniox_tts_url: str = Field(default="wss://tts-rt.soniox.com/tts-websocket")
+    soniox_tts_voice: str = Field(default="Adrian")
+    soniox_language: str = Field(default="bn")
+    pipecat_vad_confidence: float = Field(default=0.7)
+    pipecat_vad_start_secs: float = Field(default=0.2)
+    pipecat_vad_stop_secs: float = Field(default=0.2)
+    pipecat_vad_min_volume: float = Field(default=0.6)
 
     # Public ws URL FreeSWITCH should fork audio to. e.g. ws://voice.internal:8084/ws/audio
     voice_ws_public_url: str = Field(default="ws://127.0.0.1:8084/ws/audio")

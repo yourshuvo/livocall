@@ -23,6 +23,7 @@ const RuntimeSettings = z.object({
   pauseBeforeSpeakingSec: z.number().min(0).max(30).optional(),
   denoiseMode: z.enum(['none', 'mixed', 'off']).optional(),
   transcriptionMode: z.enum(['speed', 'accuracy', 'custom']).optional(),
+  sttProvider: z.enum(['soniox', 'deepgram']).optional(),
   vocabularyMode: z.enum(['general', 'medical']).optional(),
   boostedKeywords: z.string().max(1000).optional(),
   voicemailDetection: z.boolean().optional(),
@@ -206,20 +207,22 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
   return NextResponse.json(agentToJson(agent))
 })
 
-export const DELETE = withErrors(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
-  const { id } = await ctx.params
-  const s = await requireDashboardSession()
-  if (isResponse(s)) return s
-  const forbidden = requireRole(s, 'admin')
-  if (forbidden) return forbidden
-  const oid = objectIdOr400(id)
-  if (!oid) return apiError('invalid_input', 'invalid id')
-  await connectMongo()
-  const r = await Agent.deleteOne({ _id: oid, orgId: s.orgId })
-  if (r.deletedCount === 0) return apiError('not_found')
-  await recordAudit(s, {
-    action: 'agent.delete',
-    resource: { type: 'Agent', id: String(oid) },
-  })
-  return NextResponse.json({ ok: true })
-})
+export const DELETE = withErrors(
+  async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+    const { id } = await ctx.params
+    const s = await requireDashboardSession()
+    if (isResponse(s)) return s
+    const forbidden = requireRole(s, 'admin')
+    if (forbidden) return forbidden
+    const oid = objectIdOr400(id)
+    if (!oid) return apiError('invalid_input', 'invalid id')
+    await connectMongo()
+    const r = await Agent.deleteOne({ _id: oid, orgId: s.orgId })
+    if (r.deletedCount === 0) return apiError('not_found')
+    await recordAudit(s, {
+      action: 'agent.delete',
+      resource: { type: 'Agent', id: String(oid) },
+    })
+    return NextResponse.json({ ok: true })
+  },
+)

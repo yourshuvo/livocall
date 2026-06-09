@@ -45,7 +45,7 @@ export type CallOutcome =
 export const tierLabel: Record<Tier, string> = {
   gemini_live: 'Conversational · Gemini Live',
   grok_voice: 'Conversational · Grok Voice',
-  pipeline: 'Pipeline · Deepgram + Flash + Cartesia',
+  pipeline: 'Pipeline · Soniox + Flash + Soniox/Cartesia',
   dtmf: 'IVR · DTMF + cached TTS',
 }
 

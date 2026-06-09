@@ -60,6 +60,20 @@ GROK_VOICE_ALIASES = {
     "xai:tanvir": "tanvir",
 }
 
+SONIOX_VOICE_ALIASES = {
+    "adrian": "Adrian",
+    "ava": "Ava",
+    "olivia": "Olivia",
+    "liam": "Liam",
+    "soniox:adrian": "Adrian",
+    "soniox:ava": "Ava",
+    "soniox:olivia": "Olivia",
+    "soniox:liam": "Liam",
+}
+
+PIPELINE_STT_PROVIDERS = {"soniox", "deepgram"}
+PIPELINE_TTS_PROVIDERS = {"soniox", "cartesia"}
+
 
 def prompt_parts(agent: dict[str, Any], override: str = "") -> tuple[str, str]:
     prompt_doc = agent.get("prompt") if isinstance(agent.get("prompt"), dict) else {}
@@ -165,6 +179,44 @@ def cartesia_voice_id(agent: dict[str, Any]) -> str:
     return raw
 
 
+def pipeline_stt_provider(agent: dict[str, Any]) -> str:
+    runtime = runtime_settings(agent)
+    raw = str(runtime.get("sttProvider") or settings.pipeline_stt_provider).strip().lower()
+    return raw if raw in PIPELINE_STT_PROVIDERS else settings.pipeline_stt_provider
+
+
+def pipeline_tts_provider(agent: dict[str, Any]) -> str:
+    voice_value = agent.get("voice")
+    voice = voice_value if isinstance(voice_value, dict) else {}
+    raw = str(voice.get("provider") or settings.pipeline_tts_provider).strip().lower()
+    return raw if raw in PIPELINE_TTS_PROVIDERS else settings.pipeline_tts_provider
+
+
+def soniox_voice(agent: dict[str, Any]) -> str:
+    voice_value = agent.get("voice")
+    voice = voice_value if isinstance(voice_value, dict) else {}
+    raw = str(voice.get("voiceId") or settings.soniox_tts_voice).strip()
+    if raw.lower().startswith("soniox:"):
+        raw = raw.split(":", 1)[1]
+    return SONIOX_VOICE_ALIASES.get(raw.lower(), raw or settings.soniox_tts_voice)
+
+
+def soniox_language(agent: dict[str, Any]) -> str:
+    raw = str(agent.get("language") or settings.soniox_language).strip()
+    if raw in {"bn-BD", "bn-en-mixed"}:
+        return "bn"
+    if raw == "en-US":
+        return "en"
+    return raw or settings.soniox_language
+
+
+def soniox_language_hint_codes(agent: dict[str, Any]) -> list[str]:
+    raw = str(agent.get("language") or settings.soniox_language).strip()
+    if raw == "bn-en-mixed":
+        return ["bn", "en"]
+    return [soniox_language(agent)]
+
+
 async def knowledge_context(agent: dict[str, Any], *, query: str = "", limit: int = 4) -> str:
     ids = [x for x in agent.get("knowledgeBaseIds") or [] if ObjectId.is_valid(str(x))]
     if not ids:
@@ -183,7 +235,12 @@ async def knowledge_context(agent: dict[str, Any], *, query: str = "", limit: in
                 scored.append((score, chunk))
             chunks = [c for _, c in sorted(scored, key=lambda x: x[0], reverse=True)[:limit]]
     if not chunks:
-        cursor = db["kb_chunks"].find({"kbId": {"$in": kb_ids}}, projection).sort("chunkIndex", 1).limit(limit)
+        cursor = (
+            db["kb_chunks"]
+            .find({"kbId": {"$in": kb_ids}}, projection)
+            .sort("chunkIndex", 1)
+            .limit(limit)
+        )
         async for chunk in cursor:
             chunks.append(chunk)
     if not chunks:
@@ -212,7 +269,9 @@ async def gemini_memory_context(agent: dict[str, Any]) -> str:
     return await _build_and_store_gemini_memory(agent)
 
 
-async def build_system_prompt(agent: dict[str, Any], override: str = "", *, kb_query: str = "") -> str:
+async def build_system_prompt(
+    agent: dict[str, Any], override: str = "", *, kb_query: str = ""
+) -> str:
     system_prompt, first_message = prompt_parts(agent, override)
     runtime = runtime_settings(agent)
     prompt_doc = agent.get("prompt") if isinstance(agent.get("prompt"), dict) else {}
@@ -337,7 +396,10 @@ def gemini_tool_declarations(agent: dict[str, Any]) -> list[dict[str, Any]]:
                     "type": "OBJECT",
                     "properties": {
                         "query": {"type": "STRING", "description": "Caller request or lookup key"},
-                        "phone": {"type": "STRING", "description": "Caller phone number when useful"},
+                        "phone": {
+                            "type": "STRING",
+                            "description": "Caller phone number when useful",
+                        },
                         "notes": {"type": "STRING", "description": "Short context for the tool"},
                     },
                 },
@@ -382,7 +444,9 @@ async def execute_agent_tool(
                 "answer": "I need to check that and follow up.",
                 "source": "error",
             }
-        await _log_tool_call(agent, call_id, "search_knowledge_base", _redact(arguments), result, started_at=started)
+        await _log_tool_call(
+            agent, call_id, "search_knowledge_base", _redact(arguments), result, started_at=started
+        )
         return result
     tool = next((t for t in configured_tools(agent) if t["name"] == _tool_name(name)), None)
     if tool is None:
@@ -404,7 +468,9 @@ async def execute_agent_tool(
             response = None
             for attempt in range(attempts):
                 if method == "GET":
-                    response = await client.get(url, params=_string_dict(arguments), headers=headers)
+                    response = await client.get(
+                        url, params=_string_dict(arguments), headers=headers
+                    )
                 else:
                     response = await client.request(method, url, json=arguments, headers=headers)
                 if response.status_code < 500 or attempt == attempts - 1:
@@ -419,7 +485,9 @@ async def execute_agent_tool(
         }
     except Exception as exc:  # noqa: BLE001
         result = {"ok": False, "error": str(exc)[:500]}
-    await _log_tool_call(agent, call_id, str(tool["name"]), _redact(arguments), _redact(result), started)
+    await _log_tool_call(
+        agent, call_id, str(tool["name"]), _redact(arguments), _redact(result), started
+    )
     return result
 
 
@@ -455,7 +523,10 @@ def _redact(value: Any) -> Any:
         redacted: dict[str, Any] = {}
         for k, v in value.items():
             key = str(k).lower()
-            if any(s in key for s in ("authorization", "token", "secret", "password", "api_key", "apikey")):
+            if any(
+                s in key
+                for s in ("authorization", "token", "secret", "password", "api_key", "apikey")
+            ):
                 redacted[str(k)] = "[redacted]"
             else:
                 redacted[str(k)] = _redact(v)
@@ -472,10 +543,7 @@ def _now() -> str:
 
 
 def _format_gemini_memory(text: str) -> str:
-    return (
-        "Gemini memory for low-latency answers. Use this before tools:\n"
-        f"{text.strip()}"
-    )
+    return f"Gemini memory for low-latency answers. Use this before tools:\n{text.strip()}"
 
 
 async def _build_and_store_gemini_memory(agent: dict[str, Any]) -> str:
@@ -591,7 +659,9 @@ async def _store_gemini_memory(
     }
     agent["geminiMemory"] = memory
     try:
-        await get_db()["agents"].update_one({"_id": ObjectId(str(agent_id))}, {"$set": {"geminiMemory": memory}})
+        await get_db()["agents"].update_one(
+            {"_id": ObjectId(str(agent_id))}, {"$set": {"geminiMemory": memory}}
+        )
     except Exception as exc:  # noqa: BLE001
         log.warning("gemini_memory.store_failed", agent_id=str(agent_id), error=str(exc))
 

@@ -16,7 +16,7 @@ def test_gemini_live_vad_silence_default_and_clamp(monkeypatch: pytest.MonkeyPat
         agent_runtime.gemini_live_vad_silence_ms(
             {"runtimeSettings": {"geminiLiveVadSilenceMs": 250}}
         )
-        == 300
+        == 500
     )
     assert (
         agent_runtime.gemini_live_vad_silence_ms(
@@ -24,6 +24,35 @@ def test_gemini_live_vad_silence_default_and_clamp(monkeypatch: pytest.MonkeyPat
         )
         == 2000
     )
+
+
+def test_pipeline_provider_helpers_default_and_sanitize(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(agent_runtime.settings, "pipeline_stt_provider", "soniox")
+    monkeypatch.setattr(agent_runtime.settings, "pipeline_tts_provider", "soniox")
+    monkeypatch.setattr(agent_runtime.settings, "soniox_tts_voice", "Adrian")
+
+    assert agent_runtime.pipeline_stt_provider({}) == "soniox"
+    assert (
+        agent_runtime.pipeline_stt_provider({"runtimeSettings": {"sttProvider": "deepgram"}})
+        == "deepgram"
+    )
+    assert (
+        agent_runtime.pipeline_stt_provider({"runtimeSettings": {"sttProvider": "bogus"}})
+        == "soniox"
+    )
+    assert agent_runtime.pipeline_tts_provider({"voice": {"provider": "cartesia"}}) == "cartesia"
+    assert agent_runtime.pipeline_tts_provider({"voice": {"provider": "eleven"}}) == "soniox"
+
+
+def test_soniox_voice_and_language_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(agent_runtime.settings, "soniox_tts_voice", "Adrian")
+    monkeypatch.setattr(agent_runtime.settings, "soniox_language", "bn")
+
+    assert agent_runtime.soniox_voice({"voice": {"voiceId": "soniox:ava"}}) == "Ava"
+    assert agent_runtime.soniox_voice({"voice": {"voiceId": "Custom Voice"}}) == "Custom Voice"
+    assert agent_runtime.soniox_language({"language": "bn-en-mixed"}) == "bn"
+    assert agent_runtime.soniox_language({"language": "en-US"}) == "en"
+    assert agent_runtime.soniox_language_hint_codes({"language": "bn-en-mixed"}) == ["bn", "en"]
 
 
 @pytest.mark.asyncio

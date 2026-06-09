@@ -8,6 +8,7 @@ const runtimeSettingsSchema = new Schema(
     pauseBeforeSpeakingSec: { type: Number, default: 0 },
     denoiseMode: { type: String, enum: ['none', 'mixed', 'off'], default: 'none' },
     transcriptionMode: { type: String, enum: ['speed', 'accuracy', 'custom'], default: 'accuracy' },
+    sttProvider: { type: String, enum: ['soniox', 'deepgram'], default: 'soniox' },
     vocabularyMode: { type: String, enum: ['general', 'medical'], default: 'general' },
     boostedKeywords: { type: String, default: '' },
     voicemailDetection: { type: Boolean, default: false },

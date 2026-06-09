@@ -59,6 +59,7 @@ interface RuntimeSettings {
   pauseBeforeSpeakingSec?: number
   denoiseMode?: 'none' | 'mixed' | 'off'
   transcriptionMode?: 'speed' | 'accuracy' | 'custom'
+  sttProvider?: 'soniox' | 'deepgram'
   vocabularyMode?: 'general' | 'medical'
   boostedKeywords?: string
   voicemailDetection?: boolean
@@ -175,10 +176,12 @@ const GROK_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=x.ai&sz=64'
 const OPENAI_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=openai.com&sz=64'
 const CARTESIA_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=cartesia.ai&sz=64'
 const ELEVENLABS_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=elevenlabs.io&sz=64'
+const SONIOX_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=soniox.com&sz=64'
 
 const PROVIDER_LOGO_SRC: Record<string, string> = {
   cartesia: CARTESIA_LOGO_SRC,
   eleven: ELEVENLABS_LOGO_SRC,
+  soniox: SONIOX_LOGO_SRC,
   'gemini-live': GEMINI_LOGO_SRC,
   xai: GROK_LOGO_SRC,
   'gemini-tts': GEMINI_LOGO_SRC,
@@ -225,7 +228,7 @@ const MODEL_OPTIONS: Record<Tier, ModelOption[]> = {
     {
       k: 'gemini-3.1-flash',
       label: 'Gemini 3.1 Flash',
-      sub: 'Currently wired pipeline LLM',
+      sub: 'Pipecat pipeline · Soniox STT/TTS capable',
       badge: 'Suggested',
       costPerMin: '$0.060',
       latency: '900-1200ms',
@@ -350,6 +353,36 @@ const VOICE_CATALOG: Record<string, VoiceOption[]> = {
       styles: ['default', 'narration'],
     },
   ],
+  soniox: [
+    {
+      id: 'Adrian',
+      label: 'Adrian',
+      provider: 'soniox',
+      accent: 'Multilingual · natural',
+      styles: ['conversational', 'support'],
+    },
+    {
+      id: 'Ava',
+      label: 'Ava',
+      provider: 'soniox',
+      accent: 'Multilingual · warm',
+      styles: ['friendly', 'support'],
+    },
+    {
+      id: 'Olivia',
+      label: 'Olivia',
+      provider: 'soniox',
+      accent: 'Multilingual · female',
+      styles: ['conversational', 'calm'],
+    },
+    {
+      id: 'Liam',
+      label: 'Liam',
+      provider: 'soniox',
+      accent: 'Multilingual · male',
+      styles: ['professional', 'calm'],
+    },
+  ],
   'gemini-live': [
     {
       id: 'aoede',
@@ -438,16 +471,32 @@ const VOICE_CATALOG: Record<string, VoiceOption[]> = {
 const PROVIDER_LABEL: Record<string, string> = {
   cartesia: 'Cartesia Sonic-2',
   eleven: 'ElevenLabs',
+  soniox: 'Soniox Realtime TTS',
   'gemini-live': 'Gemini Live',
   xai: 'xAI Grok Voice',
   'gemini-tts': 'Gemini TTS · cached',
 }
 
+const STT_PROVIDER_OPTIONS = [
+  {
+    k: 'soniox',
+    label: 'Soniox Realtime STT',
+    sub: 'Pipecat local VAD finalizes turns',
+    logoSrc: SONIOX_LOGO_SRC,
+  },
+  {
+    k: 'deepgram',
+    label: 'Deepgram Nova',
+    sub: 'Legacy pipeline STT fallback',
+    logoSrc: 'https://www.google.com/s2/favicons?domain=deepgram.com&sz=64',
+  },
+] as const
+
 // Which voice providers are available for each tier. The voice service
 // fundamentally can only use matching realtime voices in live modes and only
 // pre-rendered TTS in dtmf mode, so we hide invalid combinations.
 const PROVIDERS_BY_TIER: Record<Tier, string[]> = {
-  pipeline: ['cartesia', 'eleven'],
+  pipeline: ['soniox', 'cartesia', 'eleven'],
   gemini_live: ['gemini-live'],
   grok_voice: ['xai'],
   dtmf: ['gemini-tts'],
@@ -653,6 +702,9 @@ export function AgentEditor({
   const [transMode, setTransMode] = useState<'speed' | 'accuracy' | 'custom'>(
     runtime.transcriptionMode || 'accuracy',
   )
+  const [sttProvider, setSttProvider] = useState<'soniox' | 'deepgram'>(
+    runtime.sttProvider || 'soniox',
+  )
   const [vocab, setVocab] = useState<'general' | 'medical'>(runtime.vocabularyMode || 'general')
   const [boosted, setBoosted] = useState(runtime.boostedKeywords || '')
   const [voicemailDetect, setVoicemailDetect] = useState(Boolean(runtime.voicemailDetection))
@@ -747,6 +799,7 @@ export function AgentEditor({
     pauseBeforeSpeakingSec: pauseBefore,
     denoiseMode: denoise,
     transcriptionMode: transMode,
+    sttProvider,
     vocabularyMode: vocab,
     boostedKeywords: boosted,
     voicemailDetection: voicemailDetect,
@@ -802,6 +855,7 @@ export function AgentEditor({
       pauseBeforeSpeakingSec: pauseBefore,
       denoiseMode: denoise,
       transcriptionMode: transMode,
+      sttProvider,
       vocabularyMode: vocab,
       boostedKeywords: boosted,
       voicemailDetection: voicemailDetect,
@@ -1757,11 +1811,57 @@ export function AgentEditor({
                           : 'border-line bg-bg text-fg hover:bg-bg-muted',
                       )}
                     >
+                      {PROVIDER_LOGO_SRC[p] && (
+                        <img
+                          src={PROVIDER_LOGO_SRC[p]}
+                          alt=""
+                          className="size-3.5 shrink-0 rounded-sm"
+                          loading="lazy"
+                        />
+                      )}
                       {PROVIDER_LABEL[p] ?? p}
                     </button>
                   ))}
                 </div>
               </Field>
+              {showRealtimeStt && (
+                <Field label="Speech-to-text provider">
+                  <div className="grid gap-1.5">
+                    {STT_PROVIDER_OPTIONS.map((p) => {
+                      const on = p.k === sttProvider
+                      return (
+                        <button
+                          key={p.k}
+                          type="button"
+                          onClick={() => setSttProvider(p.k)}
+                          className={cn(
+                            'flex items-center justify-between rounded-[5px] border px-3 py-2 transition-colors',
+                            on ? 'border-fg/40 bg-fg/5' : 'border-line bg-bg hover:border-fg/20',
+                          )}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <img
+                              src={p.logoSrc}
+                              alt=""
+                              className="size-4 shrink-0 rounded-sm"
+                              loading="lazy"
+                            />
+                            <span className="min-w-0">
+                              <span className="text-fg block truncate text-[12.5px]">
+                                {p.label}
+                              </span>
+                              <span className="text-fg-muted block truncate text-[10.5px]">
+                                {p.sub}
+                              </span>
+                            </span>
+                          </span>
+                          {on && <Icon name="check" size="xs" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </Field>
+              )}
               <Field label="Voice">
                 <div className="grid gap-1.5">
                   {availableVoices.map((v) => {

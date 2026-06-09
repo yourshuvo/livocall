@@ -19,6 +19,7 @@ const RuntimeSettings = z
     pauseBeforeSpeakingSec: z.number().min(0).max(30).optional(),
     denoiseMode: z.enum(['none', 'mixed', 'off']).optional(),
     transcriptionMode: z.enum(['speed', 'accuracy', 'custom']).optional(),
+    sttProvider: z.enum(['soniox', 'deepgram']).optional(),
     vocabularyMode: z.enum(['general', 'medical']).optional(),
     boostedKeywords: z.string().max(1000).optional(),
     voicemailDetection: z.boolean().optional(),

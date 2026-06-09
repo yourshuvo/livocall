@@ -44,10 +44,13 @@ export const EMPTY_AGENT_BUILDER: AgentBuilderAnswers = {
   customerType: '',
   languageStyle: 'সহজ, ভদ্র, বাংলাদেশি কথ্য বাংলা; দরকার হলে ছোট English শব্দ ব্যবহার করবে',
   keyQuestions: '',
-  kbRules: 'প্রোডাক্ট, দাম, পলিসি বা প্রসেস সম্পর্কিত প্রশ্নের উত্তর Knowledge Base থেকে দেবে। না জানলে বানিয়ে বলবে না।',
+  kbRules:
+    'প্রোডাক্ট, দাম, পলিসি বা প্রসেস সম্পর্কিত প্রশ্নের উত্তর Knowledge Base থেকে দেবে। না জানলে বানিয়ে বলবে না।',
   toolRules: 'দরকার হলে সংযুক্ত tools/function ব্যবহার করবে এবং ফলাফল এক বাক্যে বুঝিয়ে বলবে।',
-  transferRules: 'কাস্টমার মানুষ/ম্যানেজার চাইলে বা উত্তর নিশ্চিত না হলে human agent-এ transfer করবে।',
-  complianceRules: 'OTP, bKash PIN, কার্ড নম্বর বা পাসওয়ার্ড চাইবে না। কল রেকর্ড হলে শুরুতে জানাবে।',
+  transferRules:
+    'কাস্টমার মানুষ/ম্যানেজার চাইলে বা উত্তর নিশ্চিত না হলে human agent-এ transfer করবে।',
+  complianceRules:
+    'OTP, bKash PIN, কার্ড নম্বর বা পাসওয়ার্ড চাইবে না। কল রেকর্ড হলে শুরুতে জানাবে।',
 }
 
 const DEFAULT_REVENUE_OUTCOME_LABELS: GeneratedOutcomeLabel[] = [
@@ -117,7 +120,7 @@ function inferPrimaryRevenueOutcome(a: AgentBuilderAnswers): GeneratedOutcomeLab
       conversion: true,
     }
   }
-  if (/\b(booking|appointment|reservation|schedule|slot)\b/.test(text)) {
+  if (/\b(book|booking|appointments?|reservations?|schedule|slot)\b/.test(text)) {
     return {
       key: 'booking_confirmed',
       label: 'Booking confirmed',
