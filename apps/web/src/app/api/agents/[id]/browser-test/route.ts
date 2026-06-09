@@ -32,8 +32,8 @@ export const POST = withErrors(async (_req: Request, ctx: { params: Promise<{ id
   if (!agent) return apiError('not_found', 'agent not found')
 
   const callId = new Types.ObjectId().toString()
-  if (agent.tier !== 'gemini_live') {
-    return apiError('invalid_input', 'browser voice test currently supports Gemini Live agents only')
+  if (agent.tier !== 'gemini_live' && agent.tier !== 'pipeline') {
+    return apiError('invalid_input', 'browser voice test currently supports Gemini Live and Pipeline agents only')
   }
 
   const webrtcUrl = browserWebrtcUrl()

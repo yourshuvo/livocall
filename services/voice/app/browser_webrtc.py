@@ -17,6 +17,10 @@ from app.agent_runtime import (
     gemini_live_vad_silence_ms,
     gemini_tool_declarations,
     gemini_voice,
+    pipeline_model,
+    pipeline_stt_provider,
+    pipeline_tts_provider,
+    runtime_settings,
 )
 from app.persistence import TranscriptBuffer
 from app.settings import settings
@@ -100,10 +104,10 @@ def _context_from_query(request: Request) -> BrowserWebRTCContext:
     if not ws_verify(call_id, auth or None):
         log.warning("browser_webrtc.auth_failed", call_id=call_id)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="invalid WebRTC auth")
-    if tier != "gemini_live":
+    if tier not in {"gemini_live", "pipeline"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="browser WebRTC currently supports gemini_live agents only",
+            detail="browser WebRTC currently supports gemini_live and pipeline agents only",
         )
 
     return BrowserWebRTCContext(
@@ -314,9 +318,11 @@ async def handle_offer(
     body = await request.json()
     offer = _request_model(imports.SmallWebRTCRequest, body)
 
+    bot_runner = run_bot or _browser_bot_for_tier(context.tier)
+
     async def on_connection(connection: Any) -> None:
         background_tasks.add_task(
-            run_bot or run_browser_gemini_bot,
+            bot_runner,
             connection,
             call_id=context.call_id,
             agent_id=context.agent_id,
@@ -355,6 +361,216 @@ async def handle_ice_candidate(request: Request) -> dict[str, str]:
         raise
     await handler.handle_patch_request(patch)
     return {"status": "success", "callId": context.call_id}
+
+
+def _browser_bot_for_tier(tier: str) -> Callable[..., Awaitable[None]]:
+    if tier == "pipeline":
+        return run_browser_pipeline_bot
+    return run_browser_gemini_bot
+
+
+async def run_browser_pipeline_bot(
+    webrtc_connection: Any,
+    *,
+    call_id: str,
+    agent_id: str,
+    prompt: str = "",
+    metadata: dict[str, str] | None = None,
+) -> None:
+    try:
+        from pipecat.audio.vad.silero import (  # type: ignore[import-not-found]
+            SileroVADAnalyzer,
+            VADParams,
+        )
+        from pipecat.frames.frames import LLMRunFrame  # type: ignore[import-not-found]
+        from pipecat.pipeline.pipeline import Pipeline  # type: ignore[import-not-found]
+        from pipecat.pipeline.runner import PipelineRunner  # type: ignore[import-not-found]
+        from pipecat.pipeline.task import (  # type: ignore[import-not-found]
+            PipelineParams,
+            PipelineTask,
+        )
+        from pipecat.processors.aggregators.llm_context import (  # type: ignore[import-not-found]
+            LLMContext,
+        )
+        from pipecat.processors.aggregators.llm_response_universal import (  # type: ignore[import-not-found]
+            LLMContextAggregatorPair,
+        )
+        from pipecat.processors.audio.vad_processor import (  # type: ignore[import-not-found]
+            VADProcessor,
+        )
+        from pipecat.services.google.llm import GoogleLLMService  # type: ignore[import-not-found]
+        from pipecat.transports.base_transport import TransportParams  # type: ignore[import-not-found]
+        from pipecat.transports.smallwebrtc.transport import (  # type: ignore[import-not-found]
+            SmallWebRTCTransport,
+        )
+
+        from app.tiers.pipeline import (  # noqa: PLC0415
+            _build_stt,
+            _build_tts,
+            _context_terms,
+            _missing_pipeline_keys,
+            _pipeline_vad_stop_secs,
+        )
+    except ImportError as exc:
+        log.warning(
+            "browser_pipeline.pipecat_missing",
+            hint="pip install -e '.[voice]' to enable browser pipeline WebRTC",
+            missing_module=getattr(exc, "name", ""),
+            error=str(exc),
+        )
+        return
+
+    agent = await fetch_agent_for_call(agent_id, call_id)
+    stt_provider = pipeline_stt_provider(agent)
+    tts_provider = pipeline_tts_provider(agent)
+    missing = _missing_pipeline_keys(stt_provider, tts_provider)
+    if missing:
+        log.warning(
+            "browser_pipeline.no_keys",
+            call_id=call_id,
+            providers={"stt": stt_provider, "tts": tts_provider},
+            missing=missing,
+            hint="set GEMINI_API_KEY plus the selected STT/TTS provider keys",
+        )
+        return
+
+    system_prompt = await build_system_prompt(agent, prompt)
+    if _is_landing_webcall(metadata) or (metadata or {}).get("banglaOnly") == "true":
+        system_prompt = _with_bangla_only_guard(system_prompt)
+    model = pipeline_model(agent)
+    runtime = runtime_settings(agent)
+    trans_mode = str(runtime.get("transcriptionMode") or "accuracy")
+    context_terms = _context_terms(runtime)
+    started_at = datetime.now(UTC)
+    outcome = "completed"
+    hangup_cause = "browser_pipeline_disconnected"
+
+    transport = SmallWebRTCTransport(
+        webrtc_connection=webrtc_connection,
+        params=TransportParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            audio_in_sample_rate=settings.sample_rate_in,
+            audio_out_sample_rate=settings.sample_rate_out,
+            audio_out_10ms_chunks=2,
+        ),
+    )
+    vad = VADProcessor(
+        vad_analyzer=SileroVADAnalyzer(
+            sample_rate=settings.sample_rate_in,
+            params=VADParams(
+                confidence=settings.pipecat_vad_confidence,
+                start_secs=settings.pipecat_vad_start_secs,
+                stop_secs=_pipeline_vad_stop_secs(trans_mode),
+                min_volume=settings.pipecat_vad_min_volume,
+            ),
+        ),
+    )
+    stt = _build_stt(stt_provider, agent, trans_mode, context_terms, call_id)
+    llm = GoogleLLMService(api_key=settings.gemini_api_key, model=model)
+    tts = _build_tts(tts_provider, agent, trans_mode)
+    initial_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    if _should_start_with_ai(agent):
+        initial_messages.append(
+            {
+                "role": "user",
+                "content": "Start the live browser call now with the configured opening. Keep it brief.",
+            }
+        )
+    context = LLMContext(initial_messages)
+    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
+    pipeline = Pipeline(
+        [
+            transport.input(),
+            vad,
+            stt,
+            user_aggregator,
+            llm,
+            tts,
+            transport.output(),
+            assistant_aggregator,
+        ]
+    )
+    task = PipelineTask(pipeline, params=PipelineParams(enable_metrics=True, enable_usage_metrics=True))
+
+    @transport.event_handler("on_client_connected")
+    async def on_client_connected(_transport: Any, _client: Any) -> None:
+        log.info(
+            "browser_pipeline.connected",
+            call_id=call_id,
+            agent_id=agent_id,
+            model=model,
+            stt_provider=stt_provider,
+            tts_provider=tts_provider,
+        )
+        if _should_start_with_ai(agent):
+            await task.queue_frames([LLMRunFrame()])
+
+    @transport.event_handler("on_client_disconnected")
+    async def on_client_disconnected(_transport: Any, _client: Any) -> None:
+        log.info("browser_pipeline.disconnected", call_id=call_id)
+        await task.cancel()
+
+    async def cancel_after_public_limit() -> None:
+        nonlocal hangup_cause
+        limit_sec = _public_webcall_max_duration_sec(metadata)
+        if limit_sec <= 0:
+            return
+        await asyncio.sleep(limit_sec)
+        hangup_cause = "public_webcall_duration_limit"
+        log.info("browser_pipeline.public_limit_reached", call_id=call_id, limit_sec=limit_sec)
+        await task.cancel()
+
+    runner = PipelineRunner(handle_sigint=False)
+    limit_task: asyncio.Task[None] | None = None
+    try:
+        if _is_landing_webcall(metadata):
+            limit_task = asyncio.create_task(cancel_after_public_limit())
+        await runner.run(task)
+    except Exception as exc:  # noqa: BLE001
+        outcome = "failed"
+        hangup_cause = "browser_pipeline_error"
+        log.exception("browser_pipeline.error", call_id=call_id, error=str(exc))
+    finally:
+        if limit_task is not None and not limit_task.done():
+            limit_task.cancel()
+        if _is_non_billable_test_session(metadata):
+            ended_at = datetime.now(UTC)
+            await post_voice_event(
+                {
+                    "type": "call.completed",
+                    "callId": call_id,
+                    "endedAt": ended_at.isoformat(),
+                    "durationSec": max(0, int((ended_at - started_at).total_seconds())),
+                    "outcome": outcome,
+                    "cost": {
+                        "sttPaisa": 0,
+                        "llmPaisa": 0,
+                        "ttsPaisa": 0,
+                        "sipPaisa": 0,
+                        "totalPaisa": 0,
+                    },
+                    "hangupCause": hangup_cause,
+                }
+            )
+        else:
+            transcript = TranscriptBuffer(call_id=call_id)
+            try:
+                for msg in getattr(context, "messages", []) or []:
+                    if isinstance(msg, dict):
+                        role = str(msg.get("role", ""))
+                        text = str(msg.get("content", ""))
+                    else:
+                        role = str(getattr(msg, "role", ""))
+                        text = str(getattr(msg, "content", ""))
+                    if role in {"system", "developer"} or not text.strip():
+                        continue
+                    if text.startswith("Start the live browser call now"):
+                        continue
+                    mapped = "agent" if role == "assistant" else "user"
+                    await transcript.add(mapped, text)
+            finally:
+                await transcript.flush()
 
 
 async def run_browser_gemini_bot(

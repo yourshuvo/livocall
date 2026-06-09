@@ -173,7 +173,6 @@ interface EngineInfo {
 
 const GEMINI_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64'
 const GROK_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=x.ai&sz=64'
-const OPENAI_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=openai.com&sz=64'
 const CARTESIA_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=cartesia.ai&sz=64'
 const ELEVENLABS_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=elevenlabs.io&sz=64'
 const SONIOX_LOGO_SRC = 'https://www.google.com/s2/favicons?domain=soniox.com&sz=64'
@@ -193,7 +192,6 @@ const ENGINE_OPTIONS: EngineInfo[] = [
     label: 'Pipeline',
     sub: 'STT → LLM → TTS (most flexible)',
     suggested: true,
-    logoSrc: OPENAI_LOGO_SRC,
   },
   {
     k: 'gemini_live',
@@ -1223,6 +1221,7 @@ export function AgentEditor({
   const voiceDef = availableVoices.find((v) => v.id === voiceId) ?? availableVoices[0]
   const availableModels = MODEL_OPTIONS[tier]
   const modelDef = availableModels.find((m) => m.k === model) ?? availableModels[0]
+  const sttProviderDef = STT_PROVIDER_OPTIONS.find((p) => p.k === sttProvider)
   const availableProviders = PROVIDERS_BY_TIER[tier]
   const availableStyles = voiceDef?.styles ?? []
 
@@ -1362,6 +1361,20 @@ export function AgentEditor({
             }))}
             value={model}
             onChange={setModel}
+          />
+        )}
+        {showRealtimeStt && (
+          <ToolSelect
+            name="wave"
+            label={sttProviderDef?.label ?? 'STT provider'}
+            options={STT_PROVIDER_OPTIONS.map((p) => ({
+              k: p.k,
+              label: p.label,
+              sub: p.sub,
+              logoSrc: p.logoSrc,
+            }))}
+            value={sttProvider}
+            onChange={(v) => setSttProvider(v as 'soniox' | 'deepgram')}
           />
         )}
         <IconBtn name="settings" label="Engine settings" />
@@ -1833,44 +1846,6 @@ export function AgentEditor({
                   ))}
                 </div>
               </Field>
-              {showRealtimeStt && (
-                <Field label="Speech-to-text provider">
-                  <div className="grid gap-1.5">
-                    {STT_PROVIDER_OPTIONS.map((p) => {
-                      const on = p.k === sttProvider
-                      return (
-                        <button
-                          key={p.k}
-                          type="button"
-                          onClick={() => setSttProvider(p.k)}
-                          className={cn(
-                            'flex items-center justify-between rounded-[5px] border px-3 py-2 transition-colors',
-                            on ? 'border-fg/40 bg-fg/5' : 'border-line bg-bg hover:border-fg/20',
-                          )}
-                        >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <img
-                              src={p.logoSrc}
-                              alt=""
-                              className="size-4 shrink-0 rounded-sm"
-                              loading="lazy"
-                            />
-                            <span className="min-w-0">
-                              <span className="text-fg block truncate text-[12.5px]">
-                                {p.label}
-                              </span>
-                              <span className="text-fg-muted block truncate text-[10.5px]">
-                                {p.sub}
-                              </span>
-                            </span>
-                          </span>
-                          {on && <Icon name="check" size="xs" />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </Field>
-              )}
               <Field label="Voice">
                 <div className="grid gap-1.5">
                   {availableVoices.map((v) => {
@@ -2122,6 +2097,45 @@ export function AgentEditor({
               open={openSections.realtime}
               onToggle={() => toggleSec('realtime')}
             >
+              <Field label="Speech-to-text provider">
+                <div className="grid gap-1.5">
+                  {STT_PROVIDER_OPTIONS.map((p) => {
+                    const on = p.k === sttProvider
+                    return (
+                      <button
+                        key={p.k}
+                        type="button"
+                        onClick={() => setSttProvider(p.k)}
+                        className={cn(
+                          'flex items-center justify-between rounded-[5px] border px-3 py-2 transition-colors',
+                          on ? 'border-fg/40 bg-fg/5' : 'border-line bg-bg hover:border-fg/20',
+                        )}
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <img
+                            src={p.logoSrc}
+                            alt=""
+                            className="size-4 shrink-0 rounded-sm"
+                            loading="lazy"
+                          />
+                          <span className="min-w-0">
+                            <span className="text-fg block truncate text-[12.5px]">
+                              {p.label}
+                            </span>
+                            <span className="text-fg-muted block truncate text-[10.5px]">
+                              {p.sub}
+                            </span>
+                          </span>
+                        </span>
+                        {on && <Icon name="check" size="xs" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </Field>
+
+              <Divider />
+
               <SubLabel
                 title="Denoising Mode"
                 hint="Filter out unwanted background noise or speech."

@@ -54,7 +54,7 @@ export const POST = withErrors(async (req: Request) => {
       shouldSetCookie,
     )
   }
-  if (agent.tier !== 'gemini_live' || agent.status !== 'live') {
+  if ((agent.tier !== 'gemini_live' && agent.tier !== 'pipeline') || agent.status !== 'live') {
     return withPublicSessionCookie(
       apiError('upstream_error', 'public Webcall agent is not available'),
       sessionId,
@@ -62,6 +62,7 @@ export const POST = withErrors(async (req: Request) => {
     )
   }
   const agentId = agent._id
+  const agentTier = agent.tier
 
   const dbLimitResponse = await checkPersistentLimits(ipHash, sessionHash)
   if (dbLimitResponse) return withPublicSessionCookie(dbLimitResponse, sessionId, shouldSetCookie)
@@ -79,7 +80,7 @@ export const POST = withErrors(async (req: Request) => {
     direction: 'outbound',
     fromE164: 'public-webcall',
     toE164: 'public-webcall',
-    tier: 'gemini_live',
+    tier: agentTier,
     startedAt,
     outcome: 'in_progress',
     transcript: [],
@@ -97,8 +98,8 @@ export const POST = withErrors(async (req: Request) => {
       publicIpHash: ipHash,
       publicSessionHash: sessionHash,
       maxDurationSec,
-      model: GEMINI_LIVE_MODEL,
-      language: 'bn',
+      model: agentTier === 'gemini_live' ? GEMINI_LIVE_MODEL : String(agent.model || ''),
+      language: agentTier === 'gemini_live' ? 'bn' : String(agent.language || 'bn-en-mixed'),
       builtInAgent: String(agent.name || '') === BUILTIN_AGENT_NAME,
     },
     latency: { callCreatedAt: startedAt.toISOString() },
@@ -106,12 +107,14 @@ export const POST = withErrors(async (req: Request) => {
 
   webrtcUrl.searchParams.set('call_id', callId)
   webrtcUrl.searchParams.set('agent_id', String(agentId))
-  webrtcUrl.searchParams.set('tier', 'gemini_live')
+  webrtcUrl.searchParams.set('tier', agentTier)
   webrtcUrl.searchParams.append('meta', `source:${PUBLIC_SOURCE}`)
   webrtcUrl.searchParams.append('meta', 'publicDemo:true')
   webrtcUrl.searchParams.append('meta', `maxDurationSec:${maxDurationSec}`)
-  webrtcUrl.searchParams.append('meta', `model:${GEMINI_LIVE_MODEL}`)
-  webrtcUrl.searchParams.append('meta', 'language:bn')
+  if (agentTier === 'gemini_live') {
+    webrtcUrl.searchParams.append('meta', `model:${GEMINI_LIVE_MODEL}`)
+    webrtcUrl.searchParams.append('meta', 'language:bn')
+  }
   webrtcUrl.searchParams.append('meta', 'banglaOnly:true')
   const auth = signWsAuth(callId)
   if (auth) webrtcUrl.searchParams.set('auth', auth)
@@ -141,6 +144,8 @@ async function resolvePublicWebcallAgent(): Promise<{
   orgId: Types.ObjectId
   name: string
   tier: 'gemini_live' | 'grok_voice' | 'pipeline' | 'dtmf'
+  model?: string
+  language?: string
   status: 'draft' | 'live'
 } | null> {
   const rawAgentId = (process.env.PUBLIC_WEBCALL_AGENT_ID || '').trim()
@@ -150,6 +155,8 @@ async function resolvePublicWebcallAgent(): Promise<{
       orgId: Types.ObjectId
       name: string
       tier: 'gemini_live' | 'grok_voice' | 'pipeline' | 'dtmf'
+      model?: string
+      language?: string
       status: 'draft' | 'live'
     }>()
   }

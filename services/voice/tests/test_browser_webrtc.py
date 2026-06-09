@@ -191,6 +191,34 @@ def test_browser_webrtc_offer_starts_background_bot(monkeypatch) -> None:
     ]
 
 
+def test_browser_webrtc_offer_routes_pipeline_to_pipeline_bot(monkeypatch) -> None:
+    _enable_browser_webrtc(monkeypatch)
+    started: list[dict[str, Any]] = []
+
+    async def fake_pipeline_bot(connection: Any, **kwargs: Any) -> None:
+        started.append({"connection": connection, **kwargs})
+
+    monkeypatch.setattr(browser_webrtc, "run_browser_pipeline_bot", fake_pipeline_bot)
+    token = ws_auth.sign("call-1")
+
+    with TestClient(app) as client:
+        res = client.post(
+            f"/webrtc/browser-offer?call_id=call-1&agent_id=agent-1&tier=pipeline&auth={token}",
+            json={"sdp": "offer-sdp", "type": "offer"},
+        )
+
+    assert res.status_code == 200
+    assert started == [
+        {
+            "connection": "fake-connection",
+            "call_id": "call-1",
+            "agent_id": "agent-1",
+            "prompt": "",
+            "metadata": {"source": "browser-webrtc"},
+        }
+    ]
+
+
 def test_browser_webrtc_offer_passes_landing_webcall_metadata(monkeypatch) -> None:
     _enable_browser_webrtc(monkeypatch)
     started: list[dict[str, Any]] = []
