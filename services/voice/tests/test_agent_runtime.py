@@ -26,6 +26,17 @@ def test_gemini_live_vad_silence_default_and_clamp(monkeypatch: pytest.MonkeyPat
     )
 
 
+def test_pipeline_model_defaults_to_flash_lite_and_sanitizes_legacy_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(agent_runtime.settings, "pipeline_llm_model", "gemini-2.5-flash-lite")
+
+    assert agent_runtime.pipeline_model({}) == "gemini-2.5-flash-lite"
+    assert agent_runtime.pipeline_model({"model": "gemini-2.5-flash-lite"}) == "gemini-2.5-flash-lite"
+    assert agent_runtime.pipeline_model({"model": "models/gemini-2.5-flash-lite"}) == "gemini-2.5-flash-lite"
+    assert agent_runtime.pipeline_model({"model": "gemini-2.5-flash"}) == "gemini-2.5-flash-lite"
+
+
 def test_pipeline_provider_helpers_default_and_sanitize(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(agent_runtime.settings, "pipeline_stt_provider", "soniox")
     monkeypatch.setattr(agent_runtime.settings, "pipeline_tts_provider", "soniox")

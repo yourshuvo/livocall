@@ -226,10 +226,19 @@ interface ModelOption {
 const MODEL_OPTIONS: Record<Tier, ModelOption[]> = {
   pipeline: [
     {
+      k: 'gemini-2.5-flash-lite',
+      label: 'Gemini 2.5 Flash-Lite',
+      sub: 'Lowest-cost Pipecat pipeline LLM',
+      badge: 'Suggested',
+      costPerMin: '$0.035',
+      latency: '700-1000ms',
+      tokenBudget: '~960 tokens',
+      logoSrc: GEMINI_LOGO_SRC,
+    },
+    {
       k: 'gemini-3.1-flash',
       label: 'Gemini 3.1 Flash',
       sub: 'Pipecat pipeline · Soniox STT/TTS capable',
-      badge: 'Suggested',
       costPerMin: '$0.060',
       latency: '900-1200ms',
       tokenBudget: '~960 tokens',
@@ -486,8 +495,8 @@ const STT_PROVIDER_OPTIONS = [
   },
   {
     k: 'deepgram',
-    label: 'Deepgram Nova',
-    sub: 'Legacy pipeline STT fallback',
+    label: 'Deepgram Nova-3',
+    sub: 'Latest Deepgram STT fallback',
     logoSrc: 'https://www.google.com/s2/favicons?domain=deepgram.com&sz=64',
   },
 ] as const

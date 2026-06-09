@@ -1355,7 +1355,7 @@ storage = [
 ]
 voice = [
     { name = "numpy" },
-    { name = "pipecat-ai", extra = ["cartesia", "deepgram", "google", "webrtc"] },
+    { name = "pipecat-ai", extra = ["cartesia", "deepgram", "google", "soniox", "webrtc", "websocket"] },
 ]
 
 [package.metadata]
@@ -1366,7 +1366,7 @@ requires-dist = [
     { name = "motor", specifier = ">=3.6.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },
     { name = "numpy", marker = "extra == 'voice'", specifier = ">=1.26.0" },
-    { name = "pipecat-ai", extras = ["google", "deepgram", "cartesia", "silero", "webrtc"], marker = "extra == 'voice'", specifier = ">=1.1.0" },
+    { name = "pipecat-ai", extras = ["google", "deepgram", "cartesia", "soniox", "silero", "webrtc", "websocket"], marker = "extra == 'voice'", specifier = ">=1.1.0" },
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "pydantic-settings", specifier = ">=2.5.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0" },
@@ -1998,9 +1998,16 @@ google = [
     { name = "google-genai" },
     { name = "websockets" },
 ]
+soniox = [
+    { name = "websockets" },
+]
 webrtc = [
     { name = "aiortc" },
     { name = "opencv-python" },
+]
+websocket = [
+    { name = "fastapi" },
+    { name = "websockets" },
 ]
 
 [[package]]
