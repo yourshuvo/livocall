@@ -32,7 +32,7 @@ export function AgentsImportButton() {
         description: raw.description || '',
         tier: raw.tier || 'gemini_live',
         model: raw.model || '',
-        language: raw.language || 'bn-en-mixed',
+        language: raw.language || 'bn',
         voice: {
           provider: raw.voice?.provider || 'gemini-live',
           voiceId: raw.voice?.voiceId || 'aoede',

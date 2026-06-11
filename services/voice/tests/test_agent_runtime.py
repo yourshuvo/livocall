@@ -143,6 +143,28 @@ async def test_build_system_prompt_adds_bangla_only_rule_for_gemini_live(
 
 
 @pytest.mark.asyncio
+async def test_build_system_prompt_adds_bangla_only_rule_for_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def no_memory(*args: Any, **kwargs: Any) -> str:
+        return ""
+
+    monkeypatch.setattr(agent_runtime, "gemini_memory_context", no_memory)
+    monkeypatch.setattr(agent_runtime, "knowledge_context", no_memory)
+
+    prompt = await agent_runtime.build_system_prompt(
+        {
+            "tier": "pipeline",
+            "language": "bn-en-mixed",
+            "prompt": {"system": "You are concise."},
+        }
+    )
+
+    assert "Language rule: speak only Bangla/Bengali." in prompt
+    assert "Do not switch to English" in prompt
+
+
+@pytest.mark.asyncio
 async def test_execute_agent_tool_times_out_kb_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

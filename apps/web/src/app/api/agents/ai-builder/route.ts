@@ -45,7 +45,7 @@ async function generateWithGemini(answers: AgentBuilderAnswers): Promise<Generat
   if (!key) return null
   const fallback = buildBanglaAgentPrompt(answers)
   const prompt = `Generate a production-ready Bangla phone-call AI agent prompt as strict JSON.
-Return exactly: {"name":"","description":"","language":"bn-en-mixed","system":"","firstMessage":"","guardrails":"","outcomeConfig":{"enabled":true,"labels":[{"key":"order_confirmed","label":"Order confirmed","description":"Caller confirmed the target business outcome.","conversion":true},{"key":"unknown","label":"Unknown","description":"Outcome cannot be confidently determined.","conversion":false}]}}
+Return exactly: {"name":"","description":"","language":"bn","system":"","firstMessage":"","guardrails":"","outcomeConfig":{"enabled":true,"labels":[{"key":"order_confirmed","label":"Order confirmed","description":"Caller confirmed the target business outcome.","conversion":true},{"key":"unknown","label":"Unknown","description":"Outcome cannot be confidently determined.","conversion":false}]}}
 Rules:
 - Bangla-first, natural Bangladesh call-center tone.
 - Short, low-latency phone replies.
@@ -82,7 +82,7 @@ ${JSON.stringify(fallback, null, 2)}`
     .object({
       name: z.string().min(1).max(120),
       description: z.string().max(400).default(''),
-      language: z.enum(agentLanguageCodes).default('bn-en-mixed'),
+      language: z.enum(agentLanguageCodes).default('bn'),
       system: z.string().min(1).max(8000),
       firstMessage: z.string().min(1).max(2000),
       guardrails: z.string().min(1).max(4000),

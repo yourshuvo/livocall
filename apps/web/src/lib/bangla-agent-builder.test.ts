@@ -34,5 +34,6 @@ describe('Bangla agent builder revenue outcomes', () => {
       label: 'Booking confirmed',
       conversion: true,
     })
+    expect(prompt.language).toBe('bn')
   })
 })

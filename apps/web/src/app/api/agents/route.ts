@@ -45,7 +45,7 @@ const Body = z.object({
   description: z.string().max(400).optional().default(''),
   tier: z.enum(['gemini_live', 'grok_voice', 'pipeline', 'dtmf']),
   model: z.string().max(120).optional().default(''),
-  language: z.enum(agentLanguageCodes).default('bn-en-mixed'),
+  language: z.enum(agentLanguageCodes).default('bn'),
   voice: z
     .object({
       provider: z.string().max(64).optional().default('soniox'),

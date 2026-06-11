@@ -127,7 +127,7 @@ const agentSchema = new Schema(
     language: {
       type: String,
       enum: agentLanguageCodes,
-      default: 'bn-en-mixed',
+      default: 'bn',
     },
     // Engine-specific model identifier. Tier defines the *family* (pipeline /
     // gemini_live / grok_voice / dtmf); `model` selects the concrete variant

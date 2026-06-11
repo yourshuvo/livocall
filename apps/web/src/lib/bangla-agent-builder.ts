@@ -194,7 +194,7 @@ ${a.complianceRules || EMPTY_AGENT_BUILDER.complianceRules}`
   return {
     name: `${agent} · ${business}`.slice(0, 120),
     description: `${industry} agent: ${goal}`.slice(0, 400),
-    language: 'bn-en-mixed',
+    language: 'bn',
     system,
     firstMessage,
     guardrails,

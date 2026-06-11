@@ -5,6 +5,11 @@ import type { PipecatClient } from '@pipecat-ai/client-js'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/cn'
+import {
+  isLocalPipecatAudioTrack,
+  shouldAttachRemotePipecatAudioTrack,
+  shouldTearDownRemotePipecatAudioTrack,
+} from '@/lib/pipecat-track-routing'
 
 type WebcallStatus = 'idle' | 'connecting' | 'live' | 'limited'
 
@@ -100,8 +105,9 @@ export function PublicWebcallDemo({
           onDeviceError: () => failWebcall('Microphone permission is needed for the demo call.'),
           onDisconnected: () => stopWebcall(),
           onBotDisconnected: () => stopWebcall(),
-          onTrackStarted: (track) => {
-            if (isLocalPipecatAudioTrack(client, track)) {
+          onTrackStarted: (track, participant) => {
+            const localAudioTrack = currentLocalPipecatAudioTrack(client)
+            if (isLocalPipecatAudioTrack(track, participant, localAudioTrack)) {
               if (track.kind === 'audio') {
                 nextSession.localRecordTrack = track
                 maybeStartPublicWebcallRecording(
@@ -112,6 +118,7 @@ export function PublicWebcallDemo({
               }
               return
             }
+            if (!shouldAttachRemotePipecatAudioTrack(track, participant, localAudioTrack)) return
             attachPublicWebcallAudioTrack(
               nextSession,
               track,
@@ -119,9 +126,17 @@ export function PublicWebcallDemo({
               start.recordingUploadToken,
             )
           },
-          onTrackStopped: (track) => {
-            if (isLocalPipecatAudioTrack(client, track)) return
-            if (track.kind === 'audio') detachPublicWebcallAudio(nextSession)
+          onTrackStopped: (track, participant) => {
+            if (
+              !shouldTearDownRemotePipecatAudioTrack(
+                track,
+                participant,
+                currentLocalPipecatAudioTrack(client),
+              )
+            ) {
+              return
+            }
+            detachPublicWebcallAudio(nextSession)
           },
           onTransportStateChanged: (state) => {
             if (state === 'error') failWebcall('Demo call connection failed.')
@@ -457,11 +472,10 @@ function detachPublicWebcallAudio(session: PublicWebcallSession) {
   session.remoteAudio = undefined
 }
 
-function isLocalPipecatAudioTrack(client: PipecatClient, track: MediaStreamTrack) {
-  if (track.kind !== 'audio') return false
+function currentLocalPipecatAudioTrack(client: PipecatClient) {
   try {
-    return client.tracks().local.audio?.id === track.id
+    return client.tracks().local.audio
   } catch {
-    return false
+    return undefined
   }
 }

@@ -3,7 +3,7 @@ export const DEFAULT_AGENT_PAYLOAD = {
   description: '',
   tier: 'pipeline',
   model: 'gemini-2.5-flash-lite',
-  language: 'bn-en-mixed',
+  language: 'bn',
   voice: { provider: 'soniox', voiceId: 'Adrian', style: 'conversational' },
   prompt: { system: '', firstMessage: '', guardrails: '' },
   runtimeSettings: {

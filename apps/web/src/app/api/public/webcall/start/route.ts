@@ -99,7 +99,7 @@ export const POST = withErrors(async (req: Request) => {
       publicSessionHash: sessionHash,
       maxDurationSec,
       model: agentTier === 'gemini_live' ? GEMINI_LIVE_MODEL : String(agent.model || ''),
-      language: agentTier === 'gemini_live' ? 'bn' : String(agent.language || 'bn-en-mixed'),
+      language: agentTier === 'gemini_live' ? 'bn' : String(agent.language || 'bn'),
       builtInAgent: String(agent.name || '') === BUILTIN_AGENT_NAME,
     },
     latency: { callCreatedAt: startedAt.toISOString() },

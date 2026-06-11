@@ -1,10 +1,10 @@
 export type Tier = 'gemini_live' | 'grok_voice' | 'pipeline' | 'dtmf'
 
 export const agentLanguageOptions = [
+  { k: 'bn', label: 'Bangla', grokSupported: true },
   { k: 'bn-en-mixed', label: 'Bangla + English', grokSupported: false },
   { k: 'bn-BD', label: 'Bangla (BD)', grokSupported: false },
   { k: 'en-US', label: 'English (US)', grokSupported: false },
-  { k: 'bn', label: 'Bangla', grokSupported: true },
 ] as const
 
 export const agentLanguageCodes = agentLanguageOptions.map((l) => l.k) as [
@@ -14,7 +14,7 @@ export const agentLanguageCodes = agentLanguageOptions.map((l) => l.k) as [
 
 export type AgentLanguage = (typeof agentLanguageOptions)[number]['k']
 
-export const defaultAgentLanguageCodes = ['bn-en-mixed', 'bn-BD', 'en-US'] as const
+export const defaultAgentLanguageCodes = ['bn', 'bn-en-mixed', 'bn-BD', 'en-US'] as const
 
 export function languageOptionsForTier(tier: Tier) {
   if (tier === 'grok_voice') return agentLanguageOptions.filter((l) => l.grokSupported)
@@ -29,7 +29,7 @@ export function languageOptionsForTier(tier: Tier) {
 }
 
 export function defaultLanguageForTier(tier: Tier): AgentLanguage {
-  return tier === 'grok_voice' || tier === 'gemini_live' ? 'bn' : 'bn-en-mixed'
+  return tier === 'grok_voice' || tier === 'gemini_live' || tier === 'pipeline' ? 'bn' : 'bn-en-mixed'
 }
 
 export type AgentStatus = 'draft' | 'live'
