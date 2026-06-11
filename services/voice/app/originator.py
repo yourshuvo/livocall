@@ -107,8 +107,10 @@ async def resolve_outbound_gateway(
         num = await db["phonenumbers"].find_one({"orgId": org_oid, "e164": from_e164})
         if num:
             requested_cli = str(num.get("e164") or from_e164)
-        if prefer_default_gateway and settings.fs_default_gateway:
-            return settings.fs_default_gateway, requested_cli or from_e164
+        if prefer_default_gateway:
+            preferred_gateway = settings.fs_dashboard_test_gateway or settings.fs_default_gateway
+            if preferred_gateway:
+                return preferred_gateway, requested_cli or from_e164
         if num and num.get("outboundEnabled") is True and str(num.get("providerSlug") or ""):
             return num["providerSlug"], num["e164"]
     fallback = await db["phonenumbers"].find_one(

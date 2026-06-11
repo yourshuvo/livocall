@@ -140,6 +140,8 @@ async def health() -> dict[str, object]:
         "version": "0.2.0",
         "fs_host": settings.fs_host,
         "fs_esl_port": settings.fs_esl_port,
+        "fs_default_gateway": settings.fs_default_gateway,
+        "fs_dashboard_test_gateway": settings.fs_dashboard_test_gateway,
         "fake_driver": settings.voice_fake_driver,
         "web_base_url": settings.web_base_url,
         "gemini_live_model": settings.gemini_live_model,

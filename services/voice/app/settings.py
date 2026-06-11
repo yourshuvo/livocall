@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     fs_esl_port: int = Field(default=8021)
     fs_esl_password: str = Field(default="ClueCon")
     fs_default_gateway: str = Field(default="sip_custom")  # sofia/gateway/<this>/<dest>
+    fs_dashboard_test_gateway: str = Field(default="sip_j")
 
     # Web app callback (event ingest + webhook tick)
     web_base_url: str = Field(default="http://localhost:3000")

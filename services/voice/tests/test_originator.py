@@ -100,7 +100,8 @@ async def test_dashboard_test_calls_prefer_default_gateway_even_with_stale_phone
 ) -> None:
     org_id = ObjectId()
     cli = "+8809639148184"
-    monkeypatch.setattr(originator.settings, "fs_default_gateway", "sip_j")
+    monkeypatch.setattr(originator.settings, "fs_default_gateway", "sip_custom")
+    monkeypatch.setattr(originator.settings, "fs_dashboard_test_gateway", "sip_j")
     monkeypatch.setattr(
         originator,
         "get_db",
