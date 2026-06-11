@@ -60,6 +60,43 @@ def test_audio_fork_args_use_8k_for_pcmu_bridge() -> None:
 
 
 @pytest.mark.asyncio
+async def test_originate_routes_answered_leg_through_livocall_dialplan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[str] = []
+    client = EslClient(EslConfig(host="127.0.0.1", port=8021, password="ClueCon"))
+
+    async def _fake_bgapi(command: str) -> str:
+        commands.append(command)
+        return "+OK"
+
+    monkeypatch.setattr(client, "bgapi", _fake_bgapi)
+    channel_uuid = "11111111-2222-3333-4444-555555555555"
+
+    result = await client.originate(
+        gateway="sip_j",
+        to_e164="+8801712345678",
+        agent_id="agent-1",
+        tier="pipeline",
+        from_e164="+8809612345678",
+        ws_url="ws://voice:8084/ws/audio?call_id=abc&auth=def mono 16000 buffer 20 jitterbuffer 20",
+        call_doc_id="call-1",
+        channel_uuid=channel_uuid,
+    )
+
+    assert result == channel_uuid
+    assert len(commands) == 1
+    command = commands[0]
+    assert "livocall_park='1'" in command
+    assert (
+        "livocall_ws_url='ws://voice:8084/ws/audio?call_id=abc&auth=def mono 16000 buffer 20 jitterbuffer 20'"
+        in command
+    )
+    assert "&park" not in command
+    assert command.endswith("sofia/gateway/sip_j/+8801712345678 livocall_park XML default")
+
+
+@pytest.mark.asyncio
 async def test_eavesdrop_listen_originates_passive_supervisor_leg(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

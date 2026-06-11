@@ -171,8 +171,14 @@ class EslClient:
                 "livocall_consent_prompt": consent_prompt_url,
             }
         )
-        # bridge to the gateway and route the dialplan leg into livocall_park.
-        cmd = f"originate {{{chan_vars}}}sofia/gateway/{gateway}/{to_e164} &park()"
+        # Bridge to the gateway, then run the answered leg through the
+        # livocall_park dialplan extension. Executing ``&park()`` directly here
+        # would bypass the dialplan and never start ``audio_fork``, leaving the
+        # answered test call parked in silence.
+        cmd = (
+            f"originate {{{chan_vars}}}sofia/gateway/{gateway}/{to_e164} "
+            "livocall_park XML default"
+        )
         log.info("esl.originate", to=to_e164, agent_id=agent_id, tier=tier)
         await self.bgapi(cmd)
         return channel_uuid
