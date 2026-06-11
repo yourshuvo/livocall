@@ -23,7 +23,7 @@ export function fmtDate(d: Date | string): string {
 }
 
 export function fmtPhoneE164(e164: string): string {
-  // +8801XXXXXXXXX → +880 1X XX XX XX XX
+  // +8801XXXXXXXXX or +8809XXXXXXXXX → grouped for BD mobile/IPT display
   if (!e164.startsWith('+880') || e164.length !== 14) return e164
   return `+880 ${e164.slice(4, 6)} ${e164.slice(6, 9)} ${e164.slice(9, 12)} ${e164.slice(12)}`
 }

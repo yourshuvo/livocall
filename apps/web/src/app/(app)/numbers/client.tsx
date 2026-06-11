@@ -9,6 +9,7 @@ import { Icon } from '@/components/ui/icon'
 import { api } from '@/lib/api-fetch'
 import { useToast } from '@/components/ui/toast'
 import { fmtPhoneE164 } from '@/lib/format'
+import { normalizeBdPhoneToE164 } from '@/lib/phone-number'
 
 interface NumberItem {
   id: string
@@ -91,7 +92,7 @@ export function NumbersClient({
     setError(null)
     try {
       await api.post('/api/numbers', {
-        e164: sipUsername.startsWith('+') ? sipUsername : `+${sipUsername.replace(/\D/g, '')}`,
+        e164: normalizeBdPhoneToE164(sipUsername),
         providerName: providerName || sipServer,
         didRange: '',
         sipServer,
@@ -203,10 +204,10 @@ export function NumbersClient({
               />
             </div>
             <div>
-              <Label>Phone number (E.164)</Label>
+              <Label>Phone/IPT number or SIP username</Label>
               <Input
                 className="mt-2"
-                placeholder="+8801711000000"
+                placeholder="096XXXXXXXX or +8801XXXXXXXXX"
                 value={sipUsername}
                 onChange={(e) => setSipUsername(e.target.value)}
               />
@@ -238,6 +239,7 @@ export function NumbersClient({
             </div>
             <p className="md:col-span-2 text-[12px] text-fg-muted">
               Advanced defaults are applied automatically: UDP, port 5060, registration on, PCMU@20ms.
+              BD local mobile/IPT numbers are normalized to +880 before storage.
               Providers that require separate SIP usernames, proxy, or realm can still be edited through API.
             </p>
             {error && <p className="md:col-span-2 text-[13px] text-status-fail">{error}</p>}

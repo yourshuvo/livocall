@@ -640,7 +640,7 @@ In the dashboard:
 1. Create/sign in to an org.
 2. Create an agent.
 3. Set agent status to live.
-4. Add a DID in E.164 format, for example `+8801XXXXXXXXX`.
+4. Add a DID/CLI. Local BD input such as `096XXXXXXXX` is accepted and stored as E.164 (`+8809XXXXXXXXX`).
 5. Set provider slug to `sip_custom`, or match the generated gateway name.
 6. Enable inbound and/or outbound.
 7. Attach inbound DID to the live agent.
@@ -666,7 +666,7 @@ In the dashboard:
 - SIP provider sends INVITE to `YOUR_VPS_PUBLIC_IP:5080`.
 - Provider signalling IPs are in `livocall_trunks`.
 - `drachtio_mrf` profile context is `public`.
-- DID is stored as E.164, for example `+8801XXXXXXXXX`.
+- DID is stored as E.164, for example `+8801XXXXXXXXX` or IPT/096 as `+8809XXXXXXXXX`.
 - DID has `inboundEnabled=true`.
 - DID is attached to a live agent.
 - Inbound XML uses real `VOICE_SERVICE_URL` and `VOICE_SERVICE_TOKEN`.

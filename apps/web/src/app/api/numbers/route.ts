@@ -8,13 +8,14 @@ import { isResponse, requireDashboardSession } from '@/lib/api-helpers'
 import { apiError, withErrors } from '@/lib/errors'
 import { requireRole } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
+import { normalizeBdPhoneToE164, isE164 } from '@/lib/phone-number'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
 import { AutoCallbackConfigSchema } from '@/lib/auto-callback'
 import { triggerFreeswitchSync } from '@/lib/freeswitch-sync'
 
 const Body = z.object({
-  e164: z.string().regex(/^\+\d{8,15}$/, 'must be E.164'),
+  e164: z.string().trim().min(1).max(32),
   providerName: z.string().trim().min(1).max(80),
   providerSlug: z.string().trim().max(64).optional(),
   didRange: z.string().max(120).optional().default(''),
@@ -53,16 +54,13 @@ export const POST = withErrors(async (req: Request) => {
     const agent = await Agent.findOne({ _id: body.agentId, orgId: s.orgId }).lean()
     if (!agent) return apiError('invalid_input', 'agent does not belong to this org')
   }
-  const exists = await PhoneNumber.findOne({ e164: body.e164 }).lean()
-  if (exists) return apiError('conflict', 'number already provisioned')
   const providerSlug = slugifySipProvider(body.providerSlug || body.providerName)
-  const e164 =
-    body.e164.startsWith('+') && body.e164.length >= 8
-      ? body.e164
-      : `+${body.sipUsername.replace(/\D/g, '')}`
-  if (!/^\+\d{8,15}$/.test(e164)) {
-    return apiError('invalid_input', 'username must be an E.164 number or provide e164 via API')
+  const e164 = normalizeBdPhoneToE164(body.e164 || body.sipUsername)
+  if (!isE164(e164)) {
+    return apiError('invalid_input', 'number must be E.164 or a BD local number like 096XXXXXXXX')
   }
+  const exists = await PhoneNumber.findOne({ e164 }).lean()
+  if (exists) return apiError('conflict', 'number already provisioned')
   const created = await PhoneNumber.create({
     orgId: s.orgId,
     ...body,

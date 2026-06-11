@@ -286,7 +286,7 @@ cat > "${FS_ROOT}/dialplan/public/00_livocall_inbound.xml" <<EOF
 <include>
   <context name="public">
     <extension name="livocall_inbound">
-      <condition field="destination_number" expression="^(8801[0-9]{9})$">
+      <condition field="destination_number" expression="^(?:\+?880(?:1[0-9]{9}|9[0-9]{9})|0(?:1[0-9]{9}|9[0-9]{9})|(?:1[0-9]{9}|9[0-9]{9}))$">
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="continue_on_fail=true"/>
         <action application="set" data="absolute_codec_string=PCMU@20i"/>

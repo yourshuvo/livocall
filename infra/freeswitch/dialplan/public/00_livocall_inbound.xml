@@ -1,7 +1,9 @@
 <include>
   <!--
     Inbound DID router.
-    `${destination_number}` is the called BD DID (e.g. 8801XXXXXXXXX).
+    `${destination_number}` is the called BD DID. Providers may send it as
+    8801XXXXXXXXX / 8809XXXXXXXXX, local 01XXXXXXXXX / 09XXXXXXXXX, or already
+    prefixed with +880.
     Calls the voice service over Event Socket Outbound so the per-call
     Python handler can resolve agent + tier from Mongo and start mod_audio_fork
     (or DTMF, depending on the agent's tier).
@@ -13,7 +15,7 @@
   -->
   <context name="public">
     <extension name="livocall_inbound">
-      <condition field="destination_number" expression="^(8801[0-9]{9})$">
+      <condition field="destination_number" expression="^(?:\+?880(?:1[0-9]{9}|9[0-9]{9})|0(?:1[0-9]{9}|9[0-9]{9})|(?:1[0-9]{9}|9[0-9]{9}))$">
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="continue_on_fail=true"/>
         <action application="set" data="absolute_codec_string=PCMU@20i"/>

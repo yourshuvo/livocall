@@ -6,13 +6,14 @@ import { PhoneNumber } from '@/models/PhoneNumber'
 import { Agent } from '@/models/Agent'
 import { authV1, isResponse } from '@/lib/auth/v1'
 import { apiError, withErrors } from '@/lib/errors'
+import { normalizeBdPhoneToE164, isE164 } from '@/lib/phone-number'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
 import { AutoCallbackConfigSchema } from '@/lib/auto-callback'
 import { triggerFreeswitchSync } from '@/lib/freeswitch-sync'
 
 const Body = z.object({
-  e164: z.string().regex(/^\+\d{8,15}$/).optional(),
+  e164: z.string().trim().min(1).max(32).optional(),
   providerName: z.string().trim().max(80).optional().default(''),
   providerSlug: z.string().trim().max(64).optional(),
   sipServer: z.string().trim().min(1).max(255),
@@ -43,11 +44,9 @@ export const POST = withErrors(async (req: Request) => {
   const auth = await authV1(req, 'numbers:write')
   if (isResponse(auth)) return auth
   const body = Body.parse(await req.json().catch(() => ({})))
-  const e164 =
-    body.e164 ||
-    (body.sipUsername.startsWith('+') ? body.sipUsername : `+${body.sipUsername.replace(/\D/g, '')}`)
-  if (!/^\+\d{8,15}$/.test(e164)) {
-    return apiError('invalid_input', 'send e164 or use an E.164 SIP username')
+  const e164 = normalizeBdPhoneToE164(body.e164 || body.sipUsername)
+  if (!isE164(e164)) {
+    return apiError('invalid_input', 'send e164 or a BD local SIP username like 096XXXXXXXX')
   }
   await connectMongo()
   if (body.agentId) {

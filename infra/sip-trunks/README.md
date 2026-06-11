@@ -27,8 +27,8 @@ The legacy YAML example files remain as local development samples only.
 
 ## DID format
 
-All BD DIDs normalised to E.164: `+8801XXXXXXXXX`. The dialplan strips the leading `+`
-and matches on `8801[0-9]{9}`.
+All BD DIDs normalise to E.164. Mobile examples look like `+8801XXXXXXXXX`; IPT/096 examples look like `+8809XXXXXXXXX`.
+The dashboard and voice service also accept local BD input such as `01XXXXXXXXX` or `096XXXXXXXX` and convert it before storage/lookup.
 
 ## Codec strategy
 

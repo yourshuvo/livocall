@@ -18,7 +18,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app import event_bridge, originator
+from app import event_bridge, freeswitch_controller, originator
 from app.browser_webrtc import (
     aclose as aclose_browser_webrtc,
 )
@@ -156,6 +156,54 @@ async def health() -> dict[str, object]:
         "audio_fork_jitter_buffer_ms": settings.audio_fork_jitter_buffer_ms,
         "browser_webrtc_enabled": settings.browser_webrtc_enabled,
     }
+
+
+class FreeswitchProfileRequest(BaseModel):
+    profile: str = Field(default="external", pattern=r"^[A-Za-z0-9_-]{1,80}$")
+
+
+class FreeswitchGatewayActionRequest(FreeswitchProfileRequest):
+    action: str = Field(pattern=r"^(register|unregister|killgw)$")
+
+
+@app.get("/freeswitch/status", dependencies=[Depends(require_voice_token)])
+async def freeswitch_status(profile: str = "external") -> dict[str, Any]:
+    try:
+        return await freeswitch_controller.get_controller().status(profile=profile)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.exception("freeswitch.status_error")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@app.post("/freeswitch/resync", dependencies=[Depends(require_voice_token)])
+async def freeswitch_resync(req: FreeswitchProfileRequest) -> dict[str, Any]:
+    try:
+        return await freeswitch_controller.get_controller().resync(profile=req.profile)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.exception("freeswitch.resync_error")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@app.post("/freeswitch/gateways/{gateway}/action", dependencies=[Depends(require_voice_token)])
+async def freeswitch_gateway_action(
+    gateway: str,
+    req: FreeswitchGatewayActionRequest,
+) -> dict[str, Any]:
+    try:
+        return await freeswitch_controller.get_controller().gateway_action(
+            gateway,
+            req.action,
+            profile=req.profile,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.exception("freeswitch.gateway_action_error", gateway=gateway, action=req.action)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @app.get("/webrtc/browser-config")
@@ -302,11 +350,28 @@ async def inbound_route(req: InboundRouteRequest) -> dict[str, Any]:
 
 def _normalize_e164(value: str) -> str:
     raw = "".join(ch for ch in value.strip() if ch.isdigit() or ch == "+")
+    if not raw:
+        return ""
+    digits = "".join(ch for ch in raw if ch.isdigit())
     if raw.startswith("+"):
-        return raw
-    if raw.startswith("00"):
-        return f"+{raw[2:]}"
-    return f"+{raw}"
+        if digits.startswith("880"):
+            return f"+{digits}"
+        if digits.startswith("0"):
+            return f"+880{digits[1:]}"
+        return f"+{digits}"
+    if digits.startswith("00880"):
+        return f"+{digits[2:]}"
+    if digits.startswith("00"):
+        return f"+{digits[2:]}"
+    if digits.startswith("880"):
+        return f"+{digits}"
+    if digits.startswith("0"):
+        return f"+880{digits[1:]}"
+    # BD SIP providers can present destination/caller IDs without either the
+    # country code or national trunk prefix, e.g. 9639148184 for 09639148184.
+    if len(digits) == 10 and digits[0] in {"1", "9"}:
+        return f"+880{digits}"
+    return f"+{digits}"
 
 
 @app.websocket("/ws/audio")
