@@ -9,6 +9,7 @@ from app.browser_webrtc import (
     PipecatWebRTCImports,
     _gemini_live_tools,
     _is_non_billable_test_session,
+    _pipeline_stt_provider_for_browser,
     _metadata_gemini_language,
     _metadata_gemini_model,
     _public_webcall_max_duration_sec,
@@ -262,6 +263,34 @@ def test_landing_webcall_metadata_controls_model_language_and_limit() -> None:
     assert _public_webcall_max_duration_sec({"source": "landing-webcall", "maxDurationSec": "4"}) == 15
     assert _metadata_gemini_model(metadata) == "models/gemini-3.1-flash-live-preview"
     assert _metadata_gemini_language(metadata) == "bn"
+
+
+def test_browser_pipeline_uses_soniox_stt_for_bangla_agents(monkeypatch) -> None:
+    monkeypatch.setattr(browser_webrtc.settings, "soniox_api_key", "soniox-key")
+
+    assert (
+        _pipeline_stt_provider_for_browser(
+            {
+                "language": "bn",
+                "runtimeSettings": {"sttProvider": "deepgram"},
+            }
+        )
+        == "soniox"
+    )
+
+
+def test_browser_pipeline_preserves_deepgram_when_soniox_key_is_missing(monkeypatch) -> None:
+    monkeypatch.setattr(browser_webrtc.settings, "soniox_api_key", "")
+
+    assert (
+        _pipeline_stt_provider_for_browser(
+            {
+                "language": "bn",
+                "runtimeSettings": {"sttProvider": "deepgram"},
+            }
+        )
+        == "deepgram"
+    )
 
 
 def test_browser_webrtc_patch_normalizes_ice_candidate_dicts(monkeypatch) -> None:

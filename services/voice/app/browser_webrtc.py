@@ -21,6 +21,7 @@ from app.agent_runtime import (
     pipeline_stt_provider,
     pipeline_tts_provider,
     runtime_settings,
+    soniox_language,
 )
 from app.persistence import TranscriptBuffer
 from app.settings import settings
@@ -292,6 +293,17 @@ def _with_bangla_only_guard(system_prompt: str) -> str:
     )
 
 
+def _pipeline_stt_provider_for_browser(agent: dict[str, Any]) -> str:
+    provider = pipeline_stt_provider(agent)
+    # Browser/WebRTC is the most latency-sensitive path. If an existing Bangla
+    # agent still has the older Deepgram setting, prefer Soniox when available:
+    # Soniox is already required for Bangla TTS, accepts Bangla language hints,
+    # and is configured with vad_force_turn_endpoint=True in the shared builder.
+    if provider == "deepgram" and soniox_language(agent) == "bn" and settings.soniox_api_key:
+        return "soniox"
+    return provider
+
+
 def prewarm() -> dict[str, object]:
     if not settings.browser_webrtc_enabled:
         return {
@@ -425,7 +437,7 @@ async def run_browser_pipeline_bot(
         return
 
     agent = await fetch_agent_for_call(agent_id, call_id)
-    stt_provider = pipeline_stt_provider(agent)
+    stt_provider = _pipeline_stt_provider_for_browser(agent)
     tts_provider = pipeline_tts_provider(agent)
     missing = _missing_pipeline_keys(stt_provider, tts_provider)
     if missing:
