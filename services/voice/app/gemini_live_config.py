@@ -20,8 +20,6 @@ def live_config(
 ) -> dict[str, Any]:
     config: dict[str, Any] = {
         "response_modalities": ["AUDIO"],
-        "input_audio_transcription": {},
-        "output_audio_transcription": {},
         "system_instruction": system_prompt,
         "temperature": settings.gemini_live_temperature,
         "max_output_tokens": settings.gemini_live_max_tokens,

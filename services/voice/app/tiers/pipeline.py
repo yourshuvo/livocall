@@ -23,7 +23,7 @@ from app.agent_runtime import (
     soniox_language_hint_codes,
     soniox_voice,
 )
-from app.persistence import TranscriptBuffer
+from app.persistence import flush_context_transcript
 from app.settings import settings
 from app.tiers._common import close_unavailable, fetch_agent_for_call
 
@@ -159,24 +159,10 @@ class PipelineTier:
                 tts_provider=tts_provider,
                 vad="pipecat_silero",
             )
-            buffer = TranscriptBuffer(call_id=call_id)
             try:
                 await runner.run(task)
             finally:
-                try:
-                    for msg in getattr(context, "messages", []) or []:
-                        if isinstance(msg, dict):
-                            role = str(msg.get("role", ""))
-                            text = str(msg.get("content", ""))
-                        else:
-                            role = str(getattr(msg, "role", ""))
-                            text = str(getattr(msg, "content", ""))
-                        if role in {"system", "developer"} or not text.strip():
-                            continue
-                        mapped = "agent" if role == "assistant" else "user"
-                        await buffer.add(mapped, text)
-                finally:
-                    await buffer.flush()
+                await flush_context_transcript(call_id, context)
         except Exception as exc:  # noqa: BLE001
             log.exception("tier2.runner_error", error=str(exc))
             await close_unavailable(ws)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from types import SimpleNamespace
 
 import pytest
 
@@ -55,6 +56,41 @@ async def test_transcript_buffer_ignores_invalid_call_id(
     await buf.add("user", "ignored")
     await buf.flush()
     assert fake.updates == []
+
+
+def test_context_transcript_turns_maps_google_model_parts_to_agent() -> None:
+    messages = [
+        {"role": "system", "content": "hidden"},
+        {"role": "user", "content": "Start the live browser call now with the configured opening."},
+        {"role": "model", "parts": [{"text": "Hello "}, {"text": "there"}]},
+        {"role": "user", "parts": [{"text": "I need help"}]},
+        SimpleNamespace(role="assistant", content="Sure."),
+    ]
+
+    assert persistence.context_transcript_turns(messages) == [
+        ("agent", "Hello there"),
+        ("user", "I need help"),
+        ("agent", "Sure."),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_flush_context_transcript_persists_pipeline_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _install_fake_db(monkeypatch)
+    context = SimpleNamespace(
+        messages=[
+            {"role": "model", "parts": [{"text": "AI response"}]},
+            {"role": "user", "content": "Caller response"},
+        ]
+    )
+
+    await persistence.flush_context_transcript("64b64b64b64b64b64b64b64b", context)
+
+    turns = fake.updates[0][1]["$push"]["transcript"]["$each"]
+    assert [(turn["role"], turn["text"]) for turn in turns] == [
+        ("agent", "AI response"),
+        ("user", "Caller response"),
+    ]
 
 
 def test_heuristic_summary_empty() -> None:

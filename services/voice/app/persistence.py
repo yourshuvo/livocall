@@ -85,6 +85,56 @@ class TranscriptBuffer:
             log.warning("transcript.flush_failed", error=str(exc), call_id=self.call_id)
 
 
+def context_transcript_turns(context_or_messages: Any) -> list[tuple[str, str]]:
+    messages = getattr(context_or_messages, "messages", context_or_messages) or []
+    turns: list[tuple[str, str]] = []
+    for msg in messages:
+        role, text = _context_message_role_text(msg)
+        text = text.strip()
+        if role in {"system", "developer"} or not text:
+            continue
+        if text.startswith("Start the live browser call now"):
+            continue
+        mapped = "agent" if role in {"assistant", "model"} else "user"
+        turns.append((mapped, text))
+    return turns
+
+
+async def flush_context_transcript(call_id: str, context_or_messages: Any) -> None:
+    transcript = TranscriptBuffer(call_id=call_id)
+    try:
+        for role, text in context_transcript_turns(context_or_messages):
+            await transcript.add(role, text)
+    finally:
+        await transcript.flush()
+
+
+def _context_message_role_text(msg: Any) -> tuple[str, str]:
+    if isinstance(msg, dict):
+        role = str(msg.get("role", ""))
+        content = msg.get("content")
+        if content is not None:
+            return role, str(content)
+        return role, _parts_text(msg.get("parts"))
+    role = str(getattr(msg, "role", ""))
+    content = getattr(msg, "content", None)
+    if content is not None:
+        return role, str(content)
+    return role, _parts_text(getattr(msg, "parts", None))
+
+
+def _parts_text(parts: Any) -> str:
+    if not isinstance(parts, list):
+        return ""
+    chunks: list[str] = []
+    for part in parts:
+        if isinstance(part, dict):
+            chunks.append(str(part.get("text") or ""))
+        else:
+            chunks.append(str(getattr(part, "text", "") or ""))
+    return "".join(chunks)
+
+
 # ---------------------------------------------------------------------------
 # Recording upload
 # ---------------------------------------------------------------------------

@@ -38,13 +38,13 @@
         <condition field="${livocall_record}" expression="^prompt$" break="on-false">
           <action application="read" data="1 1 ${livocall_consent_prompt} consent_digit 5000 #"/>
           <condition field="${consent_digit}" expression="^1$" break="on-true">
-            <action application="set" data="execute_on_answer=record_session ${recordings_dir}/${uuid}.wav"/>
+            <action application="record_session" data="${recordings_dir}/${call_doc_id}.wav"/>
           </condition>
         </condition>
 
         <!-- Recording consent — 'on' records unconditionally, 'off' skips. -->
         <condition field="${livocall_record}" expression="^on$" break="on-false">
-          <action application="set" data="execute_on_answer=record_session ${recordings_dir}/${uuid}.wav"/>
+          <action application="record_session" data="${recordings_dir}/${call_doc_id}.wav"/>
         </condition>
 
         <action application="audio_fork" data="${livocall_ws_url}"/>

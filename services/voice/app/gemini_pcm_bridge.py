@@ -507,14 +507,6 @@ async def _iter_model_output(
             )
             yield ToolResponse({"id": call_id_part, "name": name, "response": result})
         content = getattr(response, "server_content", None)
-        input_text = _transcription_text(getattr(content, "input_transcription", None))
-        if input_text:
-            yield TranscriptUpdate("user", input_text)
-        output_text = _transcription_text(
-            getattr(content, "output_transcription", None), strip=False
-        )
-        if output_text:
-            output_transcript_chunks.append(output_text)
         if getattr(content, "interrupted", False):
             output_transcript_chunks.clear()
             log.info("gemini_pcm.interrupted", call_id=call_id)

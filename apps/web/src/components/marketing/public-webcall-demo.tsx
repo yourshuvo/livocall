@@ -31,6 +31,10 @@ interface PublicWebcallSession {
   recorder?: MediaRecorder
   recordingChunks?: Blob[]
   recordingStream?: MediaStream
+  recordingAudioContext?: AudioContext
+  recordingDestination?: MediaStreamAudioDestinationNode
+  recordingSources?: MediaStreamAudioSourceNode[]
+  recordingTrackIds?: Set<string>
   localRecordTrack?: MediaStreamTrack
   remoteRecordTrack?: MediaStreamTrack
   recordingCallId?: string
@@ -110,6 +114,7 @@ export function PublicWebcallDemo({
             if (isLocalPipecatAudioTrack(track, participant, localAudioTrack)) {
               if (track.kind === 'audio') {
                 nextSession.localRecordTrack = track
+                addPublicWebcallRecordingTrack(nextSession, track)
                 maybeStartPublicWebcallRecording(
                   nextSession,
                   start.callId,
@@ -153,6 +158,7 @@ export function PublicWebcallDemo({
       const localAudioTrack = client.tracks().local.audio
       if (localAudioTrack) {
         nextSession.localRecordTrack = localAudioTrack
+        addPublicWebcallRecordingTrack(nextSession, localAudioTrack)
         maybeStartPublicWebcallRecording(nextSession, start.callId, start.recordingUploadToken)
       }
       setStatus('live')
@@ -339,6 +345,7 @@ function closePublicWebcallSession(session: PublicWebcallSession | null, disconn
   if (disconnectClient && session.pipecat) {
     void session.pipecat.disconnect().catch(() => {})
   }
+  void session.recordingAudioContext?.close().catch(() => undefined)
 }
 
 function attachPublicWebcallAudioTrack(
@@ -374,12 +381,30 @@ function publicWebcallRecordingMimeType(): string {
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || ''
 }
 
+function ensurePublicWebcallRecordingMixer(session: PublicWebcallSession) {
+  if (session.recordingDestination) return session.recordingDestination
+  if (typeof window === 'undefined' || typeof window.AudioContext === 'undefined') return null
+  const context = new window.AudioContext()
+  const destination = context.createMediaStreamDestination()
+  session.recordingAudioContext = context
+  session.recordingDestination = destination
+  session.recordingStream = destination.stream
+  session.recordingSources = []
+  session.recordingTrackIds = new Set<string>()
+  void context.resume().catch(() => undefined)
+  return destination
+}
+
 function addPublicWebcallRecordingTrack(session: PublicWebcallSession, track: MediaStreamTrack) {
-  if (!session.recordingStream || track.kind !== 'audio') return
-  const alreadyAdded = session.recordingStream
-    .getAudioTracks()
-    .some((current) => current.id === track.id)
-  if (!alreadyAdded) session.recordingStream.addTrack(track)
+  if (track.kind !== 'audio') return
+  const destination = ensurePublicWebcallRecordingMixer(session)
+  if (!destination || !session.recordingAudioContext) return
+  if (!session.recordingTrackIds) session.recordingTrackIds = new Set<string>()
+  if (session.recordingTrackIds.has(track.id)) return
+  const source = session.recordingAudioContext.createMediaStreamSource(new MediaStream([track]))
+  source.connect(destination)
+  session.recordingSources = [...(session.recordingSources ?? []), source]
+  session.recordingTrackIds.add(track.id)
 }
 
 function maybeStartPublicWebcallRecording(
@@ -388,16 +413,13 @@ function maybeStartPublicWebcallRecording(
   recordingUploadToken?: string,
 ) {
   if (!recordingUploadToken || session.recorder || typeof MediaRecorder === 'undefined') return
-  const tracks = [session.localRecordTrack, session.remoteRecordTrack].filter(
-    (track): track is MediaStreamTrack => track != null && track.kind === 'audio',
-  )
-  if (!tracks.length) return
+  const destination = ensurePublicWebcallRecordingMixer(session)
+  if (!destination || !session.recordingTrackIds?.size) return
 
   try {
-    const stream = new MediaStream(tracks)
     const mimeType = publicWebcallRecordingMimeType()
     const chunks: Blob[] = []
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    const recorder = new MediaRecorder(destination.stream, mimeType ? { mimeType } : undefined)
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) chunks.push(event.data)
     }
@@ -407,7 +429,7 @@ function maybeStartPublicWebcallRecording(
       const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' })
       void uploadPublicWebcallRecording(callId, recordingUploadToken, blob)
     }
-    session.recordingStream = stream
+    session.recordingStream = destination.stream
     session.recordingChunks = chunks
     session.recordingCallId = callId
     session.recordingUploadToken = recordingUploadToken

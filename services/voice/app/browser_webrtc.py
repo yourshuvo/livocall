@@ -23,7 +23,7 @@ from app.agent_runtime import (
     runtime_settings,
     soniox_language,
 )
-from app.persistence import TranscriptBuffer
+from app.persistence import flush_context_transcript
 from app.settings import settings
 from app.tiers._common import fetch_agent_for_call
 from app.web_client import post_voice_event
@@ -560,6 +560,7 @@ async def run_browser_pipeline_bot(
     finally:
         if limit_task is not None and not limit_task.done():
             limit_task.cancel()
+        await flush_context_transcript(call_id, context)
         if _is_non_billable_test_session(metadata):
             ended_at = datetime.now(UTC)
             await post_voice_event(
@@ -580,23 +581,7 @@ async def run_browser_pipeline_bot(
                 }
             )
         else:
-            transcript = TranscriptBuffer(call_id=call_id)
-            try:
-                for msg in getattr(context, "messages", []) or []:
-                    if isinstance(msg, dict):
-                        role = str(msg.get("role", ""))
-                        text = str(msg.get("content", ""))
-                    else:
-                        role = str(getattr(msg, "role", ""))
-                        text = str(getattr(msg, "content", ""))
-                    if role in {"system", "developer"} or not text.strip():
-                        continue
-                    if text.startswith("Start the live browser call now"):
-                        continue
-                    mapped = "agent" if role == "assistant" else "user"
-                    await transcript.add(mapped, text)
-            finally:
-                await transcript.flush()
+            pass
 
 
 async def run_browser_gemini_bot(
@@ -657,7 +642,6 @@ async def run_browser_gemini_bot(
     voice = gemini_voice(agent)
     language = _metadata_gemini_language(metadata) or settings.gemini_live_language
     tools = gemini_tool_declarations(agent)
-    transcript = TranscriptBuffer(call_id)
     started_at = datetime.now(UTC)
     outcome = "completed"
     hangup_cause = "browser_test_disconnected"
@@ -798,19 +782,7 @@ async def run_browser_gemini_bot(
                 }
             )
         else:
-            for msg in getattr(context, "messages", []) or []:
-                if isinstance(msg, dict):
-                    role = str(msg.get("role", ""))
-                    text = str(msg.get("content", "")).strip()
-                else:
-                    role = str(getattr(msg, "role", ""))
-                    text = str(getattr(msg, "content", "")).strip()
-                if role == "system" or not text:
-                    continue
-                if text.startswith("Start the live browser call now"):
-                    continue
-                await transcript.add("agent" if role == "assistant" else "user", text)
-            await transcript.flush()
+            pass
 
 
 def _should_start_with_ai(agent: dict[str, Any]) -> bool:

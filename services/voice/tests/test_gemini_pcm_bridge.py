@@ -59,7 +59,7 @@ def _response(
     )
 
 
-def test_live_config_enables_audio_transcription(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_config_does_not_request_audio_transcription(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(bridge.settings, "gemini_live_context_compression_enabled", True)
     config = bridge._live_config(
         FakeTypes,
@@ -69,8 +69,8 @@ def test_live_config_enables_audio_transcription(monkeypatch: pytest.MonkeyPatch
     )
 
     assert config["response_modalities"] == ["AUDIO"]
-    assert config["input_audio_transcription"] == {}
-    assert config["output_audio_transcription"] == {}
+    assert "input_audio_transcription" not in config
+    assert "output_audio_transcription" not in config
     assert config["realtime_input_config"]["automatic_activity_detection"] == {
         "disabled": False,
         "prefix_padding_ms": 100,
@@ -111,7 +111,7 @@ def test_bridge_modes_keep_phone_and_browser_separate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_iter_model_output_yields_transcripts_and_audio() -> None:
+async def test_iter_model_output_ignores_transcripts_and_yields_audio() -> None:
     content_1 = SimpleNamespace(
         input_transcription=_transcription("hello"),
         output_transcription=_transcription("Hi "),
@@ -140,13 +140,11 @@ async def test_iter_model_output_yields_transcripts_and_audio() -> None:
         )
     ]
 
-    assert items[0] == bridge.TranscriptUpdate("user", "hello")
-    assert items[1] == bridge.TranscriptUpdate("agent", "Hi there")
-    assert items[2] == b"pcm24"
+    assert items == [b"pcm24"]
 
 
 @pytest.mark.asyncio
-async def test_iter_model_output_clears_interrupted_agent_transcript() -> None:
+async def test_iter_model_output_drops_interrupted_and_non_interrupted_transcripts() -> None:
     interrupted = SimpleNamespace(
         input_transcription=None,
         output_transcription=_transcription("discard me"),
@@ -175,7 +173,7 @@ async def test_iter_model_output_clears_interrupted_agent_transcript() -> None:
         )
     ]
 
-    assert items == [bridge.TranscriptUpdate("agent", "keep me")]
+    assert items == []
 
 
 @pytest.mark.asyncio
