@@ -17,10 +17,16 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { BanglaAgentBuilder } from '@/components/app/bangla-agent-builder'
 import { api } from '@/lib/api-fetch'
+import {
+  createBrowserRemoteAudioReadyHandle,
+  waitForBrowserRemoteAudioReady,
+  type BrowserRemoteAudioReadyHandle,
+} from '@/lib/browser-audio-readiness'
 import { shouldPrewarmBrowserVoice } from '@/lib/browser-test-prewarm'
 import {
   isLocalPipecatAudioTrack,
   shouldAttachRemotePipecatAudioTrack,
+  shouldTearDownRemotePipecatAudioTrack,
 } from '@/lib/pipecat-track-routing'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/cn'
@@ -158,12 +164,13 @@ interface BrowserAudioSession {
   remoteAudio?: HTMLAudioElement
   pipecat?: PipecatClient
   recorder?: MediaRecorder
-  recordingChunks?: Blob[]
   recordingStream?: MediaStream
   localRecordTrack?: MediaStreamTrack
   remoteRecordTrack?: MediaStreamTrack
+  recordingChunks?: Blob[]
   recordingCallId?: string
   recordingUploadStarted?: boolean
+  remoteAudioReady?: BrowserRemoteAudioReadyHandle
 }
 
 type BrowserWebrtcModules = [
@@ -1063,7 +1070,9 @@ export function AgentEditor({
       if (!ok) return
     }
 
-    const audioSession: BrowserAudioSession = {}
+    const audioSession: BrowserAudioSession = {
+      remoteAudioReady: createBrowserRemoteAudioReadyHandle(),
+    }
     setBrowserTestStatus('connecting')
     setTab('simulation')
     setTestPanel('audio')
@@ -1073,6 +1082,8 @@ export function AgentEditor({
         `/api/agents/${initial.id}/browser-test`,
         {},
       )
+      closeBrowserAudioSession(browserAudioRef.current)
+      browserAudioRef.current = audioSession
       await connectBrowserWebrtcSession(session, audioSession, {
         onDisconnected: () => {
           if (browserAudioRef.current !== audioSession) return
@@ -1088,13 +1099,13 @@ export function AgentEditor({
         },
       })
 
-      closeBrowserAudioSession(browserAudioRef.current)
-      browserAudioRef.current = audioSession
+      if (browserAudioRef.current !== audioSession) return
       setBrowserTestStatus('live')
       setBrowserTestCallId(session.callId)
       setTestOpen(false)
       toast('Browser test connected in this tab', 'success')
     } catch (e) {
+      if (browserAudioRef.current === audioSession) browserAudioRef.current = null
       closeBrowserAudioSession(audioSession)
       setBrowserTestStatus('idle')
       setBrowserTestCallId('')
@@ -3228,6 +3239,11 @@ async function connectBrowserWebrtcSession(
 ) {
   const [{ PipecatClient }, { SmallWebRTCTransport }] = await preloadBrowserWebrtcClient()
   const iceServers = session.iceServers ?? []
+  const remoteAudioReady = audioSession.remoteAudioReady ?? createBrowserRemoteAudioReadyHandle()
+  audioSession.remoteAudioReady = remoteAudioReady
+  const failRemoteAudioReady = (message: string) => {
+    remoteAudioReady.reject(new Error(message))
+  }
 
   const client = new PipecatClient({
     transport: new SmallWebRTCTransport({
@@ -3238,15 +3254,19 @@ async function connectBrowserWebrtcSession(
     enableCam: false,
     callbacks: {
       onError: () => {
+        failRemoteAudioReady('Browser test transport failed before remote audio was playable')
         handlers.onError()
       },
       onDeviceError: () => {
+        failRemoteAudioReady('Browser microphone/audio device setup failed')
         handlers.onError()
       },
       onDisconnected: () => {
+        failRemoteAudioReady('Browser test disconnected before remote audio was playable')
         handlers.onDisconnected()
       },
       onBotDisconnected: () => {
+        failRemoteAudioReady('Voice bot disconnected before remote audio was playable')
         handlers.onDisconnected()
       },
       onTrackStarted: (track, participant) => {
@@ -3259,11 +3279,26 @@ async function connectBrowserWebrtcSession(
           return
         }
         if (!shouldAttachRemotePipecatAudioTrack(track, participant, localAudioTrack)) return
-        attachBrowserWebrtcAudioTrack(audioSession, track, session.callId)
+        void attachBrowserWebrtcAudioTrack(audioSession, track, session.callId)
+          .then(() => remoteAudioReady.resolve())
+          .catch((error) => {
+            remoteAudioReady.reject(
+              error instanceof Error
+                ? error
+                : new Error('Remote browser-test audio could not play'),
+            )
+          })
       },
       onTrackStopped: (track, participant) => {
-        if (isLocalPipecatAudioTrack(track, participant, currentLocalPipecatAudioTrack(client))) return
-        if (track.kind !== 'audio') return
+        if (
+          !shouldTearDownRemotePipecatAudioTrack(
+            track,
+            participant,
+            currentLocalPipecatAudioTrack(client),
+          )
+        ) {
+          return
+        }
         audioSession.remoteAudio?.pause()
         audioSession.remoteAudio?.remove()
         audioSession.remoteAudio = undefined
@@ -3271,6 +3306,7 @@ async function connectBrowserWebrtcSession(
       },
       onTransportStateChanged: (state) => {
         if (state === 'error') {
+          failRemoteAudioReady('Browser test transport failed before remote audio was playable')
           handlers.onError()
         }
       },
@@ -3291,9 +3327,10 @@ async function connectBrowserWebrtcSession(
     audioSession.localRecordTrack = localAudioTrack
     maybeStartBrowserRecording(audioSession, session.callId)
   }
+  await waitForBrowserRemoteAudioReady(remoteAudioReady)
 }
 
-function attachBrowserWebrtcAudioTrack(
+async function attachBrowserWebrtcAudioTrack(
   session: BrowserAudioSession,
   track: MediaStreamTrack,
   callId: string,
@@ -3317,11 +3354,13 @@ function attachBrowserWebrtcAudioTrack(
 
   session.remoteStream = stream
   session.remoteAudio = audio
-  playHiddenRemoteAudio(audio)
+  await playHiddenRemoteAudio(audio)
 }
 
-function playHiddenRemoteAudio(audio: HTMLAudioElement) {
-  void audio.play().catch(() => {
+async function playHiddenRemoteAudio(audio: HTMLAudioElement) {
+  try {
+    await audio.play()
+  } catch (error) {
     const retry = () => {
       document.removeEventListener('pointerdown', retry)
       document.removeEventListener('touchend', retry)
@@ -3331,7 +3370,8 @@ function playHiddenRemoteAudio(audio: HTMLAudioElement) {
     document.addEventListener('pointerdown', retry, { once: true })
     document.addEventListener('touchend', retry, { once: true })
     document.addEventListener('keydown', retry, { once: true })
-  })
+    throw error instanceof Error ? error : new Error('Remote browser-test audio could not play')
+  }
 }
 
 function browserRecordingMimeType(): string {

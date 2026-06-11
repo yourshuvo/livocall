@@ -12,5 +12,7 @@ describe('Agent defaults', () => {
 
     expect(agent.runtimeSettings?.transcriptionMode).toBe('speed')
     expect(agent.runtimeSettings?.geminiLiveVadSilenceMs).toBe(250)
+    expect(agent.voice?.provider).toBe('soniox')
+    expect(agent.voice?.voiceId).toBe('Adrian')
   })
 })

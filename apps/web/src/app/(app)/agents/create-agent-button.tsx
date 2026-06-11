@@ -6,28 +6,13 @@ import { buttonVariants } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { api } from '@/lib/api-fetch'
 import { cn } from '@/lib/cn'
+import { DEFAULT_AGENT_PAYLOAD } from '@/lib/new-agent-defaults'
 
 interface CreateAgentButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'type'> {
   pendingChildren?: React.ReactNode
   size?: 'sm' | 'md' | 'lg'
   variant?: 'primary' | 'secondary' | 'ghost' | 'link' | 'danger' | 'invert' | 'ghost-light'
-}
-
-const DEFAULT_AGENT_PAYLOAD = {
-  name: 'Untitled agent',
-  description: '',
-  tier: 'pipeline',
-  model: 'gemini-3.1-flash',
-  language: 'bn-en-mixed',
-  voice: { provider: 'cartesia', voiceId: 'cimo', style: 'conversational' },
-  prompt: { system: '', firstMessage: '', guardrails: '' },
-  runtimeSettings: {
-    transcriptionMode: 'speed',
-    geminiLiveVadSilenceMs: 250,
-  },
-  knowledgeBaseIds: [],
-  postCallWebhook: '',
 }
 
 export function CreateAgentButton({

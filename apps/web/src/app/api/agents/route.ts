@@ -48,12 +48,12 @@ const Body = z.object({
   language: z.enum(agentLanguageCodes).default('bn-en-mixed'),
   voice: z
     .object({
-      provider: z.string().max(64).optional().default('cartesia'),
-      voiceId: z.string().max(120).optional().default(''),
+      provider: z.string().max(64).optional().default('soniox'),
+      voiceId: z.string().max(120).optional().default('Adrian'),
       style: z.string().max(64).optional().default('conversational'),
     })
     .optional()
-    .default({ provider: 'cartesia', voiceId: '', style: 'conversational' }),
+    .default({ provider: 'soniox', voiceId: 'Adrian', style: 'conversational' }),
   prompt: z
     .object({
       system: z.string().max(8000).optional().default(''),

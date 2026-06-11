@@ -8,30 +8,16 @@ export type BrowserIceServer = {
 
 export function browserWebrtcUrl() {
   const direct = process.env.VOICE_BROWSER_WEBRTC_URL || ''
-  const serviceUrl = process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || process.env.VOICE_SERVICE_URL || ''
+  const serviceUrl = process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || ''
   const value = direct || (serviceUrl ? `${serviceUrl.replace(/\/+$/, '')}/webrtc/browser-offer` : '')
-  if (!value) return null
-  try {
-    const url = new URL(value.trim())
-    if (!/^https?:$/.test(url.protocol)) return null
-    return url
-  } catch {
-    return null
-  }
+  return browserPublicHttpUrl(value)
 }
 
 export function browserWebrtcPrewarmUrl() {
   const direct = process.env.VOICE_BROWSER_WEBRTC_PREWARM_URL || ''
-  const serviceUrl = process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || process.env.VOICE_SERVICE_URL || ''
+  const serviceUrl = process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || ''
   const value = direct || (serviceUrl ? `${serviceUrl.replace(/\/+$/, '')}/webrtc/browser-prewarm` : '')
-  if (!value) return null
-  try {
-    const url = new URL(value.trim())
-    if (!/^https?:$/.test(url.protocol)) return null
-    return url
-  } catch {
-    return null
-  }
+  return browserPublicHttpUrl(value)
 }
 
 export function browserIceServers(): BrowserIceServer[] {
@@ -60,7 +46,7 @@ export function browserWsBaseUrl() {
     ''
   if (direct) return normalizeWsUrl(direct)
 
-  const serviceUrl = process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || process.env.VOICE_SERVICE_URL || ''
+  const serviceUrl = process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || ''
   if (!serviceUrl) return ''
   return normalizeWsUrl(`${serviceUrl.replace(/\/+$/, '')}/ws/audio`)
 }
@@ -74,6 +60,17 @@ export function signWsAuth(callId: string) {
     .update(`${callId}|${expires}`)
     .digest('base64url')
   return `${expires}.${signature}`
+}
+
+function browserPublicHttpUrl(value: string) {
+  if (!value) return null
+  try {
+    const url = new URL(value.trim())
+    if (!/^https?:$/.test(url.protocol)) return null
+    return url
+  } catch {
+    return null
+  }
 }
 
 function normalizeWsUrl(value: string) {

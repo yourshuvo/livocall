@@ -135,8 +135,8 @@ const agentSchema = new Schema(
     // default" — the voice service falls back accordingly.
     model: { type: String, default: '' },
     voice: {
-      provider: { type: String, default: 'cartesia' },
-      voiceId: { type: String, default: '' },
+      provider: { type: String, default: 'soniox' },
+      voiceId: { type: String, default: 'Adrian' },
       style: { type: String, default: 'conversational' },
     },
     prompt: {
