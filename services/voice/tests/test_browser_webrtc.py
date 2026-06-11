@@ -279,6 +279,21 @@ def test_browser_pipeline_uses_soniox_stt_for_bangla_agents(monkeypatch) -> None
     )
 
 
+def test_browser_pipeline_uses_soniox_stt_when_tts_is_soniox(monkeypatch) -> None:
+    monkeypatch.setattr(browser_webrtc.settings, "soniox_api_key", "soniox-key")
+
+    assert (
+        _pipeline_stt_provider_for_browser(
+            {
+                "language": "en-US",
+                "runtimeSettings": {"sttProvider": "deepgram"},
+                "voice": {"provider": "soniox"},
+            }
+        )
+        == "soniox"
+    )
+
+
 def test_browser_pipeline_preserves_deepgram_when_soniox_key_is_missing(monkeypatch) -> None:
     monkeypatch.setattr(browser_webrtc.settings, "soniox_api_key", "")
 

@@ -296,10 +296,14 @@ def _with_bangla_only_guard(system_prompt: str) -> str:
 def _pipeline_stt_provider_for_browser(agent: dict[str, Any]) -> str:
     provider = pipeline_stt_provider(agent)
     # Browser/WebRTC is the most latency-sensitive path. If an existing Bangla
-    # agent still has the older Deepgram setting, prefer Soniox when available:
-    # Soniox is already required for Bangla TTS, accepts Bangla language hints,
-    # and is configured with vad_force_turn_endpoint=True in the shared builder.
-    if provider == "deepgram" and soniox_language(agent) == "bn" and settings.soniox_api_key:
+    # or Soniox-voice agent still has the older Deepgram setting, prefer Soniox
+    # when available: Soniox accepts Bangla/English hints and is configured with
+    # vad_force_turn_endpoint=True in the shared builder.
+    if (
+        provider == "deepgram"
+        and settings.soniox_api_key
+        and (soniox_language(agent) == "bn" or pipeline_tts_provider(agent) == "soniox")
+    ):
         return "soniox"
     return provider
 

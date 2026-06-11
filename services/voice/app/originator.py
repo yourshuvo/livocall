@@ -87,22 +87,28 @@ async def resolve_outbound_gateway(org_id: str, agent_id: str, from_e164: str | 
     """Pick a sofia gateway slug + the from_e164 to use.
 
     Strategy:
-    1. If from_e164 is provided, find the matching org PhoneNumber and use its providerSlug.
-    2. Else pick any outboundEnabled PhoneNumber in the org.
-    3. Else fall back to settings.fs_default_gateway and settings.default_outbound_caller_id.
+    1. If from_e164 is provided and that PhoneNumber is outbound-enabled,
+       use its providerSlug.
+    2. Else pick any outboundEnabled PhoneNumber in the org, preserving the
+       requested caller ID when it belongs to the org.
+    3. Else fall back to settings.fs_default_gateway and the requested org
+       caller ID or settings.default_outbound_caller_id.
     """
     db = get_db()
     org_oid = ObjectId(org_id)
+    requested_cli = ""
     if from_e164:
         num = await db["phonenumbers"].find_one({"orgId": org_oid, "e164": from_e164})
         if num:
+            requested_cli = str(num.get("e164") or from_e164)
+        if num and num.get("outboundEnabled") is True and str(num.get("providerSlug") or ""):
             return num["providerSlug"], num["e164"]
     fallback = await db["phonenumbers"].find_one(
         {"orgId": org_oid, "outboundEnabled": True, "providerSlug": {"$exists": True, "$ne": ""}}
     )
     if fallback:
-        return fallback["providerSlug"], fallback["e164"]
-    return settings.fs_default_gateway, settings.default_outbound_caller_id
+        return fallback["providerSlug"], requested_cli or fallback["e164"]
+    return settings.fs_default_gateway, requested_cli or settings.default_outbound_caller_id
 
 
 async def find_org_for_agent(agent_id: str) -> dict[str, Any] | None:

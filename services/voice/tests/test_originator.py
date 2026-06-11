@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+from bson import ObjectId
+
+from app import originator
+
+
+class FakeCollection:
+    def __init__(self, docs: list[dict[str, Any]]) -> None:
+        self.docs = docs
+
+    async def find_one(self, flt: dict[str, Any]) -> dict[str, Any] | None:
+        for doc in self.docs:
+            if _matches(doc, flt):
+                return doc
+        return None
+
+
+def _matches(doc: dict[str, Any], flt: dict[str, Any]) -> bool:
+    for key, expected in flt.items():
+        actual = doc.get(key)
+        if isinstance(expected, dict):
+            for op, value in expected.items():
+                if op == "$exists" and ((key in doc) is not bool(value)):
+                    return False
+                if op == "$ne" and actual == value:
+                    return False
+            continue
+        if actual != expected:
+            return False
+    return True
+
+
+@pytest.mark.asyncio
+async def test_requested_from_number_does_not_force_stale_non_outbound_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    org_id = ObjectId()
+    stale_cli = "+8809639148184"
+    monkeypatch.setattr(originator.settings, "fs_default_gateway", "sip_j")
+    monkeypatch.setattr(originator.settings, "default_outbound_caller_id", stale_cli)
+    monkeypatch.setattr(
+        originator,
+        "get_db",
+        lambda: {
+            "phonenumbers": FakeCollection(
+                [
+                    {
+                        "orgId": org_id,
+                        "e164": stale_cli,
+                        "providerSlug": "sip_103_15_140_151",
+                        "outboundEnabled": False,
+                    }
+                ]
+            )
+        },
+    )
+
+    gateway, cli = await originator.resolve_outbound_gateway(str(org_id), "agent-1", stale_cli)
+
+    assert gateway == "sip_j"
+    assert cli == stale_cli
+
+
+@pytest.mark.asyncio
+async def test_requested_from_number_uses_matching_gateway_when_outbound_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    org_id = ObjectId()
+    cli = "+8809639148184"
+    monkeypatch.setattr(
+        originator,
+        "get_db",
+        lambda: {
+            "phonenumbers": FakeCollection(
+                [
+                    {
+                        "orgId": org_id,
+                        "e164": cli,
+                        "providerSlug": "sip_j",
+                        "outboundEnabled": True,
+                    }
+                ]
+            )
+        },
+    )
+
+    gateway, selected_cli = await originator.resolve_outbound_gateway(str(org_id), "agent-1", cli)
+
+    assert gateway == "sip_j"
+    assert selected_cli == cli
