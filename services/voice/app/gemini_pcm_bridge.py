@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from time import perf_counter_ns
@@ -16,9 +16,6 @@ from app.agent_runtime import (
     build_system_prompt,
     execute_agent_tool,
     gemini_live_model,
-    gemini_live_vad_prefix_padding_ms,
-    gemini_live_vad_silence_ms,
-    gemini_tool_declarations,
     gemini_voice,
 )
 from app.audio_codec import (
@@ -29,9 +26,10 @@ from app.audio_codec import (
     split_pcmu_20ms,
 )
 from app.db import get_db
+from app.gemini_live_config import live_config
 from app.persistence import TranscriptBuffer
 from app.settings import settings
-from app.tiers._common import echo_until_close, fetch_agent_for_call
+from app.tiers._common import close_unavailable, fetch_agent_for_call
 from app.warm_sessions import warm_sessions
 from app.web_client import post_voice_event
 
@@ -113,7 +111,7 @@ class GeminiPcmBridge:
     def for_phone_call(cls) -> GeminiPcmBridge:
         return cls(
             wire_format="pcmu",
-            input_queue_frames=2,
+            input_queue_frames=150,
             bridge_mode="phone",
         )
 
@@ -136,7 +134,7 @@ class GeminiPcmBridge:
     ) -> None:
         if not settings.gemini_api_key:
             log.warning("gemini_pcm.no_key", hint="set GEMINI_API_KEY")
-            await echo_until_close(ws)
+            await close_unavailable(ws)
             return
 
         try:
@@ -144,7 +142,7 @@ class GeminiPcmBridge:
             from google.genai import types  # type: ignore[import-not-found]
         except ImportError:
             log.warning("gemini_pcm.google_genai_missing", hint="install pipecat-ai[google]")
-            await echo_until_close(ws)
+            await close_unavailable(ws)
             return
 
         warm_session = await warm_sessions.pop(call_id)
@@ -157,9 +155,13 @@ class GeminiPcmBridge:
             prompt = prompt or warm_session.prompt
             metadata = {**warm_session.metadata, **(metadata or {})}
 
-        system_prompt = await build_system_prompt(agent, prompt)
-        model = gemini_live_model(agent)
-        voice = gemini_voice(agent)
+        system_prompt = (
+            warm_session.system_prompt
+            if warm_session is not None and warm_session.system_prompt
+            else await build_system_prompt(agent, prompt)
+        )
+        model = warm_session.model if warm_session is not None else gemini_live_model(agent)
+        voice = warm_session.voice if warm_session is not None else gemini_voice(agent)
         client = genai.Client(api_key=settings.gemini_api_key)
 
         input_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=self.input_queue_frames)
@@ -182,7 +184,7 @@ class GeminiPcmBridge:
             for reconnect_attempt in range(3):
                 if reader.done():
                     break
-                config = _live_config(
+                config = live_config(
                     types,
                     system_prompt,
                     voice,
@@ -190,14 +192,17 @@ class GeminiPcmBridge:
                     session_resumption_handle=session_state.get("handle"),
                 )
                 try:
-                    async with client.aio.live.connect(
-                        model=model.replace("models/", ""),
+                    async with _connected_live_session(
+                        client,
+                        model=model,
                         config=config,
-                    ) as session:
+                        warm_session=warm_session,
+                        reconnect_attempt=reconnect_attempt,
+                    ) as (session, preconnected):
                         log.info(
                             "gemini_pcm.connected",
                             call_id=call_id,
-                            preconnected=warm_session is not None,
+                            preconnected=preconnected,
                             resumed=bool(session_state.get("handle")),
                             model=model,
                             voice=voice,
@@ -280,7 +285,7 @@ class GeminiPcmBridge:
                     await ws.close(code=1011)
             else:
                 log.exception("gemini_pcm.error", call_id=call_id, error=str(exc))
-                await echo_until_close(ws)
+                await close_unavailable(ws)
         finally:
             if reader is not None and not reader.done():
                 reader.cancel()
@@ -288,45 +293,35 @@ class GeminiPcmBridge:
                     await reader
             await transcript.flush()
             await latency.persist()
+            if warm_session is not None:
+                await warm_session.close()
             await warm_sessions.cleanup(call_id)
 
 
-def _live_config(
-    types: Any,
-    system_prompt: str,
-    voice: str,
-    agent: dict[str, Any],
+def _live_config(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    return live_config(*args, **kwargs)
+
+
+@asynccontextmanager
+async def _connected_live_session(
+    client: Any,
     *,
-    session_resumption_handle: str | None = None,
-) -> dict[str, Any]:
-    config: dict[str, Any] = {
-        "response_modalities": ["AUDIO"],
-        "input_audio_transcription": {},
-        "output_audio_transcription": {},
-        "system_instruction": system_prompt,
-        "temperature": settings.gemini_live_temperature,
-        "max_output_tokens": settings.gemini_live_max_tokens,
-        "speech_config": {
-            "voice_config": {"prebuilt_voice_config": {"voice_name": voice}}
-        },
-        "realtime_input_config": {
-            "automatic_activity_detection": {
-                "disabled": False,
-                "prefix_padding_ms": gemini_live_vad_prefix_padding_ms(agent),
-                "silence_duration_ms": gemini_live_vad_silence_ms(agent),
-            }
-        },
-    }
-    if settings.gemini_live_context_compression_enabled:
-        config["context_window_compression"] = {"sliding_window": {}}
-    config["session_resumption"] = {"handle": session_resumption_handle}
-    declarations = gemini_tool_declarations(agent)
-    if declarations:
-        config["tools"] = [{"function_declarations": declarations}]
-    thinking_config = getattr(types, "ThinkingConfig", None)
-    if thinking_config is not None:
-        config["thinking_config"] = {"thinking_level": "minimal"}
-    return config
+    model: str,
+    config: dict[str, Any],
+    warm_session: Any | None,
+    reconnect_attempt: int,
+) -> AsyncIterator[tuple[Any, bool]]:
+    if reconnect_attempt == 0 and warm_session is not None and warm_session.live_session is not None:
+        try:
+            yield warm_session.live_session, True
+        finally:
+            await warm_session.close()
+        return
+    async with client.aio.live.connect(
+        model=model.replace("models/", ""),
+        config=config,
+    ) as session:
+        yield session, False
 
 
 async def _read_wire_audio(

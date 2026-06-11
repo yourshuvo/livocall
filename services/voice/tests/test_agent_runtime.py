@@ -9,14 +9,20 @@ from app import agent_runtime
 
 
 def test_gemini_live_vad_silence_default_and_clamp(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(agent_runtime.settings, "gemini_live_vad_silence_ms", 600)
+    monkeypatch.setattr(agent_runtime.settings, "gemini_live_vad_silence_ms", 250)
 
-    assert agent_runtime.gemini_live_vad_silence_ms({}) == 600
+    assert agent_runtime.gemini_live_vad_silence_ms({}) == 250
     assert (
         agent_runtime.gemini_live_vad_silence_ms(
             {"runtimeSettings": {"geminiLiveVadSilenceMs": 250}}
         )
-        == 500
+        == 250
+    )
+    assert (
+        agent_runtime.gemini_live_vad_silence_ms(
+            {"runtimeSettings": {"geminiLiveVadSilenceMs": 100}}
+        )
+        == 250
     )
     assert (
         agent_runtime.gemini_live_vad_silence_ms(

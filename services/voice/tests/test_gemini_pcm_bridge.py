@@ -90,7 +90,7 @@ def test_live_config_enforces_safe_gemini_vad_floor(monkeypatch: pytest.MonkeyPa
     assert config["realtime_input_config"]["automatic_activity_detection"] == {
         "disabled": False,
         "prefix_padding_ms": 100,
-        "silence_duration_ms": 500,
+        "silence_duration_ms": 250,
     }
 
 
@@ -103,10 +103,10 @@ def test_bridge_modes_keep_phone_and_browser_separate() -> None:
     browser = bridge.GeminiPcmBridge.for_browser_test()
 
     assert phone.wire_format == "pcmu"
-    assert phone.input_queue_frames == 2
+    assert phone.input_queue_frames >= 100
     assert not hasattr(phone, "barge_in_enabled")
     assert browser.wire_format == "pcm16"
-    assert browser.input_queue_frames > phone.input_queue_frames
+    assert browser.input_queue_frames < phone.input_queue_frames
     assert not hasattr(browser, "barge_in_enabled")
 
 
@@ -317,3 +317,44 @@ async def test_publish_transcript_falls_back_to_buffer(monkeypatch: pytest.Monke
 
     assert transcript.added == [("agent", "One moment.")]
     assert transcript.flushes == 1
+
+
+@pytest.mark.asyncio
+async def test_warm_session_prepare_opens_live_gemini_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import warm_sessions
+
+    manager = warm_sessions.WarmSessionManager()
+    fake_live_session = object()
+    fake_context = object()
+    opened: dict[str, object] = {}
+
+    async def fake_fetch_agent_for_call(agent_id: str, call_id: str) -> dict[str, object]:
+        opened["fetch"] = (agent_id, call_id)
+        return {"_id": agent_id, "tier": "gemini_live"}
+
+    async def fake_build_system_prompt(agent: dict[str, object], prompt: str = "") -> str:
+        opened["prompt"] = (agent, prompt)
+        return "system prompt"
+
+    async def fake_open_live_session(*, model: str, config: dict[str, object]) -> tuple[object, object]:
+        opened["live"] = (model, config)
+        return fake_context, fake_live_session
+
+    monkeypatch.setattr(warm_sessions, "fetch_agent_for_call", fake_fetch_agent_for_call)
+    monkeypatch.setattr(warm_sessions.settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(warm_sessions, "build_system_prompt", fake_build_system_prompt)
+    monkeypatch.setattr(warm_sessions, "gemini_live_model", lambda _agent: "models/test-live")
+    monkeypatch.setattr(warm_sessions, "gemini_voice", lambda _agent: "Puck")
+    monkeypatch.setattr(warm_sessions, "live_config", lambda *_args, **_kwargs: {"ok": True})
+    monkeypatch.setattr(warm_sessions, "_open_live_session", fake_open_live_session)
+
+    session = await manager.prepare("call-1", agent_id="agent-1", prompt="hello")
+
+    assert session.agent["_id"] == "agent-1"
+    assert session.system_prompt == "system prompt"
+    assert session.live_session is fake_live_session
+    assert session.live_context is fake_context
+    assert session.preconnected is True
+    assert opened["live"] == ("models/test-live", {"ok": True})

@@ -112,9 +112,9 @@ def runtime_bool(agent: dict[str, Any], key: str, default: bool) -> bool:
 def gemini_live_vad_silence_ms(agent: dict[str, Any]) -> int:
     value = runtime_int(agent, "geminiLiveVadSilenceMs", settings.gemini_live_vad_silence_ms)
     # Keep Gemini Live as the sole VAD owner, but do not force a long
-    # endpointing delay. A 500ms floor filters tiny pauses without making
-    # the caller wait after they finish speaking.
-    return max(500, min(2000, value))
+    # endpointing delay. The UI/env default is 250ms, so preserve that
+    # low-latency setting instead of silently clamping it to 500ms+.
+    return max(250, min(2000, value))
 
 
 def gemini_live_vad_prefix_padding_ms(agent: dict[str, Any]) -> int:

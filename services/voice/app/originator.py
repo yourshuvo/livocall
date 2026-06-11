@@ -180,7 +180,13 @@ async def originate_call(
     else:
         ws_url = _build_ws_url(call_doc_id=call_doc_id, agent_id=agent_id, tier=tier, metadata=metadata)
         if settings.gemini_preconnect_enabled and tier == "gemini_live":
-            await warm_sessions.prepare(call_doc_id, agent_id=agent_id, prompt="", metadata=metadata)
+            await warm_sessions.begin_prepare(
+                call_doc_id,
+                agent_id=agent_id,
+                prompt="",
+                metadata=metadata,
+                agent=agent,
+            )
         client = EslClient(_esl_config())
         try:
             await client.connect()
@@ -197,6 +203,9 @@ async def originate_call(
                 record_mode=record_mode,
                 consent_prompt_url=consent_prompt_url,
             )
+        except Exception:
+            await warm_sessions.cleanup(call_doc_id)
+            raise
         finally:
             await client.close()
 
@@ -262,7 +271,13 @@ async def create_inbound_call(
     inserted = await db["calls"].insert_one(call_doc)
     call_doc_id = str(inserted.inserted_id)
     if settings.gemini_preconnect_enabled and tier == "gemini_live":
-        await warm_sessions.prepare(call_doc_id, agent_id=str(agent["_id"]), prompt="", metadata=meta)
+        await warm_sessions.begin_prepare(
+            call_doc_id,
+            agent_id=str(agent["_id"]),
+            prompt="",
+            metadata=meta,
+            agent=agent,
+        )
     await post_voice_event(
         {
             "type": "call.started",

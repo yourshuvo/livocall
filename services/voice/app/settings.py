@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     gemini_live_language: str = Field(default="bn")
     gemini_live_temperature: float = Field(default=0.25)
     gemini_live_max_tokens: int = Field(default=512)
-    gemini_live_vad_silence_ms: int = Field(default=600)
+    gemini_live_vad_silence_ms: int = Field(default=250)
     gemini_live_vad_prefix_padding_ms: int = Field(default=100)
     gemini_live_context_compression_enabled: bool = Field(default=True)
     gemini_kb_tool_timeout_ms: int = Field(default=1200)
@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     pipecat_vad_confidence: float = Field(default=0.7)
     pipecat_vad_start_secs: float = Field(default=0.2)
     pipecat_vad_stop_secs: float = Field(default=0.2)
+    pipecat_vad_audio_idle_timeout_secs: float = Field(default=0.35)
     pipecat_vad_min_volume: float = Field(default=0.6)
 
     # Public ws URL FreeSWITCH should fork audio to. e.g. ws://voice.internal:8084/ws/audio

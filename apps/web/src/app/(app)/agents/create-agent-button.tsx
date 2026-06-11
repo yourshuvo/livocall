@@ -22,6 +22,10 @@ const DEFAULT_AGENT_PAYLOAD = {
   language: 'bn-en-mixed',
   voice: { provider: 'cartesia', voiceId: 'cimo', style: 'conversational' },
   prompt: { system: '', firstMessage: '', guardrails: '' },
+  runtimeSettings: {
+    transcriptionMode: 'speed',
+    geminiLiveVadSilenceMs: 250,
+  },
   knowledgeBaseIds: [],
   postCallWebhook: '',
 }

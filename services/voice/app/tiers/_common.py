@@ -8,14 +8,15 @@ directions. Each tier expects:
     if the trunk needs a different codec)
   * inbound  text   → control messages (keepalive, DTMF events, hangup hints)
 
-The fake-driver fallback echoes inbound audio back so end-to-end tests pass
-without paid AI keys.
+The legacy fake-driver echo helper is kept for isolated local experiments only;
+production tier setup failures close the websocket instead of echoing caller audio.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import suppress
 from typing import Any
 
 import structlog
@@ -25,7 +26,7 @@ log = structlog.get_logger()
 
 
 async def echo_until_close(ws: WebSocket) -> None:
-    """Echo inbound audio bytes back to the caller. Used as the no-keys fallback."""
+    """Echo inbound audio bytes back to the caller for isolated local experiments."""
     try:
         while True:
             msg = await ws.receive()
@@ -41,6 +42,18 @@ async def echo_until_close(ws: WebSocket) -> None:
                     log.info("ws.text", value=text[:200])
     except WebSocketDisconnect:
         return
+
+
+async def close_unavailable(ws: WebSocket, *, code: int = 1011) -> None:
+    """Close a media websocket when the selected AI path cannot run.
+
+    Echoing caller audio as a fallback makes users hear their own voice while
+    the UI still says "connecting". Close instead so the caller/dashboard sees
+    a real setup failure.
+    """
+
+    with suppress(Exception):
+        await ws.close(code=code)
 
 
 async def send_json(ws: WebSocket, payload: dict[str, Any]) -> None:

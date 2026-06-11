@@ -14,7 +14,7 @@ from app.agent_runtime import build_system_prompt, grok_language, grok_voice, gr
 from app.audio_codec import split_pcm16_16k_20ms, split_pcmu_20ms
 from app.persistence import TranscriptBuffer
 from app.settings import settings
-from app.tiers._common import echo_until_close, fetch_agent_for_call
+from app.tiers._common import close_unavailable, fetch_agent_for_call
 
 log = structlog.get_logger()
 
@@ -32,14 +32,14 @@ class GrokVoiceTier:
         log.info("grok_voice.start", call_id=call_id, agent_id=agent_id)
         if not settings.xai_api_key:
             log.warning("grok_voice.no_key", hint="set XAI_API_KEY to enable Grok Voice")
-            await echo_until_close(ws)
+            await close_unavailable(ws)
             return
 
         try:
             import websockets  # type: ignore[import-not-found]
         except ImportError:
             log.warning("grok_voice.websockets_missing", hint="uv sync installs websockets")
-            await echo_until_close(ws)
+            await close_unavailable(ws)
             return
 
         agent = await fetch_agent_for_call(agent_id, call_id)
@@ -79,7 +79,7 @@ class GrokVoiceTier:
             log.info("grok_voice.disconnected", call_id=call_id)
         except Exception as exc:  # noqa: BLE001
             log.exception("grok_voice.runner_error", error=str(exc), call_id=call_id)
-            await echo_until_close(ws)
+            await close_unavailable(ws)
         finally:
             await transcript.flush()
 

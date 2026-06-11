@@ -32,7 +32,7 @@ const RuntimeSettings = z
     maxDurationHours: z.number().min(0.25).max(4).optional(),
     handoffTarget: z.string().max(240).optional(),
     handoffRules: z.string().max(2000).optional(),
-    geminiLiveVadSilenceMs: z.number().int().min(300).max(2000).optional(),
+    geminiLiveVadSilenceMs: z.number().int().min(250).max(2000).optional(),
     geminiKbToolTimeoutMs: z.number().int().min(300).max(5000).optional(),
     geminiMemoryEnabled: z.boolean().optional(),
     geminiKbCacheEnabled: z.boolean().optional(),

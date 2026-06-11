@@ -17,6 +17,11 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { BanglaAgentBuilder } from '@/components/app/bangla-agent-builder'
 import { api } from '@/lib/api-fetch'
+import { shouldPrewarmBrowserVoice } from '@/lib/browser-test-prewarm'
+import {
+  isLocalPipecatAudioTrack,
+  shouldAttachRemotePipecatAudioTrack,
+} from '@/lib/pipecat-track-routing'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/cn'
 import { defaultLanguageForTier, languageOptionsForTier } from '@/types/agent'
@@ -159,6 +164,23 @@ interface BrowserAudioSession {
   remoteRecordTrack?: MediaStreamTrack
   recordingCallId?: string
   recordingUploadStarted?: boolean
+}
+
+type BrowserWebrtcModules = [
+  typeof import('@pipecat-ai/client-js'),
+  typeof import('@pipecat-ai/small-webrtc-transport'),
+]
+
+let browserWebrtcModulesPromise: Promise<BrowserWebrtcModules> | null = null
+
+function preloadBrowserWebrtcClient() {
+  if (!browserWebrtcModulesPromise) {
+    browserWebrtcModulesPromise = Promise.all([
+      import('@pipecat-ai/client-js'),
+      import('@pipecat-ai/small-webrtc-transport'),
+    ]) as Promise<BrowserWebrtcModules>
+  }
+  return browserWebrtcModulesPromise
 }
 
 /* ----------------------------- Engine catalog ----------------------------- */
@@ -707,7 +729,7 @@ export function AgentEditor({
   const [pauseBefore, setPauseBefore] = useState(runtime.pauseBeforeSpeakingSec ?? 0)
   const [denoise, setDenoise] = useState<'none' | 'mixed' | 'off'>(runtime.denoiseMode || 'none')
   const [transMode, setTransMode] = useState<'speed' | 'accuracy' | 'custom'>(
-    runtime.transcriptionMode || 'accuracy',
+    runtime.transcriptionMode || 'speed',
   )
   const [sttProvider, setSttProvider] = useState<'soniox' | 'deepgram'>(
     runtime.sttProvider || 'soniox',
@@ -725,7 +747,7 @@ export function AgentEditor({
   const [handoffTarget, setHandoffTarget] = useState(runtime.handoffTarget || '')
   const [handoffRules, setHandoffRules] = useState(runtime.handoffRules || '')
   const [geminiLiveVadSilenceMs, setGeminiLiveVadSilenceMs] = useState(
-    runtime.geminiLiveVadSilenceMs ?? 600,
+    runtime.geminiLiveVadSilenceMs ?? 250,
   )
   const [geminiKbToolTimeoutMs, setGeminiKbToolTimeoutMs] = useState(
     runtime.geminiKbToolTimeoutMs ?? 1200,
@@ -1009,8 +1031,9 @@ export function AgentEditor({
   }
 
   function prewarmBrowserTest() {
-    if (tier !== 'gemini_live' || browserPrewarmStartedRef.current) return
+    if (!shouldPrewarmBrowserVoice(tier, browserPrewarmStartedRef.current)) return
     browserPrewarmStartedRef.current = true
+    void preloadBrowserWebrtcClient().catch(() => undefined)
     void fetch('/api/voice/browser-prewarm', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -1909,13 +1932,13 @@ export function AgentEditor({
                     <Field label="VAD silence (ms)">
                       <Input
                         type="number"
-                        min={300}
+                        min={250}
                         max={2000}
                         step={50}
                         value={geminiLiveVadSilenceMs}
                         onChange={(e) =>
                           setGeminiLiveVadSilenceMs(
-                            Math.max(300, Math.min(2000, Number(e.target.value) || 600)),
+                            Math.max(250, Math.min(2000, Number(e.target.value) || 250)),
                           )
                         }
                       />
@@ -3203,10 +3226,7 @@ async function connectBrowserWebrtcSession(
     onError: () => void
   },
 ) {
-  const [{ PipecatClient }, { SmallWebRTCTransport }] = await Promise.all([
-    import('@pipecat-ai/client-js'),
-    import('@pipecat-ai/small-webrtc-transport'),
-  ])
+  const [{ PipecatClient }, { SmallWebRTCTransport }] = await preloadBrowserWebrtcClient()
   const iceServers = session.iceServers ?? []
 
   const client = new PipecatClient({
@@ -3229,18 +3249,20 @@ async function connectBrowserWebrtcSession(
       onBotDisconnected: () => {
         handlers.onDisconnected()
       },
-      onTrackStarted: (track) => {
-        if (isLocalPipecatAudioTrack(client, track)) {
+      onTrackStarted: (track, participant) => {
+        const localAudioTrack = currentLocalPipecatAudioTrack(client)
+        if (isLocalPipecatAudioTrack(track, participant, localAudioTrack)) {
           if (track.kind === 'audio') {
             audioSession.localRecordTrack = track
             maybeStartBrowserRecording(audioSession, session.callId)
           }
           return
         }
+        if (!shouldAttachRemotePipecatAudioTrack(track, participant, localAudioTrack)) return
         attachBrowserWebrtcAudioTrack(audioSession, track, session.callId)
       },
-      onTrackStopped: (track) => {
-        if (isLocalPipecatAudioTrack(client, track)) return
+      onTrackStopped: (track, participant) => {
+        if (isLocalPipecatAudioTrack(track, participant, currentLocalPipecatAudioTrack(client))) return
         if (track.kind !== 'audio') return
         audioSession.remoteAudio?.pause()
         audioSession.remoteAudio?.remove()
@@ -3385,12 +3407,11 @@ async function uploadBrowserTestRecording(callId: string, blob: Blob) {
   }
 }
 
-function isLocalPipecatAudioTrack(client: PipecatClient, track: MediaStreamTrack) {
-  if (track.kind !== 'audio') return false
+function currentLocalPipecatAudioTrack(client: PipecatClient) {
   try {
-    return client.tracks().local.audio?.id === track.id
+    return client.tracks().local.audio
   } catch {
-    return false
+    return undefined
   }
 }
 

@@ -399,7 +399,9 @@ async def run_browser_pipeline_bot(
             VADProcessor,
         )
         from pipecat.services.google.llm import GoogleLLMService  # type: ignore[import-not-found]
-        from pipecat.transports.base_transport import TransportParams  # type: ignore[import-not-found]
+        from pipecat.transports.base_transport import (
+            TransportParams,  # type: ignore[import-not-found]
+        )
         from pipecat.transports.smallwebrtc.transport import (  # type: ignore[import-not-found]
             SmallWebRTCTransport,
         )
@@ -409,6 +411,8 @@ async def run_browser_pipeline_bot(
             _build_tts,
             _context_terms,
             _missing_pipeline_keys,
+            _pipeline_transcription_mode,
+            _pipeline_vad_audio_idle_timeout_secs,
             _pipeline_vad_stop_secs,
         )
     except ImportError as exc:
@@ -439,7 +443,7 @@ async def run_browser_pipeline_bot(
         system_prompt = _with_bangla_only_guard(system_prompt)
     model = pipeline_model(agent)
     runtime = runtime_settings(agent)
-    trans_mode = str(runtime.get("transcriptionMode") or "accuracy")
+    trans_mode = _pipeline_transcription_mode(runtime)
     context_terms = _context_terms(runtime)
     started_at = datetime.now(UTC)
     outcome = "completed"
@@ -465,10 +469,16 @@ async def run_browser_pipeline_bot(
                 min_volume=settings.pipecat_vad_min_volume,
             ),
         ),
+        audio_idle_timeout=_pipeline_vad_audio_idle_timeout_secs(trans_mode),
     )
     stt = _build_stt(stt_provider, agent, trans_mode, context_terms, call_id)
     llm = GoogleLLMService(api_key=settings.gemini_api_key, model=model)
-    tts = _build_tts(tts_provider, agent, trans_mode)
+    tts = _build_tts(
+        tts_provider,
+        agent,
+        trans_mode,
+        output_sample_rate=settings.sample_rate_out,
+    )
     initial_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
     if _should_start_with_ai(agent):
         initial_messages.append(
@@ -614,7 +624,6 @@ async def run_browser_gemini_bot(
         from pipecat.transports.smallwebrtc.transport import (
             SmallWebRTCTransport,  # type: ignore[import-not-found]
         )
-        from pipecat.workers.runner import WorkerRunner  # type: ignore[import-not-found]
     except ImportError as exc:
         log.warning(
             "browser_webrtc.pipecat_missing",

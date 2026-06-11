@@ -225,7 +225,7 @@ function builtInPublicAgentPatch() {
     runtimeSettings: {
       welcomeMode: 'ai' as const,
       welcomeKind: 'static' as const,
-      geminiLiveVadSilenceMs: 600,
+      geminiLiveVadSilenceMs: 250,
       geminiKbToolTimeoutMs: 1200,
       geminiMemoryEnabled: true,
       geminiKbCacheEnabled: false,

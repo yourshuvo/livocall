@@ -25,7 +25,7 @@ from app.agent_runtime import (
 )
 from app.persistence import TranscriptBuffer
 from app.settings import settings
-from app.tiers._common import echo_until_close, fetch_agent_for_call
+from app.tiers._common import close_unavailable, fetch_agent_for_call
 
 log = structlog.get_logger()
 
@@ -53,7 +53,7 @@ class PipelineTier:
                 missing=missing,
                 hint="set GEMINI_API_KEY plus the selected STT/TTS provider keys",
             )
-            await echo_until_close(ws)
+            await close_unavailable(ws)
             return
 
         try:
@@ -90,14 +90,15 @@ class PipelineTier:
                 missing_module=getattr(exc, "name", ""),
                 error=str(exc),
             )
-            await echo_until_close(ws)
+            await close_unavailable(ws)
             return
 
         system_prompt = await build_system_prompt(agent, prompt)
         model = pipeline_model(agent)
         runtime = runtime_settings(agent)
-        trans_mode = str(runtime.get("transcriptionMode") or "accuracy")
+        trans_mode = _pipeline_transcription_mode(runtime)
         context_terms = _context_terms(runtime)
+        output_sample_rate = _phone_pipeline_output_sample_rate()
 
         try:
             transport = FastAPIWebsocketTransport(
@@ -106,7 +107,7 @@ class PipelineTier:
                     audio_in_enabled=True,
                     audio_out_enabled=True,
                     audio_in_sample_rate=settings.sample_rate_in,
-                    audio_out_sample_rate=settings.sample_rate_out,
+                    audio_out_sample_rate=output_sample_rate,
                 ),
             )
             vad = VADProcessor(
@@ -119,13 +120,19 @@ class PipelineTier:
                         min_volume=settings.pipecat_vad_min_volume,
                     ),
                 ),
+                audio_idle_timeout=_pipeline_vad_audio_idle_timeout_secs(trans_mode),
             )
             stt = _build_stt(stt_provider, agent, trans_mode, context_terms, call_id)
             llm = GoogleLLMService(
                 api_key=settings.gemini_api_key,
                 model=model,
             )
-            tts = _build_tts(tts_provider, agent, trans_mode)
+            tts = _build_tts(
+                tts_provider,
+                agent,
+                trans_mode,
+                output_sample_rate=output_sample_rate,
+            )
             context = LLMContext([{"role": "system", "content": system_prompt}])
             user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
             pipeline = Pipeline(
@@ -172,7 +179,7 @@ class PipelineTier:
                     await buffer.flush()
         except Exception as exc:  # noqa: BLE001
             log.exception("tier2.runner_error", error=str(exc))
-            await echo_until_close(ws)
+            await close_unavailable(ws)
 
 
 def _missing_pipeline_keys(stt_provider: str, tts_provider: str) -> list[str]:
@@ -196,6 +203,34 @@ def _pipeline_vad_stop_secs(transcription_mode: str) -> float:
     if transcription_mode == "accuracy":
         return max(0.2, min(0.8, settings.pipecat_vad_stop_secs + 0.1))
     return max(0.12, min(1.0, settings.pipecat_vad_stop_secs))
+
+
+def _pipeline_transcription_mode(runtime: dict[str, Any]) -> str:
+    mode = str(runtime.get("transcriptionMode") or "speed").strip().lower()
+    return mode if mode in {"speed", "accuracy", "custom"} else "speed"
+
+
+def _phone_pipeline_output_sample_rate() -> int:
+    # /ws/audio is driven by mod_audio_fork raw L16 frames. It is configured
+    # with settings.sample_rate_in and expects the same rate in both directions.
+    return settings.sample_rate_in
+
+
+def _pipeline_vad_audio_idle_timeout_secs(transcription_mode: str) -> float:
+    raw = float(settings.pipecat_vad_audio_idle_timeout_secs)
+    if raw <= 0:
+        return 0.0
+    upper = 0.5 if transcription_mode == "speed" else 0.8
+    target = min(raw, 0.25) if transcription_mode == "speed" else raw
+    return max(0.15, min(upper, target))
+
+
+def _soniox_tts_text_aggregation_mode(transcription_mode: str) -> Any:
+    from pipecat.services.tts_service import TextAggregationMode  # type: ignore[import-not-found]
+
+    if transcription_mode == "custom":
+        return TextAggregationMode.SENTENCE
+    return TextAggregationMode.TOKEN
 
 
 def _context_terms(runtime: dict[str, Any]) -> list[str]:
@@ -267,24 +302,24 @@ def _build_stt(
     )
 
 
-def _build_tts(provider: str, agent: dict[str, Any], transcription_mode: str) -> Any:
+def _build_tts(
+    provider: str,
+    agent: dict[str, Any],
+    transcription_mode: str,
+    *,
+    output_sample_rate: int | None = None,
+) -> Any:
+    sample_rate = output_sample_rate or settings.sample_rate_out
     if provider == "soniox":
         from pipecat.services.soniox.tts import SonioxTTSService  # type: ignore[import-not-found]
-        from pipecat.services.tts_service import (
-            TextAggregationMode,  # type: ignore[import-not-found]
-        )
         from pipecat.transcriptions.language import Language  # type: ignore[import-not-found]
 
         return SonioxTTSService(
             api_key=settings.soniox_api_key,
             url=settings.soniox_tts_url,
-            sample_rate=settings.sample_rate_out,
+            sample_rate=sample_rate,
             audio_format="pcm_s16le",
-            text_aggregation_mode=(
-                TextAggregationMode.TOKEN
-                if transcription_mode == "speed"
-                else TextAggregationMode.SENTENCE
-            ),
+            text_aggregation_mode=_soniox_tts_text_aggregation_mode(transcription_mode),
             settings=SonioxTTSService.Settings(
                 model=settings.soniox_tts_model,
                 voice=soniox_voice(agent),
@@ -297,7 +332,7 @@ def _build_tts(provider: str, agent: dict[str, Any], transcription_mode: str) ->
     voice_id = cartesia_voice_id(agent)
     tts_kwargs: dict[str, Any] = {
         "api_key": settings.cartesia_api_key,
-        "sample_rate": settings.sample_rate_out,
+        "sample_rate": sample_rate,
     }
     if voice_id:
         tts_kwargs["settings"] = CartesiaTTSService.Settings(voice=voice_id)
