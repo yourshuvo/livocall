@@ -13,11 +13,17 @@ import { apiError, withErrors } from '@/lib/errors'
 import { voiceClient } from '@/lib/voice-client'
 import { resolveAgentTools } from '@/lib/secret-vault'
 import { getOriginationGuard } from '@/lib/billing-caps'
+import { normalizeBdPhoneToE164 } from '@/lib/phone-number'
+
+const PhoneInput = z.preprocess(
+  (value) => (typeof value === 'string' ? normalizeBdPhoneToE164(value) : value),
+  z.string().regex(/^\+\d{8,15}$/),
+)
 
 const Body = z.object({
   agentId: z.string(),
-  toE164: z.string().regex(/^\+\d{8,15}$/),
-  fromE164: z.string().regex(/^\+\d{8,15}$/).optional(),
+  toE164: PhoneInput,
+  fromE164: PhoneInput.optional(),
   metadata: z.record(z.string()).optional(),
 })
 

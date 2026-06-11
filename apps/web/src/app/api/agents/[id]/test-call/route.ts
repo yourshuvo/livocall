@@ -14,13 +14,16 @@ import { apiError, withErrors } from '@/lib/errors'
 import { voiceClient } from '@/lib/voice-client'
 import { resolveAgentTools } from '@/lib/secret-vault'
 import { getOriginationGuard } from '@/lib/billing-caps'
+import { normalizeBdPhoneToE164 } from '@/lib/phone-number'
+
+const PhoneInput = z.preprocess(
+  (value) => (typeof value === 'string' ? normalizeBdPhoneToE164(value) : value),
+  z.string().regex(/^\+\d{8,15}$/, 'enter a valid phone number'),
+)
 
 const Body = z.object({
-  toE164: z.string().regex(/^\+\d{8,15}$/, 'must be E.164'),
-  fromE164: z
-    .string()
-    .regex(/^\+\d{8,15}$/, 'must be E.164')
-    .optional(),
+  toE164: PhoneInput,
+  fromE164: PhoneInput.optional(),
 })
 
 export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {

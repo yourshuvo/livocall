@@ -83,7 +83,13 @@ def audio_fork_args(ws_url: str) -> str:
     return " ".join(parts)
 
 
-async def resolve_outbound_gateway(org_id: str, agent_id: str, from_e164: str | None) -> tuple[str, str]:
+async def resolve_outbound_gateway(
+    org_id: str,
+    agent_id: str,
+    from_e164: str | None,
+    *,
+    prefer_default_gateway: bool = False,
+) -> tuple[str, str]:
     """Pick a sofia gateway slug + the from_e164 to use.
 
     Strategy:
@@ -101,6 +107,8 @@ async def resolve_outbound_gateway(org_id: str, agent_id: str, from_e164: str | 
         num = await db["phonenumbers"].find_one({"orgId": org_oid, "e164": from_e164})
         if num:
             requested_cli = str(num.get("e164") or from_e164)
+        if prefer_default_gateway and settings.fs_default_gateway:
+            return settings.fs_default_gateway, requested_cli or from_e164
         if num and num.get("outboundEnabled") is True and str(num.get("providerSlug") or ""):
             return num["providerSlug"], num["e164"]
     fallback = await db["phonenumbers"].find_one(
@@ -136,7 +144,12 @@ async def originate_call(
         # caller (web) authoritatively sets tier; record both for audit
         log.warning("originate.tier_mismatch", agent_tier=agent.get("tier"), req_tier=tier)
     org_id = str(agent["orgId"])
-    gateway, cli = await resolve_outbound_gateway(org_id, agent_id, from_e164)
+    gateway, cli = await resolve_outbound_gateway(
+        org_id,
+        agent_id,
+        from_e164,
+        prefer_default_gateway=(metadata or {}).get("source") == "dashboard-test",
+    )
     org = await db["orgs"].find_one({"_id": agent["orgId"]}) or {}
     disclosure_url = str(org.get("btrcDisclosureAudioUrl") or "")
     recording_consent = str(org.get("recordingConsent") or "optional")

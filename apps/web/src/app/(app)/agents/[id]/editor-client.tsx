@@ -30,6 +30,7 @@ import {
 } from '@/lib/pipecat-track-routing'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/cn'
+import { isE164, normalizeBdPhoneToE164 } from '@/lib/phone-number'
 import { defaultLanguageForTier, languageOptionsForTier } from '@/types/agent'
 import type { PipecatClient } from '@pipecat-ai/client-js'
 
@@ -1114,16 +1115,18 @@ export function AgentEditor({
   }
 
   function runTestCall() {
-    if (!/^\+\d{8,15}$/.test(toE164)) {
-      toast('Enter a valid E.164 number (e.g. +8801711000000)', 'error')
+    const normalizedTo = normalizeBdPhoneToE164(toE164)
+    const normalizedFrom = fromE164 ? normalizeBdPhoneToE164(fromE164) : ''
+    if (!isE164(normalizedTo)) {
+      toast('Enter a valid number, e.g. 01780614365 or +8801780614365', 'error')
       return
     }
     stopBrowserTest(false)
     start(async () => {
       try {
         await api.post(`/api/agents/${initial.id}/test-call`, {
-          toE164,
-          fromE164: fromE164 || undefined,
+          toE164: normalizedTo,
+          fromE164: normalizedFrom || undefined,
         })
         toast('Test call originated — watch the call log', 'success')
         setTestOpen(false)

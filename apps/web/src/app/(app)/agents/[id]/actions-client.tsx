@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/ui/icon'
 import { api } from '@/lib/api-fetch'
 import { useToast } from '@/components/ui/toast'
+import { isE164, normalizeBdPhoneToE164 } from '@/lib/phone-number'
 
 export function AgentActions({
   agentId,
@@ -45,13 +46,14 @@ export function AgentActions({
   }
 
   function runTestCall() {
-    if (!/^\+\d{8,15}$/.test(toE164)) {
-      toast('Enter a valid E.164 number (e.g. +8801711000000)', 'error')
+    const normalizedTo = normalizeBdPhoneToE164(toE164)
+    if (!isE164(normalizedTo)) {
+      toast('Enter a valid number, e.g. 01780614365 or +8801780614365', 'error')
       return
     }
     start(async () => {
       try {
-        await api.post(`/api/agents/${agentId}/test-call`, { toE164 })
+        await api.post(`/api/agents/${agentId}/test-call`, { toE164: normalizedTo })
         toast('Test call originated — watch the call log', 'success')
         setTestOpen(false)
         setToE164('')

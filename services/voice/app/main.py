@@ -16,7 +16,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app import event_bridge, freeswitch_controller, originator
 from app.browser_webrtc import (
@@ -236,6 +236,15 @@ class OriginateRequest(BaseModel):
     tier: str  # 'gemini_live' | 'grok_voice' | 'pipeline' | 'dtmf'
     metadata: dict[str, str] = Field(default_factory=dict)
     tools: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("to_e164", "from_e164", mode="before")
+    @classmethod
+    def _normalize_bd_phone_numbers(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return _normalize_e164(value)
+        return value
 
 
 class TransferRequest(BaseModel):

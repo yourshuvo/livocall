@@ -92,3 +92,35 @@ async def test_requested_from_number_uses_matching_gateway_when_outbound_enabled
 
     assert gateway == "sip_j"
     assert selected_cli == cli
+
+
+@pytest.mark.asyncio
+async def test_dashboard_test_calls_prefer_default_gateway_even_with_stale_phone_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    org_id = ObjectId()
+    cli = "+8809639148184"
+    monkeypatch.setattr(originator.settings, "fs_default_gateway", "sip_j")
+    monkeypatch.setattr(
+        originator,
+        "get_db",
+        lambda: {
+            "phonenumbers": FakeCollection(
+                [
+                    {
+                        "orgId": org_id,
+                        "e164": cli,
+                        "providerSlug": "sip_103_15_140_151",
+                        "outboundEnabled": True,
+                    }
+                ]
+            )
+        },
+    )
+
+    gateway, selected_cli = await originator.resolve_outbound_gateway(
+        str(org_id), "agent-1", cli, prefer_default_gateway=True
+    )
+
+    assert gateway == "sip_j"
+    assert selected_cli == cli
