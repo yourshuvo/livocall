@@ -179,8 +179,23 @@ class EslClient:
             f"originate {{{chan_vars}}}sofia/gateway/{gateway}/{to_e164} "
             "livocall_park XML default"
         )
-        log.info("esl.originate", to=to_e164, agent_id=agent_id, tier=tier)
-        await self.bgapi(cmd)
+        log.info(
+            "esl.originate",
+            to=to_e164,
+            from_e164=from_e164,
+            gateway=gateway,
+            agent_id=agent_id,
+            tier=tier,
+            call_doc_id=call_doc_id,
+            channel_uuid=channel_uuid,
+        )
+        job_reply = await self.bgapi(cmd)
+        log.info(
+            "esl.originate_queued",
+            call_doc_id=call_doc_id,
+            channel_uuid=channel_uuid,
+            job_reply=job_reply,
+        )
         return channel_uuid
 
     async def hangup(self, uuid: str, cause: str = "NORMAL_CLEARING") -> str:

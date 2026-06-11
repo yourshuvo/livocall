@@ -66,6 +66,16 @@ async def on_event(ev: EslEvent) -> None:
         outcome = _outcome_from_cause(cause)
         cost = compute_cost(doc.get("tier", "pipeline"), duration_sec)
         ended = datetime.now(UTC)
+        log.info(
+            "call.hangup",
+            call_id=call_doc_id,
+            fs_uuid=ev.uuid,
+            cause=cause,
+            outcome=outcome,
+            billsec=duration_sec,
+            sip_term_status=ev.headers.get("variable_sip_term_status", ""),
+            sip_hangup_disposition=ev.headers.get("variable_sip_hangup_disposition", ""),
+        )
         await db["calls"].update_one(
             {"_id": doc["_id"]},
             {
