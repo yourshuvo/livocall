@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from app.tiers import pipeline
@@ -148,6 +150,31 @@ async def test_audio_fork_output_uses_uuid_broadcast_instead_of_returning_websoc
     assert broadcasts == [("call-1", b"\x01\x02")]
     assert ws.bytes_payloads == []
     assert ws.texts == []
+
+
+@pytest.mark.asyncio
+async def test_broadcast_sink_flushes_during_continuous_tts_without_waiting_for_silence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    broadcasts: list[bytes] = []
+
+    async def fake_broadcast(_call_id: str, audio: bytes) -> bool:
+        broadcasts.append(audio)
+        return True
+
+    monkeypatch.setattr(pipeline, "_broadcast_audio_to_freeswitch", fake_broadcast)
+    sink = pipeline._FreeswitchBroadcastSink(
+        "call-1",
+        debounce_secs=10.0,
+        flush_interval_secs=0.03,
+    )
+
+    await sink.write(b"first-")
+    await asyncio.sleep(0.015)
+    await sink.write(b"second")
+    await asyncio.sleep(0.04)
+
+    assert broadcasts == [b"first-second"]
 
 
 @pytest.mark.asyncio

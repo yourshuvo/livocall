@@ -66,6 +66,8 @@ def test_soniox_voice_and_language_mapping(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(agent_runtime.settings, "soniox_language", "bn")
 
     assert agent_runtime.soniox_voice({"voice": {"voiceId": "soniox:ava"}}) == "Ava"
+    assert agent_runtime.soniox_voice({"voice": {"voiceId": "aoede"}}) == "Adrian"
+    assert agent_runtime.soniox_voice({"voice": {"voiceId": "gemini-live:puck"}}) == "Adrian"
     assert agent_runtime.soniox_voice({"voice": {"voiceId": "Custom Voice"}}) == "Custom Voice"
     assert agent_runtime.soniox_language({"language": "bn-en-mixed"}) == "bn"
     assert agent_runtime.soniox_language({"language": "en-US"}) == "en"

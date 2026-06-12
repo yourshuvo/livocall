@@ -420,28 +420,43 @@ def _audio_fork_serializer() -> Any:
 
 
 class _FreeswitchBroadcastSink:
-    def __init__(self, call_id: str, *, debounce_secs: float | None = None) -> None:
+    def __init__(
+        self,
+        call_id: str,
+        *,
+        debounce_secs: float | None = None,
+        flush_interval_secs: float | None = None,
+    ) -> None:
         self._call_id = call_id
         if debounce_secs is None:
             debounce_secs = max(0.02, settings.playback_broadcast_debounce_ms / 1000)
+        if flush_interval_secs is None:
+            flush_interval_secs = max(0.2, settings.playback_broadcast_chunk_ms / 1000)
         self._debounce_secs = debounce_secs
+        self._flush_interval_secs = flush_interval_secs
         self._buffer = bytearray()
         self._lock = asyncio.Lock()
-        self._flush_task: asyncio.Task[None] | None = None
+        self._debounce_task: asyncio.Task[None] | None = None
+        self._interval_task: asyncio.Task[None] | None = None
 
     async def write(self, data: bytes) -> None:
         if not data:
             return
         async with self._lock:
+            start_interval_timer = not self._buffer and self._interval_task is None
             self._buffer.extend(data)
             current = asyncio.current_task()
-            if self._flush_task is not None and self._flush_task is not current:
-                self._flush_task.cancel()
-            self._flush_task = asyncio.create_task(self._delayed_flush())
+            if self._debounce_task is not None and self._debounce_task is not current:
+                self._debounce_task.cancel()
+            self._debounce_task = asyncio.create_task(self._delayed_flush(self._debounce_secs))
+            if start_interval_timer:
+                self._interval_task = asyncio.create_task(
+                    self._delayed_flush(self._flush_interval_secs)
+                )
 
-    async def _delayed_flush(self) -> None:
+    async def _delayed_flush(self, delay_secs: float) -> None:
         try:
-            await asyncio.sleep(self._debounce_secs)
+            await asyncio.sleep(delay_secs)
             await self.flush()
         except asyncio.CancelledError:
             return
@@ -449,9 +464,12 @@ class _FreeswitchBroadcastSink:
     async def flush(self) -> None:
         current = asyncio.current_task()
         async with self._lock:
-            if self._flush_task is not None and self._flush_task is not current:
-                self._flush_task.cancel()
-            self._flush_task = None
+            if self._debounce_task is not None and self._debounce_task is not current:
+                self._debounce_task.cancel()
+            if self._interval_task is not None and self._interval_task is not current:
+                self._interval_task.cancel()
+            self._debounce_task = None
+            self._interval_task = None
             audio = bytes(self._buffer)
             self._buffer.clear()
         if audio:

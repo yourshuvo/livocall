@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     playback_cache_dir: str = Field(default="/tmp/livocall-playback")
     playback_ttl_seconds: int = Field(default=300)
     playback_broadcast_debounce_ms: int = Field(default=120)
+    playback_broadcast_chunk_ms: int = Field(default=700)
 
     # Shared secret used to HMAC the `auth` query-string on /ws/audio. When set,
     # originator signs each call's WS URL and ws_audio rejects connections with

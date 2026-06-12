@@ -198,9 +198,13 @@ def soniox_voice(agent: dict[str, Any]) -> str:
     voice_value = agent.get("voice")
     voice = voice_value if isinstance(voice_value, dict) else {}
     raw = str(voice.get("voiceId") or settings.soniox_tts_voice).strip()
-    if raw.lower().startswith("soniox:"):
+    raw_lower = raw.lower()
+    if raw_lower.startswith("soniox:"):
         raw = raw.split(":", 1)[1]
-    return SONIOX_VOICE_ALIASES.get(raw.lower(), raw or settings.soniox_tts_voice)
+        raw_lower = raw.lower()
+    if raw_lower in GEMINI_VOICE_ALIASES or raw_lower.startswith("gemini-live:"):
+        return settings.soniox_tts_voice
+    return SONIOX_VOICE_ALIASES.get(raw_lower, raw or settings.soniox_tts_voice)
 
 
 def soniox_language(agent: dict[str, Any]) -> str:
