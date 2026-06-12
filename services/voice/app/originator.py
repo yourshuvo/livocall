@@ -115,13 +115,14 @@ def audio_fork_args(ws_url: str) -> str:
     # drachtio mod_audio_fork's optional args are positional:
     # [bugname] [metadata] [bidirectionalAudio_enabled]
     # [bidirectionalAudio_stream_enabled] [bidirectionalAudio_stream_samplerate].
-    # This module build rejects binary WS frames, so enable bidirectional
-    # playback but leave stream mode off; outbound audio is sent as JSON
-    # playAudio {audioContentType: raw, sampleRate, audioContent} messages.
+    # This module build accepts outbound raw WS frames only when stream mode is
+    # enabled with the literal string "true". In non-streaming JSON playAudio
+    # mode it accepts the message but only emits an internal play_audio event,
+    # which did not render to the SIP leg on BDIX.
     # Do not append "buffer/jitterbuffer" here; those are not supported options
     # for this module and would occupy the bidirectional flags.
     return " ".join(
-        [ws_url, "mono", str(sample_rate), "livocall", "null", "true", "false", str(sample_rate)]
+        [ws_url, "mono", str(sample_rate), "livocall", "null", "true", "true", str(sample_rate)]
     )
 
 

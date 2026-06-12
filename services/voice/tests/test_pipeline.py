@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from app.tiers import pipeline
@@ -42,6 +40,12 @@ def test_pipeline_vad_idle_timeout_is_bounded_and_faster_than_pipecat_default(
     assert pipeline._pipeline_vad_audio_idle_timeout_secs("accuracy") == 0.0
 
 
+def test_pipeline_user_turn_stop_timeout_is_short_for_phone_calls() -> None:
+    assert pipeline._pipeline_user_turn_stop_timeout_secs("speed") == 0.3
+    assert pipeline._pipeline_user_turn_stop_timeout_secs("custom") == 0.5
+    assert pipeline._pipeline_user_turn_stop_timeout_secs("accuracy") == 0.7
+
+
 def test_soniox_tts_streams_tokens_for_low_latency_modes() -> None:
     from pipecat.services.tts_service import TextAggregationMode
 
@@ -80,8 +84,42 @@ def test_pipeline_respects_non_ai_welcome_modes() -> None:
     assert pipeline._pipeline_opening_text(silent) == ""
 
 
+def test_direct_opening_is_seeded_into_llm_context_so_user_reply_is_not_orphaned() -> None:
+    messages = pipeline._initial_pipeline_context_messages(
+        "system rules",
+        opening_text="নমস্কার, আমি মার্ক বলছি।",
+        opening_spoken_directly=True,
+    )
+
+    assert messages == [
+        {"role": "system", "content": "system rules"},
+        {"role": "assistant", "content": "নমস্কার, আমি মার্ক বলছি।"},
+    ]
+
+
+def test_unsent_opening_is_not_seeded_into_llm_context() -> None:
+    messages = pipeline._initial_pipeline_context_messages(
+        "system rules",
+        opening_text="This has not played yet",
+        opening_spoken_directly=False,
+    )
+
+    assert messages == [{"role": "system", "content": "system rules"}]
+
+
+def test_pcm_stream_chunks_match_freeswitch_codec_frame_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
+    monkeypatch.setattr(pipeline.settings, "fs_codec_ms", 20)
+
+    chunks = pipeline._pcm_stream_chunks(bytes(range(256)) * 5)  # 1280 bytes total
+
+    assert [len(chunk) for chunk in chunks] == [640, 640]
+
+
 @pytest.mark.asyncio
-async def test_audio_fork_output_is_json_playaudio_for_non_streaming_bidirectional_mode(
+async def test_audio_fork_output_is_raw_pcm_for_streaming_bidirectional_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeAudioForkWebSocket:
@@ -100,20 +138,12 @@ async def test_audio_fork_output_is_json_playaudio_for_non_streaming_bidirection
 
     await pipeline._send_audio_to_freeswitch(ws, b"\x01\x02")
 
-    assert ws.bytes_payloads == []
-    assert len(ws.texts) == 1
-    assert json.loads(ws.texts[0]) == {
-        "type": "playAudio",
-        "data": {
-            "audioContentType": "raw",
-            "sampleRate": 16000,
-            "audioContent": "AQI=",
-        },
-    }
+    assert ws.bytes_payloads == [b"\x01\x02"]
+    assert ws.texts == []
 
 
 @pytest.mark.asyncio
-async def test_audio_fork_serializer_decodes_inbound_pcm_and_encodes_outbound_json(
+async def test_audio_fork_serializer_decodes_and_encodes_raw_pcm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from pipecat.frames.frames import InputAudioRawFrame, OutputAudioRawFrame
@@ -130,15 +160,7 @@ async def test_audio_fork_serializer_decodes_inbound_pcm_and_encodes_outbound_js
     outbound = await serializer.serialize(
         OutputAudioRawFrame(audio=b"\x03\x04", sample_rate=16000, num_channels=1)
     )
-    assert isinstance(outbound, str)
-    assert json.loads(outbound) == {
-        "type": "playAudio",
-        "data": {
-            "audioContentType": "raw",
-            "sampleRate": 16000,
-            "audioContent": "AwQ=",
-        },
-    }
+    assert outbound == b"\x03\x04"
 
 
 class FakeWebSocket:

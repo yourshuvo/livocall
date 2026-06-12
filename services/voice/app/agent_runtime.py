@@ -29,7 +29,7 @@ PIPELINE_MODEL_ALIASES = {
     "models/gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
     "gemini-3.1-flash": "gemini-3.1-flash",
     "models/gemini-3.1-flash": "gemini-3.1-flash",
-    "gemini-2.5-flash": "gemini-2.5-flash-lite",
+    "gemini-2.5-flash": "gemini-2.5-flash",
     "gpt-4.1": "gemini-3.1-flash",
     "gpt-4o-mini": "gemini-3.1-flash",
     "claude-3.5-sonnet": "gemini-3.1-flash",

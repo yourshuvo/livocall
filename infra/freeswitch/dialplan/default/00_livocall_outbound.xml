@@ -30,20 +30,20 @@
         <action application="set" data="record_sample_rate=16000"/>
 
         <!-- BTRC disclosure (Bengali regulator requirement): play pre-recorded file if configured. -->
-        <condition field="${livocall_disclosure_url}" expression=".+" break="on-false">
+        <condition field="${livocall_disclosure_url}" expression=".+" break="never">
           <action application="playback" data="${livocall_disclosure_url}"/>
         </condition>
 
         <!-- Recording consent — 'prompt' plays the consent line + waits for DTMF 1 (accept) / 2 (decline). -->
-        <condition field="${livocall_record}" expression="^prompt$" break="on-false">
+        <condition field="${livocall_record}" expression="^prompt$" break="never">
           <action application="read" data="1 1 ${livocall_consent_prompt} consent_digit 5000 #"/>
-          <condition field="${consent_digit}" expression="^1$" break="on-true">
+          <condition field="${consent_digit}" expression="^1$" break="never">
             <action application="record_session" data="${recordings_dir}/${call_doc_id}.wav"/>
           </condition>
         </condition>
 
         <!-- Recording consent — 'on' records unconditionally, 'off' skips. -->
-        <condition field="${livocall_record}" expression="^on$" break="on-false">
+        <condition field="${livocall_record}" expression="^on$" break="never">
           <action application="record_session" data="${recordings_dir}/${call_doc_id}.wav"/>
         </condition>
 

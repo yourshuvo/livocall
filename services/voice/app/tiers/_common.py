@@ -1,11 +1,12 @@
 """Shared helpers for tier runners.
 
-`mod_audio_fork` connects to /ws/audio with raw L16/16k PCM frames from
-FreeSWITCH into the app. App-to-FreeSWITCH playback uses this module build's
-JSON `playAudio` websocket control messages:
+`mod_audio_fork` connects to /ws/audio with raw L16/16k PCM frames in both
+directions. The FreeSWITCH side must start the bug with bidirectional streaming
+enabled (`... null true true 16000`) so app-to-FreeSWITCH bytes reach the live
+write-replace playout buffer:
 
   * inbound  bytes  → caller's audio (PCM s16le, 16 kHz, mono)
-  * outbound text   → JSON `playAudio` with base64 PCM s16le, 16 kHz, mono
+  * outbound bytes  → AI/TTS audio (PCM s16le, 16 kHz, mono)
   * inbound  text   → control messages (keepalive, DTMF events, hangup hints)
 
 The legacy fake-driver echo helper is kept for isolated local experiments only;

@@ -74,7 +74,7 @@ class Settings(BaseSettings):
 
     # Tier 2 fallback / Pipecat pipeline. Gemini Live intentionally does not use
     # these VAD settings because Gemini Live owns turn-taking natively.
-    pipeline_llm_model: str = Field(default="gemini-2.5-flash-lite")
+    pipeline_llm_model: str = Field(default="gemini-2.5-flash")
     pipeline_stt_provider: str = Field(default="soniox")
     pipeline_tts_provider: str = Field(default="soniox")
     deepgram_model: str = Field(default="nova-3")  # latest Deepgram STT model

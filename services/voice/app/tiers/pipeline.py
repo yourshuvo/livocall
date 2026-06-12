@@ -7,8 +7,10 @@ it owns native VAD/turn-taking itself.
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import Any
 
+import asyncio
 import structlog
 from fastapi import WebSocket
 
@@ -58,20 +60,13 @@ class PipelineTier:
             await close_unavailable(ws)
             return
 
-        answered = await _wait_for_call_answer(call_id)
-        if not answered:
-            log.info("tier2.unanswered_before_pipeline", call_id=call_id)
-            return
-
-        opening_spoken_directly = False
+        # The audio-fork websocket connects during pre-answer/ringing. Use that
+        # time to load Pipecat/Silero/SmartTurn and construct the pipeline;
+        # otherwise those synchronous imports/model loads block the event loop
+        # after answer and delay the opening audio by several seconds.
         opening_text = _pipeline_opening_text(agent)
-        if opening_text and tts_provider == "soniox":
-            opening_spoken_directly = await _speak_opening_direct(
-                ws,
-                agent=agent,
-                call_id=call_id,
-                text=opening_text,
-            )
+        opening_spoken_directly = bool(opening_text and tts_provider == "soniox")
+        opening_task: asyncio.Task[bool] | None = None
 
         try:
             from pipecat.audio.vad.silero import (  # type: ignore[import-not-found]
@@ -90,6 +85,7 @@ class PipelineTier:
             )
             from pipecat.processors.aggregators.llm_response_universal import (  # type: ignore[import-not-found]
                 LLMContextAggregatorPair,
+                LLMUserAggregatorParams,
             )
             from pipecat.processors.audio.vad_processor import (
                 VADProcessor,  # type: ignore[import-not-found]
@@ -108,6 +104,10 @@ class PipelineTier:
                 missing_module=getattr(exc, "name", ""),
                 error=str(exc),
             )
+            if opening_task is not None and not opening_task.done():
+                opening_task.cancel()
+                with suppress(Exception, asyncio.CancelledError):
+                    await opening_task
             await close_unavailable(ws)
             return
 
@@ -152,8 +152,20 @@ class PipelineTier:
                 trans_mode,
                 output_sample_rate=output_sample_rate,
             )
-            context = LLMContext([{"role": "system", "content": system_prompt}])
-            user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
+            context = LLMContext(
+                _initial_pipeline_context_messages(
+                    system_prompt,
+                    opening_text=opening_text,
+                    opening_spoken_directly=opening_spoken_directly,
+                )
+            )
+            user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+                context,
+                user_params=LLMUserAggregatorParams(
+                    audio_idle_timeout=_pipeline_vad_audio_idle_timeout_secs(trans_mode),
+                    user_turn_stop_timeout=_pipeline_user_turn_stop_timeout_secs(trans_mode),
+                ),
+            )
             pipeline = Pipeline(
                 [
                     transport.input(),
@@ -170,11 +182,24 @@ class PipelineTier:
                 pipeline,
                 params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
             )
-            opening_text = _pipeline_opening_text(agent)
-            if opening_text and not opening_spoken_directly:
+            runner = PipelineRunner(handle_sigint=False)
+            answered = await _wait_for_call_answer(call_id)
+            if not answered:
+                log.info("tier2.unanswered_before_pipeline", call_id=call_id)
+                return
+            if opening_text and opening_spoken_directly:
+                opening_task = asyncio.create_task(
+                    _speak_opening_direct(
+                        ws,
+                        agent=agent,
+                        call_id=call_id,
+                        text=opening_text,
+                    )
+                )
+                log.info("tier2.opening_direct_started", call_id=call_id, chars=len(opening_text))
+            elif opening_text:
                 await task.queue_frame(TTSSpeakFrame(opening_text, append_to_context=True))
                 log.info("tier2.opening_queued", call_id=call_id, chars=len(opening_text))
-            runner = PipelineRunner(handle_sigint=False)
             log.info(
                 "tier2.pipecat_run",
                 call_id=call_id,
@@ -185,9 +210,18 @@ class PipelineTier:
             try:
                 await runner.run(task)
             finally:
+                if opening_task is not None and not opening_task.done():
+                    opening_task.cancel()
+                if opening_task is not None:
+                    with suppress(Exception, asyncio.CancelledError):
+                        await opening_task
                 await flush_context_transcript(call_id, context)
         except Exception as exc:  # noqa: BLE001
             log.exception("tier2.runner_error", error=str(exc))
+            if opening_task is not None and not opening_task.done():
+                opening_task.cancel()
+                with suppress(Exception, asyncio.CancelledError):
+                    await opening_task
             await close_unavailable(ws)
 
 
@@ -234,27 +268,35 @@ def _pipeline_vad_audio_idle_timeout_secs(transcription_mode: str) -> float:
     return max(0.15, min(upper, target))
 
 
-def _audio_fork_play_audio_message(audio: bytes) -> str:
-    import base64
-    import json
-
-    return json.dumps(
-        {
-            "type": "playAudio",
-            "data": {
-                "audioContentType": "raw",
-                "sampleRate": settings.sample_rate_in,
-                "audioContent": base64.b64encode(audio).decode("ascii"),
-            },
-        },
-        separators=(",", ":"),
-    )
+def _pipeline_user_turn_stop_timeout_secs(transcription_mode: str) -> float:
+    if transcription_mode == "accuracy":
+        return 0.7
+    if transcription_mode == "custom":
+        return 0.5
+    return 0.3
 
 
 async def _send_audio_to_freeswitch(ws: Any, audio: bytes) -> None:
     if not audio:
         return
-    await ws.send_text(_audio_fork_play_audio_message(audio))
+
+    chunks = list(_pcm_stream_chunks(audio))
+    for index, chunk in enumerate(chunks):
+        await ws.send_bytes(chunk)
+        if index < len(chunks) - 1:
+            await asyncio.sleep(settings.fs_codec_ms / 1000)
+
+
+def _pcm_stream_chunks(audio: bytes) -> list[bytes]:
+    bytes_per_sample = 2
+    bytes_per_frame = max(
+        bytes_per_sample,
+        int(settings.sample_rate_in * bytes_per_sample * settings.fs_codec_ms / 1000),
+    )
+    # Keep signed-16-bit PCM samples intact.
+    if bytes_per_frame % bytes_per_sample:
+        bytes_per_frame += 1
+    return [audio[i : i + bytes_per_frame] for i in range(0, len(audio), bytes_per_frame)]
 
 
 def _audio_fork_serializer() -> Any:
@@ -270,7 +312,7 @@ def _audio_fork_serializer() -> Any:
     class AudioForkRawAudioSerializer(FrameSerializer):
         async def serialize(self, frame: Frame) -> str | bytes | None:
             if isinstance(frame, OutputAudioRawFrame):
-                return _audio_fork_play_audio_message(frame.audio)
+                return bytes(frame.audio)
             return None
 
         async def deserialize(self, data: str | bytes) -> Frame | None:
@@ -322,6 +364,19 @@ def _pipeline_opening_text(agent: dict[str, Any]) -> str:
     return "Hello, how can I help?"
 
 
+def _initial_pipeline_context_messages(
+    system_prompt: str,
+    *,
+    opening_text: str,
+    opening_spoken_directly: bool,
+) -> list[dict[str, str]]:
+    messages = [{"role": "system", "content": system_prompt}]
+    opening = opening_text.strip()
+    if opening_spoken_directly and opening:
+        messages.append({"role": "assistant", "content": opening})
+    return messages
+
+
 async def _wait_for_call_answer(call_id: str, timeout_secs: float = 45.0) -> bool:
     try:
         import asyncio
@@ -361,8 +416,8 @@ async def _speak_opening_direct(
 
     PipelineTask only processes queued TTSSpeakFrame after StartFrame reaches the
     end of the full STT→LLM→TTS pipeline. On cold calls that meant the first TTS
-    arrived after the caller had already hung up. This direct Soniox path sends
-    the 16k PCM through the FreeSWITCH audio-fork JSON `playAudio` protocol
+    arrived after the caller had already hung up. This direct Soniox path writes
+    raw 16k PCM into mod_audio_fork's bidirectional streaming playout buffer
     immediately, then Pipecat takes over.
     """
     if not settings.soniox_api_key or not text.strip():
@@ -425,6 +480,12 @@ async def _speak_opening_direct(
                     audio = base64.b64decode(audio_b64)
                     if first_audio_ms is None:
                         first_audio_ms = int((time.perf_counter() - started) * 1000)
+                        log.info(
+                            "tier2.opening_direct_first_audio",
+                            call_id=call_id,
+                            first_audio_ms=first_audio_ms,
+                            chunk_bytes=len(audio),
+                        )
                     await _send_audio_to_freeswitch(ws, audio)
                     audio_bytes += len(audio)
                 if msg.get("terminated"):

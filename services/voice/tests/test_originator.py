@@ -35,14 +35,14 @@ def _matches(doc: dict[str, Any], flt: dict[str, Any]) -> bool:
     return True
 
 
-def test_audio_fork_args_enable_bidirectional_json_playback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_audio_fork_args_enable_bidirectional_streaming_playback(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(originator.settings, "sample_rate_in", 16000)
     monkeypatch.setattr(originator.settings, "audio_fork_buffer_ms", 20)
     monkeypatch.setattr(originator.settings, "audio_fork_jitter_buffer_ms", 20)
 
     args = originator.audio_fork_args("ws://10.0.1.9:8084/ws/audio?call_id=call-1")
 
-    assert args == "ws://10.0.1.9:8084/ws/audio?call_id=call-1 mono 16000 livocall null true false 16000"
+    assert args == "ws://10.0.1.9:8084/ws/audio?call_id=call-1 mono 16000 livocall null true true 16000"
     assert "buffer" not in args
     assert "jitterbuffer" not in args
 
