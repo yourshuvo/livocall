@@ -14,6 +14,7 @@ from urllib.parse import urlsplit, urlunsplit
 import asyncio
 import ipaddress
 import socket
+import time
 import structlog
 from fastapi import WebSocket
 
@@ -37,6 +38,7 @@ from app.settings import settings
 from app.tiers._common import close_unavailable, fetch_agent_for_call
 
 log = structlog.get_logger()
+_PLAYBACK_SUPPRESS_UNTIL: dict[str, float] = {}
 
 
 class PipelineTier:
@@ -132,7 +134,7 @@ class PipelineTier:
                     audio_out_enabled=True,
                     audio_in_sample_rate=settings.sample_rate_in,
                     audio_out_sample_rate=output_sample_rate,
-                    serializer=_audio_fork_serializer(),
+                    serializer=_audio_fork_serializer(call_id),
                 ),
             )
             vad = VADProcessor(
@@ -305,6 +307,7 @@ async def _broadcast_audio_to_freeswitch(call_id: str, audio: bytes) -> bool:
     client = EslClient(_esl_config())
     try:
         await client.connect()
+        _mark_playback_suppression(call_id, audio)
         reply = await client.playback(fs_uuid, url)
         log.info(
             "tier2.fs_broadcast_audio",
@@ -391,7 +394,28 @@ def _pcm_stream_chunks(audio: bytes) -> list[bytes]:
     return [audio[i : i + bytes_per_frame] for i in range(0, len(audio), bytes_per_frame)]
 
 
-def _audio_fork_serializer() -> Any:
+def _mark_playback_suppression(call_id: str, audio: bytes) -> None:
+    if not call_id or not audio:
+        return
+    bytes_per_second = max(1, settings.sample_rate_in * 2)
+    duration_secs = len(audio) / bytes_per_second
+    tail_secs = max(0.0, settings.playback_input_suppression_tail_ms / 1000)
+    until = time.monotonic() + duration_secs + tail_secs
+    _PLAYBACK_SUPPRESS_UNTIL[call_id] = max(_PLAYBACK_SUPPRESS_UNTIL.get(call_id, 0.0), until)
+
+
+def _playback_input_suppressed(call_id: str) -> bool:
+    if not call_id:
+        return False
+    until = _PLAYBACK_SUPPRESS_UNTIL.get(call_id, 0.0)
+    now = time.monotonic()
+    if until <= now:
+        _PLAYBACK_SUPPRESS_UNTIL.pop(call_id, None)
+        return False
+    return True
+
+
+def _audio_fork_serializer(call_id: str = "") -> Any:
     from pipecat.frames.frames import (  # type: ignore[import-not-found]
         Frame,
         InputAudioRawFrame,
@@ -409,6 +433,8 @@ def _audio_fork_serializer() -> Any:
 
         async def deserialize(self, data: str | bytes) -> Frame | None:
             if isinstance(data, (bytes, bytearray)) and data:
+                if _playback_input_suppressed(call_id):
+                    return None
                 return InputAudioRawFrame(
                     audio=bytes(data),
                     sample_rate=settings.sample_rate_in,

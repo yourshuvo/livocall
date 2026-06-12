@@ -108,6 +108,7 @@ class Settings(BaseSettings):
     playback_ttl_seconds: int = Field(default=300)
     playback_broadcast_debounce_ms: int = Field(default=120)
     playback_broadcast_chunk_ms: int = Field(default=700)
+    playback_input_suppression_tail_ms: int = Field(default=350)
 
     # Shared secret used to HMAC the `auth` query-string on /ws/audio. When set,
     # originator signs each call's WS URL and ws_audio rejects connections with

@@ -178,6 +178,21 @@ async def test_broadcast_sink_flushes_during_continuous_tts_without_waiting_for_
 
 
 @pytest.mark.asyncio
+async def test_audio_fork_serializer_suppresses_inbound_audio_while_bot_playback_is_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
+    pipeline._PLAYBACK_SUPPRESS_UNTIL.clear()
+    pipeline._PLAYBACK_SUPPRESS_UNTIL["call-1"] = pipeline.time.monotonic() + 10
+
+    serializer = pipeline._audio_fork_serializer("call-1")
+
+    assert await serializer.deserialize(b"bot playback echo") is None
+
+    pipeline._PLAYBACK_SUPPRESS_UNTIL.clear()
+
+
+@pytest.mark.asyncio
 async def test_audio_fork_serializer_decodes_and_encodes_raw_pcm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
