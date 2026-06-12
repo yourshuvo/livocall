@@ -100,6 +100,13 @@ class Settings(BaseSettings):
     # ws://<bridge-ip>:<port>/ws/audio instead.
     voice_ws_bridge_autodetect_enabled: bool = Field(default=True)
     voice_ws_internal_port: int = Field(default=8084)
+    # Internal HTTP base URL FreeSWITCH can fetch generated TTS WAVs from. If
+    # blank, the voice service derives it from VOICE_WS_PUBLIC_URL and the
+    # Docker bridge autodetect settings.
+    voice_playback_public_url: str = Field(default="")
+    playback_cache_dir: str = Field(default="/tmp/livocall-playback")
+    playback_ttl_seconds: int = Field(default=300)
+    playback_broadcast_debounce_ms: int = Field(default=120)
 
     # Shared secret used to HMAC the `auth` query-string on /ws/audio. When set,
     # originator signs each call's WS URL and ws_audio rejects connections with

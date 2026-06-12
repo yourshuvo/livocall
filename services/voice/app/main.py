@@ -16,9 +16,10 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
-from app import event_bridge, freeswitch_controller, originator
+from app import event_bridge, freeswitch_controller, originator, playback_files
 from app.browser_webrtc import (
     aclose as aclose_browser_webrtc,
 )
@@ -158,6 +159,25 @@ async def health() -> dict[str, object]:
         "audio_fork_jitter_buffer_ms": settings.audio_fork_jitter_buffer_ms,
         "browser_webrtc_enabled": settings.browser_webrtc_enabled,
     }
+
+
+@app.get("/internal/playback/{token}.wav")
+async def internal_playback_file(token: str) -> FileResponse:
+    path = playback_files.lookup(token)
+    if path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="playback file not found")
+    return FileResponse(path, media_type="audio/wav", filename=path.name)
+
+
+@app.head("/internal/playback/{token}.wav")
+async def internal_playback_file_head(token: str) -> Response:
+    path = playback_files.lookup(token)
+    if path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="playback file not found")
+    return Response(
+        media_type="audio/wav",
+        headers={"Content-Length": str(path.stat().st_size)},
+    )
 
 
 class FreeswitchProfileRequest(BaseModel):

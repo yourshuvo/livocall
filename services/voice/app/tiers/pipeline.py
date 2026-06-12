@@ -9,8 +9,11 @@ from __future__ import annotations
 
 from contextlib import suppress
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import asyncio
+import ipaddress
+import socket
 import structlog
 from fastapi import WebSocket
 
@@ -27,7 +30,9 @@ from app.agent_runtime import (
     soniox_voice,
 )
 from app.db import get_db
+from app.esl import EslClient, EslConfig
 from app.persistence import flush_context_transcript
+from app import playback_files
 from app.settings import settings
 from app.tiers._common import close_unavailable, fetch_agent_for_call
 
@@ -119,8 +124,9 @@ class PipelineTier:
         output_sample_rate = _phone_pipeline_output_sample_rate()
 
         try:
+            playback_ws = _AudioForkPlaybackWebSocket(ws, call_id=call_id)
             transport = FastAPIWebsocketTransport(
-                websocket=_AudioForkPlaybackWebSocket(ws),
+                websocket=playback_ws,
                 params=FastAPIWebsocketParams(
                     audio_in_enabled=True,
                     audio_out_enabled=True,
@@ -210,6 +216,7 @@ class PipelineTier:
             try:
                 await runner.run(task)
             finally:
+                await playback_ws.flush_playback()
                 if opening_task is not None and not opening_task.done():
                     opening_task.cancel()
                 if opening_task is not None:
@@ -276,15 +283,100 @@ def _pipeline_user_turn_stop_timeout_secs(transcription_mode: str) -> float:
     return 0.3
 
 
-async def _send_audio_to_freeswitch(ws: Any, audio: bytes) -> None:
+async def _send_audio_to_freeswitch(ws: Any, call_id: str, audio: bytes) -> None:
     if not audio:
         return
+    ok = await _broadcast_audio_to_freeswitch(call_id, audio)
+    if not ok:
+        log.warning("tier2.fs_broadcast_audio_failed", call_id=call_id, bytes=len(audio))
 
-    chunks = list(_pcm_stream_chunks(audio))
-    for index, chunk in enumerate(chunks):
-        await ws.send_bytes(chunk)
-        if index < len(chunks) - 1:
-            await asyncio.sleep(settings.fs_codec_ms / 1000)
+
+async def _broadcast_audio_to_freeswitch(call_id: str, audio: bytes) -> bool:
+    if not audio:
+        return True
+    fs_uuid = await _fs_uuid_for_call(call_id)
+    if not fs_uuid:
+        log.warning("tier2.fs_uuid_missing_for_playback", call_id=call_id)
+        return False
+    token = playback_files.write_pcm_wav(call_id, audio, sample_rate=settings.sample_rate_in)
+    if not token:
+        return True
+    url = _playback_file_url(token)
+    client = EslClient(_esl_config())
+    try:
+        await client.connect()
+        reply = await client.playback(fs_uuid, url)
+        log.info(
+            "tier2.fs_broadcast_audio",
+            call_id=call_id,
+            fs_uuid=fs_uuid,
+            bytes=len(audio),
+            url=url,
+            reply=reply,
+        )
+        return not str(reply).startswith("-ERR")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("tier2.fs_broadcast_audio_error", call_id=call_id, error=str(exc))
+        return False
+    finally:
+        await client.close()
+
+
+async def _fs_uuid_for_call(call_id: str) -> str:
+    try:
+        from bson import ObjectId
+    except ImportError:
+        return ""
+    if not ObjectId.is_valid(call_id):
+        return ""
+    doc = await get_db()["calls"].find_one({"_id": ObjectId(call_id)}, {"fsUuid": 1})
+    return str((doc or {}).get("fsUuid") or "")
+
+
+def _esl_config() -> EslConfig:
+    return EslConfig(
+        host=settings.fs_host,
+        port=settings.fs_esl_port,
+        password=settings.fs_esl_password,
+    )
+
+
+def _playback_file_url(token: str) -> str:
+    return f"{_playback_base_url()}/internal/playback/{token}.wav"
+
+
+def _playback_base_url() -> str:
+    if settings.voice_playback_public_url.strip():
+        return settings.voice_playback_public_url.strip().rstrip("/")
+    parsed = urlsplit(settings.voice_ws_public_url.rstrip("/"))
+    scheme = "http" if parsed.scheme == "ws" else "https" if parsed.scheme == "wss" else parsed.scheme
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port
+    if settings.voice_ws_bridge_autodetect_enabled and host == "voice.livocall.com":
+        bridge_ip = _container_bridge_ipv4()
+        if bridge_ip:
+            host = bridge_ip
+            port = settings.voice_ws_internal_port
+            scheme = "http"
+    netloc = f"{host}:{port}" if port else host
+    path = parsed.path.rstrip("/")
+    for suffix in ("/ws/audio-pcmu", "/ws/audio"):
+        if path.endswith(suffix):
+            path = path[: -len(suffix)]
+            break
+    return urlunsplit((scheme or "http", netloc, path, "", "")).rstrip("/")
+
+
+def _container_bridge_ipv4() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("1.1.1.1", 80))
+            ip = sock.getsockname()[0]
+        if ipaddress.ip_address(ip).is_private:
+            return ip
+    except (OSError, ValueError):
+        return ""
+    return ""
 
 
 def _pcm_stream_chunks(audio: bytes) -> list[bytes]:
@@ -327,15 +419,55 @@ def _audio_fork_serializer() -> Any:
     return AudioForkRawAudioSerializer()
 
 
+class _FreeswitchBroadcastSink:
+    def __init__(self, call_id: str, *, debounce_secs: float | None = None) -> None:
+        self._call_id = call_id
+        if debounce_secs is None:
+            debounce_secs = max(0.02, settings.playback_broadcast_debounce_ms / 1000)
+        self._debounce_secs = debounce_secs
+        self._buffer = bytearray()
+        self._lock = asyncio.Lock()
+        self._flush_task: asyncio.Task[None] | None = None
+
+    async def write(self, data: bytes) -> None:
+        if not data:
+            return
+        async with self._lock:
+            self._buffer.extend(data)
+            current = asyncio.current_task()
+            if self._flush_task is not None and self._flush_task is not current:
+                self._flush_task.cancel()
+            self._flush_task = asyncio.create_task(self._delayed_flush())
+
+    async def _delayed_flush(self) -> None:
+        try:
+            await asyncio.sleep(self._debounce_secs)
+            await self.flush()
+        except asyncio.CancelledError:
+            return
+
+    async def flush(self) -> None:
+        current = asyncio.current_task()
+        async with self._lock:
+            if self._flush_task is not None and self._flush_task is not current:
+                self._flush_task.cancel()
+            self._flush_task = None
+            audio = bytes(self._buffer)
+            self._buffer.clear()
+        if audio:
+            await _broadcast_audio_to_freeswitch(self._call_id, audio)
+
+
 class _AudioForkPlaybackWebSocket:
-    def __init__(self, ws: WebSocket) -> None:
+    def __init__(self, ws: WebSocket, *, call_id: str) -> None:
         self._ws = ws
+        self._broadcast_sink = _FreeswitchBroadcastSink(call_id)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._ws, name)
 
     async def send_bytes(self, data: bytes) -> None:
-        await _send_audio_to_freeswitch(self._ws, data)
+        await self._broadcast_sink.write(data)
 
     async def send_text(self, data: str) -> None:
         await self._ws.send_text(data)
@@ -343,7 +475,11 @@ class _AudioForkPlaybackWebSocket:
     async def receive(self) -> Any:
         return await self._ws.receive()
 
+    async def flush_playback(self) -> None:
+        await self._broadcast_sink.flush()
+
     async def close(self, *args: Any, **kwargs: Any) -> None:
+        await self.flush_playback()
         await self._ws.close(*args, **kwargs)
 
 
@@ -416,9 +552,10 @@ async def _speak_opening_direct(
 
     PipelineTask only processes queued TTSSpeakFrame after StartFrame reaches the
     end of the full STT→LLM→TTS pipeline. On cold calls that meant the first TTS
-    arrived after the caller had already hung up. This direct Soniox path writes
-    raw 16k PCM into mod_audio_fork's bidirectional streaming playout buffer
-    immediately, then Pipecat takes over.
+    arrived after the caller had already hung up. This direct Soniox path creates
+    the opening audio immediately, then plays it to FreeSWITCH with
+    ``uuid_broadcast`` because the BDIX mod_audio_fork build is capture-only for
+    returned websocket audio.
     """
     if not settings.soniox_api_key or not text.strip():
         return False
@@ -449,6 +586,7 @@ async def _speak_opening_direct(
 
     started = time.perf_counter()
     audio_bytes = 0
+    audio_buffer = bytearray()
     first_audio_ms: int | None = None
     try:
         async with websockets.connect(
@@ -486,7 +624,7 @@ async def _speak_opening_direct(
                             first_audio_ms=first_audio_ms,
                             chunk_bytes=len(audio),
                         )
-                    await _send_audio_to_freeswitch(ws, audio)
+                    audio_buffer.extend(audio)
                     audio_bytes += len(audio)
                 if msg.get("terminated"):
                     break
@@ -495,6 +633,7 @@ async def _speak_opening_direct(
         return audio_bytes > 0
 
     if audio_bytes > 0:
+        await _send_audio_to_freeswitch(ws, call_id, bytes(audio_buffer))
         log.info(
             "tier2.opening_direct_spoken",
             call_id=call_id,

@@ -26,7 +26,7 @@
       <condition field="${livocall_park}" expression="^1$">
         <action application="answer"/>
         <action application="set" data="absolute_codec_string=PCMU@20i"/>
-        <action application="set" data="rtp_disable_transcoding=true"/>
+        <!-- Keep transcoding enabled so 16 kHz linear AI audio can be encoded to the SIP leg. -->
         <action application="set" data="record_sample_rate=16000"/>
 
         <!-- BTRC disclosure (Bengali regulator requirement): play pre-recorded file if configured. -->

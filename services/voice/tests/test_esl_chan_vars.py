@@ -49,14 +49,14 @@ def test_build_chan_vars_empty_value_still_emits_key() -> None:
     assert block == "livocall_consent_prompt='',tier='pipeline'"
 
 
-def test_audio_fork_args_include_low_latency_buffers() -> None:
+def test_audio_fork_args_include_bdix_bidirectional_capture_flags() -> None:
     args = audio_fork_args("ws://voice:8084/ws/audio?call_id=abc")
-    assert args == "ws://voice:8084/ws/audio?call_id=abc mono 16000 buffer 20 jitterbuffer 20"
+    assert args == "ws://voice:8084/ws/audio?call_id=abc mono 16000 livocall null true true 16000"
 
 
 def test_audio_fork_args_use_8k_for_pcmu_bridge() -> None:
     args = audio_fork_args("ws://voice:8084/ws/audio-pcmu?call_id=abc")
-    assert args == "ws://voice:8084/ws/audio-pcmu?call_id=abc mono 8000 buffer 20 jitterbuffer 20"
+    assert args == "ws://voice:8084/ws/audio-pcmu?call_id=abc mono 8000 livocall null true true 8000"
 
 
 @pytest.mark.asyncio

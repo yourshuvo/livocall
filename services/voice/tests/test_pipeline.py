@@ -119,7 +119,7 @@ def test_pcm_stream_chunks_match_freeswitch_codec_frame_size(
 
 
 @pytest.mark.asyncio
-async def test_audio_fork_output_is_raw_pcm_for_streaming_bidirectional_mode(
+async def test_audio_fork_output_uses_uuid_broadcast_instead_of_returning_websocket_bytes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeAudioForkWebSocket:
@@ -133,12 +133,20 @@ async def test_audio_fork_output_is_raw_pcm_for_streaming_bidirectional_mode(
         async def send_bytes(self, data: bytes) -> None:
             self.bytes_payloads.append(data)
 
+    broadcasts: list[tuple[str, bytes]] = []
+
+    async def fake_broadcast(call_id: str, audio: bytes) -> bool:
+        broadcasts.append((call_id, audio))
+        return True
+
     monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
+    monkeypatch.setattr(pipeline, "_broadcast_audio_to_freeswitch", fake_broadcast)
     ws = FakeAudioForkWebSocket()
 
-    await pipeline._send_audio_to_freeswitch(ws, b"\x01\x02")
+    await pipeline._send_audio_to_freeswitch(ws, "call-1", b"\x01\x02")
 
-    assert ws.bytes_payloads == [b"\x01\x02"]
+    assert broadcasts == [("call-1", b"\x01\x02")]
+    assert ws.bytes_payloads == []
     assert ws.texts == []
 
 
