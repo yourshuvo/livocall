@@ -37,7 +37,17 @@ async def on_event(ev: EslEvent) -> None:
     if not call_doc_id or not ObjectId.is_valid(call_doc_id):
         return  # not one of ours
     db = get_db()
-    if name == "CHANNEL_HANGUP_COMPLETE":
+    if name == "CHANNEL_ANSWER":
+        answered = datetime.now(UTC)
+        log.info("call.answered", call_id=call_doc_id, fs_uuid=ev.uuid)
+        await db["calls"].update_one(
+            {"_id": ObjectId(call_doc_id)},
+            {"$set": {"answeredAt": answered, "updatedAt": answered}},
+        )
+        # Keep answeredAt in Mongo for voice-side answer gating. The web ingest
+        # schema currently accepts call.started/transcript/completed only, so do
+        # not POST a separate call.answered event.
+    elif name == "CHANNEL_HANGUP_COMPLETE":
         # Compute duration from FS billsec when present (authoritative — only
         # counts time the call was actually billed for), otherwise fall back
         # to ``now - startedAt``. ``billsec=0`` is a *valid* answer (call was

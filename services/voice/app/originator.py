@@ -7,9 +7,12 @@ notifying the web app.
 
 from __future__ import annotations
 
+import ipaddress
+import socket
 import uuid as uuid_lib
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import structlog
 from bson import ObjectId
@@ -31,6 +34,40 @@ def _esl_config() -> EslConfig:
     )
 
 
+def _container_bridge_ipv4() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("1.1.1.1", 80))
+            ip = sock.getsockname()[0]
+        if ipaddress.ip_address(ip).is_private:
+            return ip
+    except OSError:
+        return ""
+    except ValueError:
+        return ""
+    return ""
+
+
+def _audio_fork_base_url() -> str:
+    base = settings.voice_ws_public_url.rstrip("/")
+    if not settings.voice_ws_bridge_autodetect_enabled:
+        return base
+    parsed = urlsplit(base)
+    if parsed.scheme not in {"ws", "wss"} or not parsed.hostname:
+        return base
+    # The BDIX deployment runs FreeSWITCH on the same VPS as this Docker bridge.
+    # Using the public Coolify/TLS route for audio_fork can add ~5s before the
+    # AI transport even sees the call. For the known public host, hand FS the
+    # private bridge IP instead; auth query signing still applies below.
+    if parsed.hostname != "voice.livocall.com":
+        return base
+    ip = _container_bridge_ipv4()
+    if not ip:
+        return base
+    netloc = f"{ip}:{settings.voice_ws_internal_port}"
+    return urlunsplit(("ws", netloc, parsed.path, "", "")).rstrip("/")
+
+
 def _build_ws_url(
     *,
     call_doc_id: str,
@@ -40,7 +77,7 @@ def _build_ws_url(
 ) -> str:
     from urllib.parse import urlencode
 
-    base = settings.voice_ws_public_url.rstrip("/")
+    base = _audio_fork_base_url()
     if settings.low_latency_pcmu_bridge_enabled and tier in {"gemini_live", "grok_voice"}:
         base = base.removesuffix("/ws/audio") + "/ws/audio-pcmu"
     qs: list[tuple[str, str]] = [
@@ -75,12 +112,17 @@ def audio_fork_args(ws_url: str) -> str:
     sample_rate = (
         8000 if ws_url.split("?", 1)[0].endswith("/ws/audio-pcmu") else settings.sample_rate_in
     )
-    parts = [ws_url, "mono", str(sample_rate)]
-    if settings.audio_fork_buffer_ms > 0:
-        parts.extend(["buffer", str(settings.audio_fork_buffer_ms)])
-    if settings.audio_fork_jitter_buffer_ms > 0:
-        parts.extend(["jitterbuffer", str(settings.audio_fork_jitter_buffer_ms)])
-    return " ".join(parts)
+    # drachtio mod_audio_fork's optional args are positional:
+    # [bugname] [metadata] [bidirectionalAudio_enabled]
+    # [bidirectionalAudio_stream_enabled] [bidirectionalAudio_stream_samplerate].
+    # This module build rejects binary WS frames, so enable bidirectional
+    # playback but leave stream mode off; outbound audio is sent as JSON
+    # playAudio {audioContentType: raw, sampleRate, audioContent} messages.
+    # Do not append "buffer/jitterbuffer" here; those are not supported options
+    # for this module and would occupy the bidirectional flags.
+    return " ".join(
+        [ws_url, "mono", str(sample_rate), "livocall", "null", "true", "false", str(sample_rate)]
+    )
 
 
 async def resolve_outbound_gateway(

@@ -47,7 +47,7 @@
           <action application="record_session" data="${recordings_dir}/${call_doc_id}.wav"/>
         </condition>
 
-        <action application="audio_fork" data="${livocall_ws_url}"/>
+        <action application="system" data="/usr/local/freeswitch/conf/scripts/start_audio_fork.sh '${uuid}' '${livocall_ws_url}'"/>
         <action application="park"/>
       </condition>
     </extension>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 from bson import ObjectId
@@ -32,6 +33,18 @@ def _matches(doc: dict[str, Any], flt: dict[str, Any]) -> bool:
         if actual != expected:
             return False
     return True
+
+
+def test_audio_fork_args_enable_bidirectional_json_playback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(originator.settings, "sample_rate_in", 16000)
+    monkeypatch.setattr(originator.settings, "audio_fork_buffer_ms", 20)
+    monkeypatch.setattr(originator.settings, "audio_fork_jitter_buffer_ms", 20)
+
+    args = originator.audio_fork_args("ws://10.0.1.9:8084/ws/audio?call_id=call-1")
+
+    assert args == "ws://10.0.1.9:8084/ws/audio?call_id=call-1 mono 16000 livocall null true false 16000"
+    assert "buffer" not in args
+    assert "jitterbuffer" not in args
 
 
 @pytest.mark.asyncio
@@ -125,3 +138,23 @@ async def test_dashboard_test_calls_prefer_default_gateway_even_with_stale_phone
 
     assert gateway == "sip_j"
     assert selected_cli == cli
+
+
+def test_build_ws_url_uses_private_container_bridge_for_same_host_audio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(originator.settings, "voice_ws_public_url", "wss://voice.livocall.com/ws/audio")
+    monkeypatch.setattr(originator.settings, "voice_ws_bridge_autodetect_enabled", True, raising=False)
+    monkeypatch.setattr(originator.settings, "voice_ws_internal_port", 8084, raising=False)
+    monkeypatch.setattr(originator, "_container_bridge_ipv4", lambda: "10.0.1.9")
+
+    url = originator.build_ws_url(
+        call_doc_id="call-1",
+        agent_id="agent-1",
+        tier="pipeline",
+        metadata={"source": "dashboard-test"},
+    )
+
+    parsed = urlsplit(url)
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "ws://10.0.1.9:8084/ws/audio"
+    assert "call_id=call-1" in parsed.query

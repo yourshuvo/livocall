@@ -75,6 +75,25 @@ def _install_fake(
 
 
 @pytest.mark.asyncio
+async def test_channel_answer_marks_call_answered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _install_fake(monkeypatch, {"_id": CALL_OID_HEX, "tier": "pipeline"})
+    ev = EslEvent(
+        headers={
+            "Event-Name": "CHANNEL_ANSWER",
+            "variable_call_doc_id": CALL_OID_HEX,
+        }
+    )
+
+    await event_bridge.on_event(ev)
+
+    assert fake.updates, "expected answeredAt update"
+    _, upd = fake.updates[0]
+    assert "answeredAt" in upd["$set"]
+
+
+@pytest.mark.asyncio
 async def test_billsec_zero_does_not_fall_back_to_wallclock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

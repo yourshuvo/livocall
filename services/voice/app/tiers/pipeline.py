@@ -18,11 +18,13 @@ from app.agent_runtime import (
     pipeline_model,
     pipeline_stt_provider,
     pipeline_tts_provider,
+    prompt_parts,
     runtime_settings,
     soniox_language,
     soniox_language_hint_codes,
     soniox_voice,
 )
+from app.db import get_db
 from app.persistence import flush_context_transcript
 from app.settings import settings
 from app.tiers._common import close_unavailable, fetch_agent_for_call
@@ -56,6 +58,21 @@ class PipelineTier:
             await close_unavailable(ws)
             return
 
+        answered = await _wait_for_call_answer(call_id)
+        if not answered:
+            log.info("tier2.unanswered_before_pipeline", call_id=call_id)
+            return
+
+        opening_spoken_directly = False
+        opening_text = _pipeline_opening_text(agent)
+        if opening_text and tts_provider == "soniox":
+            opening_spoken_directly = await _speak_opening_direct(
+                ws,
+                agent=agent,
+                call_id=call_id,
+                text=opening_text,
+            )
+
         try:
             from pipecat.audio.vad.silero import (  # type: ignore[import-not-found]
                 SileroVADAnalyzer,
@@ -67,6 +84,7 @@ class PipelineTier:
                 PipelineParams,
                 PipelineTask,
             )
+            from pipecat.frames.frames import TTSSpeakFrame  # type: ignore[import-not-found]
             from pipecat.processors.aggregators.llm_context import (  # type: ignore[import-not-found]
                 LLMContext,
             )
@@ -102,12 +120,13 @@ class PipelineTier:
 
         try:
             transport = FastAPIWebsocketTransport(
-                websocket=ws,
+                websocket=_AudioForkPlaybackWebSocket(ws),
                 params=FastAPIWebsocketParams(
                     audio_in_enabled=True,
                     audio_out_enabled=True,
                     audio_in_sample_rate=settings.sample_rate_in,
                     audio_out_sample_rate=output_sample_rate,
+                    serializer=_audio_fork_serializer(),
                 ),
             )
             vad = VADProcessor(
@@ -151,6 +170,10 @@ class PipelineTier:
                 pipeline,
                 params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
             )
+            opening_text = _pipeline_opening_text(agent)
+            if opening_text and not opening_spoken_directly:
+                await task.queue_frame(TTSSpeakFrame(opening_text, append_to_context=True))
+                log.info("tier2.opening_queued", call_id=call_id, chars=len(opening_text))
             runner = PipelineRunner(handle_sigint=False)
             log.info(
                 "tier2.pipecat_run",
@@ -209,6 +232,218 @@ def _pipeline_vad_audio_idle_timeout_secs(transcription_mode: str) -> float:
     upper = 0.5 if transcription_mode == "speed" else 0.8
     target = min(raw, 0.25) if transcription_mode == "speed" else raw
     return max(0.15, min(upper, target))
+
+
+def _audio_fork_play_audio_message(audio: bytes) -> str:
+    import base64
+    import json
+
+    return json.dumps(
+        {
+            "type": "playAudio",
+            "data": {
+                "audioContentType": "raw",
+                "sampleRate": settings.sample_rate_in,
+                "audioContent": base64.b64encode(audio).decode("ascii"),
+            },
+        },
+        separators=(",", ":"),
+    )
+
+
+async def _send_audio_to_freeswitch(ws: Any, audio: bytes) -> None:
+    if not audio:
+        return
+    await ws.send_text(_audio_fork_play_audio_message(audio))
+
+
+def _audio_fork_serializer() -> Any:
+    from pipecat.frames.frames import (  # type: ignore[import-not-found]
+        Frame,
+        InputAudioRawFrame,
+        OutputAudioRawFrame,
+    )
+    from pipecat.serializers.base_serializer import (  # type: ignore[import-not-found]
+        FrameSerializer,
+    )
+
+    class AudioForkRawAudioSerializer(FrameSerializer):
+        async def serialize(self, frame: Frame) -> str | bytes | None:
+            if isinstance(frame, OutputAudioRawFrame):
+                return _audio_fork_play_audio_message(frame.audio)
+            return None
+
+        async def deserialize(self, data: str | bytes) -> Frame | None:
+            if isinstance(data, (bytes, bytearray)) and data:
+                return InputAudioRawFrame(
+                    audio=bytes(data),
+                    sample_rate=settings.sample_rate_in,
+                    num_channels=1,
+                )
+            return None
+
+    return AudioForkRawAudioSerializer()
+
+
+class _AudioForkPlaybackWebSocket:
+    def __init__(self, ws: WebSocket) -> None:
+        self._ws = ws
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._ws, name)
+
+    async def send_bytes(self, data: bytes) -> None:
+        await _send_audio_to_freeswitch(self._ws, data)
+
+    async def send_text(self, data: str) -> None:
+        await self._ws.send_text(data)
+
+    async def receive(self) -> Any:
+        return await self._ws.receive()
+
+    async def close(self, *args: Any, **kwargs: Any) -> None:
+        await self._ws.close(*args, **kwargs)
+
+
+def _pipeline_opening_text(agent: dict[str, Any]) -> str:
+    runtime = runtime_settings(agent)
+    welcome_mode = str(runtime.get("welcomeMode") or "ai").strip().lower()
+    if welcome_mode != "ai":
+        return ""
+
+    _system_prompt, first_message = prompt_parts(agent)
+    first_message = first_message.strip()
+    if first_message:
+        return first_message
+
+    language = str(agent.get("language") or settings.soniox_language).strip()
+    if language in {"bn", "bn-BD", "bn-en-mixed"}:
+        return "হ্যালো, কীভাবে সাহায্য করতে পারি?"
+    return "Hello, how can I help?"
+
+
+async def _wait_for_call_answer(call_id: str, timeout_secs: float = 45.0) -> bool:
+    try:
+        import asyncio
+
+        from bson import ObjectId
+    except ImportError:
+        return True
+    if not ObjectId.is_valid(call_id):
+        return True
+
+    db = get_db()
+    call_oid = ObjectId(call_id)
+    deadline = asyncio.get_running_loop().time() + timeout_secs
+    while asyncio.get_running_loop().time() < deadline:
+        doc = await db["calls"].find_one(
+            {"_id": call_oid},
+            {"answeredAt": 1, "endedAt": 1, "direction": 1},
+        )
+        if doc and doc.get("answeredAt"):
+            return True
+        if doc and doc.get("direction") == "inbound" and not doc.get("endedAt"):
+            return True
+        if doc and doc.get("endedAt"):
+            return False
+        await asyncio.sleep(0.15)
+    return False
+
+
+async def _speak_opening_direct(
+    ws: WebSocket,
+    *,
+    agent: dict[str, Any],
+    call_id: str,
+    text: str,
+) -> bool:
+    """Send the opening line before Pipecat finishes STT/LLM startup.
+
+    PipelineTask only processes queued TTSSpeakFrame after StartFrame reaches the
+    end of the full STT→LLM→TTS pipeline. On cold calls that meant the first TTS
+    arrived after the caller had already hung up. This direct Soniox path sends
+    the 16k PCM through the FreeSWITCH audio-fork JSON `playAudio` protocol
+    immediately, then Pipecat takes over.
+    """
+    if not settings.soniox_api_key or not text.strip():
+        return False
+    try:
+        import asyncio
+        import base64
+        import json
+        import time
+        import uuid
+
+        import websockets
+    except ImportError as exc:  # pragma: no cover - only missing in stripped images
+        log.warning("tier2.opening_direct_unavailable", call_id=call_id, error=str(exc))
+        return False
+
+    stream_id = f"opening-{call_id[:8]}-{uuid.uuid4().hex[:8]}"
+    config: dict[str, Any] = {
+        "api_key": settings.soniox_api_key,
+        "stream_id": stream_id,
+        "model": settings.soniox_tts_model,
+        "voice": soniox_voice(agent),
+        "audio_format": "pcm_s16le",
+        "sample_rate": settings.sample_rate_in,
+    }
+    language = soniox_language(agent)
+    if language:
+        config["language"] = language
+
+    started = time.perf_counter()
+    audio_bytes = 0
+    first_audio_ms: int | None = None
+    try:
+        async with websockets.connect(
+            settings.soniox_tts_url,
+            open_timeout=2.5,
+            close_timeout=0.5,
+            max_size=8 * 1024 * 1024,
+        ) as tts_ws:
+            await tts_ws.send(json.dumps(config))
+            await tts_ws.send(
+                json.dumps({"stream_id": stream_id, "text": text, "text_end": False})
+            )
+            await tts_ws.send(json.dumps({"stream_id": stream_id, "text": "", "text_end": True}))
+            deadline = time.perf_counter() + 5.0
+            while time.perf_counter() < deadline:
+                timeout = max(0.1, min(1.0, deadline - time.perf_counter()))
+                message = await asyncio.wait_for(tts_ws.recv(), timeout=timeout)
+                msg = json.loads(message)
+                if msg.get("error_code") is not None:
+                    log.warning(
+                        "tier2.opening_direct_tts_error",
+                        call_id=call_id,
+                        error_code=msg.get("error_code"),
+                        error_message=msg.get("error_message"),
+                    )
+                    break
+                audio_b64 = msg.get("audio")
+                if audio_b64:
+                    audio = base64.b64decode(audio_b64)
+                    if first_audio_ms is None:
+                        first_audio_ms = int((time.perf_counter() - started) * 1000)
+                    await _send_audio_to_freeswitch(ws, audio)
+                    audio_bytes += len(audio)
+                if msg.get("terminated"):
+                    break
+    except Exception as exc:  # noqa: BLE001
+        log.warning("tier2.opening_direct_failed", call_id=call_id, error=str(exc))
+        return audio_bytes > 0
+
+    if audio_bytes > 0:
+        log.info(
+            "tier2.opening_direct_spoken",
+            call_id=call_id,
+            chars=len(text),
+            audio_bytes=audio_bytes,
+            first_audio_ms=first_audio_ms,
+            total_ms=int((time.perf_counter() - started) * 1000),
+        )
+        return True
+    return False
 
 
 def _soniox_tts_text_aggregation_mode(transcription_mode: str) -> Any:

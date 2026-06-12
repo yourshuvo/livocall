@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.tiers import pipeline
@@ -46,6 +48,97 @@ def test_soniox_tts_streams_tokens_for_low_latency_modes() -> None:
     assert pipeline._soniox_tts_text_aggregation_mode("speed") == TextAggregationMode.TOKEN
     assert pipeline._soniox_tts_text_aggregation_mode("accuracy") == TextAggregationMode.TOKEN
     assert pipeline._soniox_tts_text_aggregation_mode("custom") == TextAggregationMode.SENTENCE
+
+
+def test_pipeline_speaks_configured_opening_when_welcome_mode_is_ai() -> None:
+    agent = {
+        "prompt": {"firstMessage": "স্বাগতম, কীভাবে সাহায্য করতে পারি?"},
+        "runtimeSettings": {"welcomeMode": "ai"},
+        "language": "bn-BD",
+    }
+
+    assert pipeline._pipeline_opening_text(agent) == "স্বাগতম, কীভাবে সাহায্য করতে পারি?"
+
+
+def test_pipeline_has_language_default_opening_when_ai_welcome_has_no_first_message() -> None:
+    agent = {"runtimeSettings": {"welcomeMode": "ai"}, "language": "bn-BD"}
+
+    assert pipeline._pipeline_opening_text(agent) == "হ্যালো, কীভাবে সাহায্য করতে পারি?"
+
+
+def test_pipeline_respects_non_ai_welcome_modes() -> None:
+    caller_first = {
+        "prompt": {"firstMessage": "This should not play"},
+        "runtimeSettings": {"welcomeMode": "caller"},
+    }
+    silent = {
+        "prompt": {"firstMessage": "This should not play"},
+        "runtimeSettings": {"welcomeMode": "silent"},
+    }
+
+    assert pipeline._pipeline_opening_text(caller_first) == ""
+    assert pipeline._pipeline_opening_text(silent) == ""
+
+
+@pytest.mark.asyncio
+async def test_audio_fork_output_is_json_playaudio_for_non_streaming_bidirectional_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeAudioForkWebSocket:
+        def __init__(self) -> None:
+            self.texts: list[str] = []
+            self.bytes_payloads: list[bytes] = []
+
+        async def send_text(self, text: str) -> None:
+            self.texts.append(text)
+
+        async def send_bytes(self, data: bytes) -> None:
+            self.bytes_payloads.append(data)
+
+    monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
+    ws = FakeAudioForkWebSocket()
+
+    await pipeline._send_audio_to_freeswitch(ws, b"\x01\x02")
+
+    assert ws.bytes_payloads == []
+    assert len(ws.texts) == 1
+    assert json.loads(ws.texts[0]) == {
+        "type": "playAudio",
+        "data": {
+            "audioContentType": "raw",
+            "sampleRate": 16000,
+            "audioContent": "AQI=",
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_audio_fork_serializer_decodes_inbound_pcm_and_encodes_outbound_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pipecat.frames.frames import InputAudioRawFrame, OutputAudioRawFrame
+
+    monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
+    serializer = pipeline._audio_fork_serializer()
+
+    inbound = await serializer.deserialize(b"\x01\x02")
+    assert isinstance(inbound, InputAudioRawFrame)
+    assert inbound.audio == b"\x01\x02"
+    assert inbound.sample_rate == 16000
+    assert inbound.num_channels == 1
+
+    outbound = await serializer.serialize(
+        OutputAudioRawFrame(audio=b"\x03\x04", sample_rate=16000, num_channels=1)
+    )
+    assert isinstance(outbound, str)
+    assert json.loads(outbound) == {
+        "type": "playAudio",
+        "data": {
+            "audioContentType": "raw",
+            "sampleRate": 16000,
+            "audioContent": "AwQ=",
+        },
+    }
 
 
 class FakeWebSocket:

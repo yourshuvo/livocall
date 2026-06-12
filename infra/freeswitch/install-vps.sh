@@ -266,21 +266,22 @@ cat > "${FS_ROOT}/dialplan/default/00_livocall_outbound.xml" <<'EOF'
         <condition field="${livocall_record}" expression="^prompt$" break="on-false">
           <action application="read" data="1 1 ${livocall_consent_prompt} consent_digit 5000 #"/>
           <condition field="${consent_digit}" expression="^1$" break="on-true">
-            <action application="set" data="execute_on_answer=record_session ${recordings_dir}/${uuid}.wav"/>
+            <action application="record_session" data="${recordings_dir}/${call_doc_id}.wav"/>
           </condition>
         </condition>
 
         <condition field="${livocall_record}" expression="^on$" break="on-false">
-          <action application="set" data="execute_on_answer=record_session ${recordings_dir}/${uuid}.wav"/>
+          <action application="record_session" data="${recordings_dir}/${call_doc_id}.wav"/>
         </condition>
 
-        <action application="audio_fork" data="${livocall_ws_url}"/>
+        <action application="system" data="/usr/local/freeswitch/conf/scripts/start_audio_fork.sh '${uuid}' '${livocall_ws_url}'"/>
         <action application="park"/>
       </condition>
     </extension>
   </context>
 </include>
 EOF
+cp "${FS_ROOT}/dialplan/default/00_livocall_outbound.xml" "${FS_ROOT}/dialplan/00_livocall_outbound.xml"
 
 cat > "${FS_ROOT}/dialplan/public/00_livocall_inbound.xml" <<EOF
 <include>
@@ -310,13 +311,39 @@ cat > "${FS_ROOT}/dialplan/public/00_livocall_inbound.xml" <<EOF
           <action application="set" data="execute_on_answer=record_session \${recordings_dir}/\${uuid}.wav"/>
         </condition>
 
-        <action application="audio_fork" data="\${livocall_ws_url}"/>
+        <action application="system" data="/usr/local/freeswitch/conf/scripts/start_audio_fork.sh '\${uuid}' '\${livocall_ws_url}'"/>
         <action application="park"/>
       </condition>
     </extension>
   </context>
 </include>
 EOF
+cp "${FS_ROOT}/dialplan/public/00_livocall_inbound.xml" "${FS_ROOT}/dialplan/00_livocall_inbound.xml"
+
+cat > "${FS_ROOT}/scripts/start_audio_fork.sh" <<'EOF'
+#!/bin/sh
+# Start drachtio mod_audio_fork for a live FreeSWITCH channel from dialplan.
+# Usage: start_audio_fork.sh <uuid> '<ws-url mono rate [options...]>'
+set -eu
+
+uuid="${1:-}"
+shift || true
+fork_args="$*"
+
+if [ -z "$uuid" ] || [ -z "$fork_args" ]; then
+  echo "usage: $0 <uuid> <audio-fork-args>" >&2
+  exit 64
+fi
+
+pass=$(sed -n 's/.*<param name="password" value="\([^"]*\)".*/\1/p' /usr/local/freeswitch/conf/autoload_configs/event_socket.conf.xml | head -1)
+if [ -z "$pass" ]; then
+  echo "FS ESL password not found" >&2
+  exit 65
+fi
+
+exec fs_cli -H 127.0.0.1 -P 8021 -p "$pass" -x "uuid_audio_fork $uuid start $fork_args"
+EOF
+chmod 0755 "${FS_ROOT}/scripts/start_audio_fork.sh"
 
 cat > "${FS_ROOT}/scripts/inbound_route.py" <<'EOF'
 #!/usr/bin/env python3

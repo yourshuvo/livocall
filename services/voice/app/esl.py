@@ -78,7 +78,13 @@ def _quote_chan_var(value: str) -> str:
     those, but we still strip defensively so a malicious caller can't break the
     dialplan.
     """
-    safe = value.replace("'", "").replace("}", "").replace("\n", "").replace("\r", "")
+    safe = (
+        value.replace("'", "")
+        .replace("{", "")
+        .replace("}", "")
+        .replace("\n", "")
+        .replace("\r", "")
+    )
     return f"'{safe}'"
 
 

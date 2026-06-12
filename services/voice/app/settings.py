@@ -94,6 +94,12 @@ class Settings(BaseSettings):
 
     # Public ws URL FreeSWITCH should fork audio to. e.g. ws://voice.internal:8084/ws/audio
     voice_ws_public_url: str = Field(default="ws://127.0.0.1:8084/ws/audio")
+    # When FreeSWITCH and the voice container are on the same VPS, avoid the
+    # public HTTPS/Coolify path for mod_audio_fork; it adds several seconds to
+    # WebSocket setup. Auto-detect the container bridge IP and hand FreeSWITCH
+    # ws://<bridge-ip>:<port>/ws/audio instead.
+    voice_ws_bridge_autodetect_enabled: bool = Field(default=True)
+    voice_ws_internal_port: int = Field(default=8084)
 
     # Shared secret used to HMAC the `auth` query-string on /ws/audio. When set,
     # originator signs each call's WS URL and ws_audio rejects connections with
