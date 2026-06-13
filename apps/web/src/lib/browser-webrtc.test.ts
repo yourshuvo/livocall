@@ -29,6 +29,18 @@ describe('browser WebRTC public URLs', () => {
       'https://voice.example.com/webrtc/browser-prewarm',
     )
   })
+
+  it('derives the prewarm URL from the configured browser offer URL', () => {
+    process.env.VOICE_BROWSER_WEBRTC_URL = 'https://voice.example.com/webrtc/browser-offer'
+    process.env.VOICE_BROWSER_WEBRTC_PREWARM_URL = ''
+    process.env.NEXT_PUBLIC_VOICE_SERVICE_URL = ''
+    process.env.VOICE_SERVICE_URL = 'http://voice:8084'
+
+    expect(browserWebrtcUrl()?.toString()).toBe('https://voice.example.com/webrtc/browser-offer')
+    expect(browserWebrtcPrewarmUrl()?.toString()).toBe(
+      'https://voice.example.com/webrtc/browser-prewarm',
+    )
+  })
 })
 
 describe('browser WebRTC auth signing', () => {

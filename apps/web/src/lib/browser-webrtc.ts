@@ -15,8 +15,12 @@ export function browserWebrtcUrl() {
 
 export function browserWebrtcPrewarmUrl() {
   const direct = process.env.VOICE_BROWSER_WEBRTC_PREWARM_URL || ''
+  const offerUrl = process.env.VOICE_BROWSER_WEBRTC_URL || ''
   const serviceUrl = process.env.NEXT_PUBLIC_VOICE_SERVICE_URL || ''
-  const value = direct || (serviceUrl ? `${serviceUrl.replace(/\/+$/, '')}/webrtc/browser-prewarm` : '')
+  const value =
+    direct ||
+    derivePrewarmUrlFromOfferUrl(offerUrl) ||
+    (serviceUrl ? `${serviceUrl.replace(/\/+$/, '')}/webrtc/browser-prewarm` : '')
   return browserPublicHttpUrl(value)
 }
 
@@ -60,6 +64,21 @@ export function signWsAuth(callId: string) {
     .update(`${callId}|${expires}`)
     .digest('base64url')
   return `${expires}.${signature}`
+}
+
+function derivePrewarmUrlFromOfferUrl(value: string) {
+  if (!value) return ''
+  try {
+    const url = new URL(value.trim())
+    if (!/^https?:$/.test(url.protocol)) return ''
+    if (!url.pathname.endsWith('/webrtc/browser-offer')) return ''
+    url.pathname = url.pathname.replace(/\/webrtc\/browser-offer$/, '/webrtc/browser-prewarm')
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return ''
+  }
 }
 
 function browserPublicHttpUrl(value: string) {
