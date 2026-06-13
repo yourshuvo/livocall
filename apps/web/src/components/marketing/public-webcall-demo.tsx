@@ -11,6 +11,10 @@ import {
   shouldTearDownRemotePipecatAudioTrack,
 } from '@/lib/pipecat-track-routing'
 import {
+  PUBLIC_WEBCALL_SCENARIOS,
+  type PublicWebcallScenarioId,
+} from '@/lib/public-webcall-scenarios'
+import {
   PUBLIC_WEBCALL_DISCONNECT_ON_BOT_DISCONNECT,
   shouldEndPublicWebcallOnBotDisconnect,
 } from '@/lib/public-webcall-session'
@@ -25,6 +29,8 @@ interface PublicWebcallStartResult {
   maxDurationSec: number
   expiresAt: string
   recordingUploadToken?: string
+  scenario?: PublicWebcallScenarioId
+  scenarioLabel?: string
 }
 
 interface PublicWebcallSession {
@@ -55,6 +61,8 @@ export function PublicWebcallDemo({
 }) {
   const [status, setStatus] = useState<WebcallStatus>('idle')
   const [error, setError] = useState('')
+  const [selectedScenario, setSelectedScenario] =
+    useState<PublicWebcallScenarioId>('order-confirmation')
   const sessionRef = useRef<PublicWebcallSession | null>(null)
   const prewarmStartedRef = useRef(false)
 
@@ -96,7 +104,7 @@ export function PublicWebcallDemo({
     const nextSession: PublicWebcallSession = {}
 
     try {
-      const start = await startPublicWebcall()
+      const start = await startPublicWebcall(selectedScenario)
       const [{ PipecatClient }, { SmallWebRTCTransport }] = await Promise.all([
         import('@pipecat-ai/client-js'),
         import('@pipecat-ai/small-webrtc-transport'),
@@ -198,6 +206,9 @@ export function PublicWebcallDemo({
     setError(message)
   }
 
+  const selectedScenarioDetails =
+    PUBLIC_WEBCALL_SCENARIOS.find((scenario) => scenario.id === selectedScenario) ??
+    PUBLIC_WEBCALL_SCENARIOS[0]
   const buttonLabel = !configured
     ? 'Demo unavailable'
     : status === 'live'
@@ -274,6 +285,33 @@ export function PublicWebcallDemo({
             <DemoFact label="Language" value="Bangla-first customer experience" />
             <DemoFact label="Use case" value="Signup follow-up, support, and order confirmation" />
             <DemoFact label="Safety" value="Short public demo with credit guardrails" />
+            <div className="mt-10 border-b border-[#c6cad0] pb-4">
+              <p className="text-[12px] font-semibold text-blue-600">Choose agent</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {PUBLIC_WEBCALL_SCENARIOS.map((scenario) => {
+                  const selected = scenario.id === selectedScenario
+                  return (
+                    <button
+                      key={scenario.id}
+                      type="button"
+                      disabled={status === 'connecting' || status === 'live'}
+                      className={cn(
+                        'rounded-[6px] border px-3 py-2 text-left text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-70',
+                        selected
+                          ? 'border-blue-600 bg-white text-blue-600 shadow-sm'
+                          : 'border-[#D2D4D6] bg-white/60 text-[#334155] hover:border-blue-300 hover:text-blue-600',
+                      )}
+                      onClick={() => setSelectedScenario(scenario.id)}
+                    >
+                      {scenario.shortLabel}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-3 text-[13px] leading-5 text-[#334155]">
+                {selectedScenarioDetails.description}
+              </p>
+            </div>
             {(!configured || error) && (
               <p className="mt-6 rounded-[6px] border border-[#D2D4D6] bg-white/70 px-3 py-2 text-[13px] text-[#334155]">
                 {configured ? error : 'Public demo call is not configured yet.'}
@@ -312,11 +350,13 @@ function DemoFact({ label, value }: { label: string; value: string }) {
   )
 }
 
-async function startPublicWebcall(): Promise<PublicWebcallStartResult> {
+async function startPublicWebcall(
+  scenario: PublicWebcallScenarioId,
+): Promise<PublicWebcallStartResult> {
   const res = await fetch('/api/public/webcall/start', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify({ scenario }),
   })
   const data = await res.json().catch(() => null)
   if (!res.ok) {

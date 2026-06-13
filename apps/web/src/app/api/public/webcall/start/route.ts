@@ -9,6 +9,11 @@ import { connectMongo } from '@/lib/db'
 import { apiError, withErrors } from '@/lib/errors'
 import { browserIceServers, browserWebrtcUrl, signWsAuth } from '@/lib/browser-webrtc'
 import { signPublicRecordingToken } from '@/lib/public-recording-token'
+import {
+  publicWebcallScenarioPrompt,
+  resolvePublicWebcallScenario,
+  type PublicWebcallScenario,
+} from '@/lib/public-webcall-scenarios'
 import { rateLimit } from '@/lib/rate-limit'
 import { Agent } from '@/models/Agent'
 import { Call } from '@/models/Call'
@@ -27,6 +32,10 @@ const BUILTIN_AGENT_DESCRIPTION =
   'Safe built-in public landing Webcall demo. Auto-created by LivoCall when PUBLIC_WEBCALL_AGENT_ID is not set.'
 
 export const POST = withErrors(async (req: Request) => {
+  const body = await req.json().catch(() => ({}))
+  const scenario = resolvePublicWebcallScenario(
+    body && typeof body === 'object' && 'scenario' in body ? body.scenario : undefined,
+  )
   const cookieStore = await cookies()
   const existingSessionId = cookieStore.get(SESSION_COOKIE)?.value || ''
   const sessionId = isPublicSessionId(existingSessionId) ? existingSessionId : randomUUID()
@@ -46,7 +55,7 @@ export const POST = withErrors(async (req: Request) => {
   }
 
   await connectMongo()
-  const agent = await resolvePublicWebcallAgent()
+  const agent = await resolvePublicWebcallAgent(scenario)
   if (!agent) {
     return withPublicSessionCookie(
       apiError('upstream_error', 'public Webcall needs at least one organization'),
@@ -98,9 +107,11 @@ export const POST = withErrors(async (req: Request) => {
       publicIpHash: ipHash,
       publicSessionHash: sessionHash,
       maxDurationSec,
+      webcallScenario: scenario.id,
+      webcallScenarioLabel: scenario.label,
       model: agentTier === 'gemini_live' ? GEMINI_LIVE_MODEL : String(agent.model || ''),
       language: agentTier === 'gemini_live' ? 'bn' : String(agent.language || 'bn'),
-      builtInAgent: String(agent.name || '') === BUILTIN_AGENT_NAME,
+      builtInAgent: String(agent.name || '').startsWith(BUILTIN_AGENT_NAME),
     },
     latency: { callCreatedAt: startedAt.toISOString() },
   })
@@ -108,9 +119,11 @@ export const POST = withErrors(async (req: Request) => {
   webrtcUrl.searchParams.set('call_id', callId)
   webrtcUrl.searchParams.set('agent_id', String(agentId))
   webrtcUrl.searchParams.set('tier', agentTier)
+  webrtcUrl.searchParams.set('prompt', publicWebcallScenarioPrompt(scenario))
   webrtcUrl.searchParams.append('meta', `source:${PUBLIC_SOURCE}`)
   webrtcUrl.searchParams.append('meta', 'publicDemo:true')
   webrtcUrl.searchParams.append('meta', `maxDurationSec:${maxDurationSec}`)
+  webrtcUrl.searchParams.append('meta', `webcallScenario:${scenario.id}`)
   if (agentTier === 'gemini_live') {
     webrtcUrl.searchParams.append('meta', `model:${GEMINI_LIVE_MODEL}`)
     webrtcUrl.searchParams.append('meta', 'language:bn')
@@ -133,13 +146,15 @@ export const POST = withErrors(async (req: Request) => {
       maxDurationSec,
       expiresAt: expiresAt.toISOString(),
       recordingUploadToken,
+      scenario: scenario.id,
+      scenarioLabel: scenario.label,
     }),
     sessionId,
     shouldSetCookie,
   )
 })
 
-async function resolvePublicWebcallAgent(): Promise<{
+async function resolvePublicWebcallAgent(scenario: PublicWebcallScenario): Promise<{
   _id: Types.ObjectId
   orgId: Types.ObjectId
   name: string
@@ -163,9 +178,10 @@ async function resolvePublicWebcallAgent(): Promise<{
 
   const org = await resolvePublicWebcallOrg()
   if (!org) return null
+  const builtInName = builtInPublicAgentName(scenario)
   const existing = await Agent.findOne({
     orgId: org._id,
-    name: BUILTIN_AGENT_NAME,
+    name: builtInName,
     tier: 'gemini_live',
   }).lean<{
     _id: Types.ObjectId
@@ -176,7 +192,7 @@ async function resolvePublicWebcallAgent(): Promise<{
   }>()
   if (existing) {
     if (existing.status !== 'live') {
-      await Agent.updateOne({ _id: existing._id }, { $set: builtInPublicAgentPatch() })
+      await Agent.updateOne({ _id: existing._id }, { $set: builtInPublicAgentPatch(scenario) })
       return { ...existing, status: 'live' }
     }
     return existing
@@ -184,9 +200,9 @@ async function resolvePublicWebcallAgent(): Promise<{
 
   const created = await Agent.create({
     orgId: org._id,
-    name: BUILTIN_AGENT_NAME,
+    name: builtInName,
     tier: 'gemini_live',
-    ...builtInPublicAgentPatch(),
+    ...builtInPublicAgentPatch(scenario),
   })
   return {
     _id: created._id,
@@ -206,19 +222,20 @@ async function resolvePublicWebcallOrg() {
   return Org.findOne({}).sort({ createdAt: 1 }).lean<{ _id: Types.ObjectId }>()
 }
 
-function builtInPublicAgentPatch() {
+function builtInPublicAgentName(scenario: PublicWebcallScenario) {
+  return scenario.id === 'general' ? BUILTIN_AGENT_NAME : `${BUILTIN_AGENT_NAME} - ${scenario.label}`
+}
+
+function builtInPublicAgentPatch(scenario: PublicWebcallScenario) {
   return {
-    description: BUILTIN_AGENT_DESCRIPTION,
+    description: `${BUILTIN_AGENT_DESCRIPTION} Scenario: ${scenario.label}.`,
     status: 'live' as const,
     model: GEMINI_LIVE_MODEL,
     language: 'bn' as const,
     voice: { provider: 'gemini-live', voiceId: 'Puck', style: 'conversational' },
     prompt: {
-      system:
-        'আপনি LivoCall-এর পাবলিক Webcall ডেমো এজেন্ট। সবসময় বাংলায় কথা বলুন। ' +
-        'খুব সংক্ষিপ্ত, বন্ধুত্বপূর্ণ এবং নিরাপদ উত্তর দিন। ব্যক্তিগত তথ্য চাইবেন না। ' +
-        'ব্যবহারকারী যদি LivoCall সম্পর্কে জিজ্ঞেস করে, নিচের Gemini memory থেকে উত্তর দিন।',
-      firstMessage: 'হ্যালো, আমি LivoCall-এর বাংলা AI Webcall ডেমো। কীভাবে সাহায্য করতে পারি?',
+      system: publicWebcallScenarioPrompt(scenario),
+      firstMessage: scenario.firstMessage,
       guardrails:
         'শুধু পাবলিক ডেমো তথ্য ব্যবহার করুন। দাম, চুক্তি, মেডিকেল, আইন, বা ব্যক্তিগত পরামর্শ দেবেন না। দরকার হলে বলুন টিমের সাথে কথা বলতে হবে।',
     },
@@ -239,9 +256,11 @@ function builtInPublicAgentPatch() {
         '- এই ডেমোটি Gemini 3.1 Flash Live দিয়ে চলে।',
         '- Public demo সর্বোচ্চ 4 minutes চলে এবং billing হয় না।',
         '- LivoCall appointment, customer support, lead qualification, survey, and order confirmation use cases support করে।',
+        `- Selected public Webcall agent/scenario: ${scenario.label}.`,
+        `- Scenario goal: ${scenario.description}`,
         '- Company location context: Kurigram.',
       ].join('\n'),
-      sourceHash: 'built-in-public-webcall-v1',
+      sourceHash: `built-in-public-webcall-${scenario.id}-v1`,
       updatedAt: new Date(),
     },
     knowledgeBaseIds: [],
