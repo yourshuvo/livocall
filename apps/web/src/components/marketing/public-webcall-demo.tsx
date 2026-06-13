@@ -10,6 +10,10 @@ import {
   shouldAttachRemotePipecatAudioTrack,
   shouldTearDownRemotePipecatAudioTrack,
 } from '@/lib/pipecat-track-routing'
+import {
+  PUBLIC_WEBCALL_DISCONNECT_ON_BOT_DISCONNECT,
+  shouldEndPublicWebcallOnBotDisconnect,
+} from '@/lib/public-webcall-session'
 
 type WebcallStatus = 'idle' | 'connecting' | 'live' | 'limited'
 
@@ -104,11 +108,14 @@ export function PublicWebcallDemo({
         }),
         enableMic: true,
         enableCam: false,
+        disconnectOnBotDisconnect: PUBLIC_WEBCALL_DISCONNECT_ON_BOT_DISCONNECT,
         callbacks: {
           onError: () => failWebcall('Demo call disconnected.'),
           onDeviceError: () => failWebcall('Microphone permission is needed for the demo call.'),
           onDisconnected: () => stopWebcall(),
-          onBotDisconnected: () => stopWebcall(),
+          onBotDisconnected: () => {
+            if (shouldEndPublicWebcallOnBotDisconnect()) stopWebcall()
+          },
           onTrackStarted: (track, participant) => {
             const localAudioTrack = currentLocalPipecatAudioTrack(client)
             if (isLocalPipecatAudioTrack(track, participant, localAudioTrack)) {
