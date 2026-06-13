@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     gemini_live_language: str = Field(default="bn")
     gemini_live_temperature: float = Field(default=0.25)
     gemini_live_max_tokens: int = Field(default=512)
-    gemini_live_vad_silence_ms: int = Field(default=250)
+    gemini_live_vad_silence_ms: int = Field(default=500)
     gemini_live_vad_prefix_padding_ms: int = Field(default=100)
     gemini_live_context_compression_enabled: bool = Field(default=True)
     gemini_kb_tool_timeout_ms: int = Field(default=1200)
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     pipeline_stt_provider: str = Field(default="soniox")
     pipeline_tts_provider: str = Field(default="soniox")
     deepgram_model: str = Field(default="nova-3")  # latest Deepgram STT model
-    deepgram_language: str = Field(default="multi")
+    deepgram_language: str = Field(default="bn")
     cartesia_voice_id: str = Field(default="")
     soniox_stt_model: str = Field(default="stt-rt-v4")
     soniox_stt_url: str = Field(default="wss://stt-rt.soniox.com/transcribe-websocket")

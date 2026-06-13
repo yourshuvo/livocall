@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 
@@ -10,6 +11,17 @@ from app import gemini_pcm_bridge as bridge
 
 class FakeTypes:
     ThinkingConfig = object
+
+    class Blob:
+        def __init__(self, *, data: bytes, mime_type: str) -> None:
+            self.data = data
+            self.mime_type = mime_type
+
+    class ActivityStart:
+        pass
+
+    class ActivityEnd:
+        pass
 
 
 class FakeSession:
@@ -41,6 +53,18 @@ class FakeWebSocket:
         self.sent.append(data)
 
 
+class FakeRealtimeInputSession:
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    async def send_realtime_input(self, **kwargs: Any) -> None:
+        self.events.append(kwargs)
+
+
+def _pcm16_constant(sample: int, frames: int = 320) -> bytes:
+    return int(sample).to_bytes(2, "little", signed=True) * frames
+
+
 def _transcription(text: str) -> SimpleNamespace:
     return SimpleNamespace(text=text)
 
@@ -59,8 +83,11 @@ def _response(
     )
 
 
-def test_live_config_does_not_request_audio_transcription(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_config_uses_supported_bangla_speech_and_audio_transcription(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(bridge.settings, "gemini_live_context_compression_enabled", True)
+    monkeypatch.setattr(bridge.settings, "gemini_live_language", "bn")
     config = bridge._live_config(
         FakeTypes,
         "Answer fast.",
@@ -69,8 +96,11 @@ def test_live_config_does_not_request_audio_transcription(monkeypatch: pytest.Mo
     )
 
     assert config["response_modalities"] == ["AUDIO"]
-    assert "input_audio_transcription" not in config
-    assert "output_audio_transcription" not in config
+    assert config["speech_config"]["language_code"] == "bn-BD"
+    # Gemini API currently accepts transcription enablement, but rejects the
+    # SDK's `language_codes` parameter on this endpoint.
+    assert config["input_audio_transcription"] == {}
+    assert config["output_audio_transcription"] == {}
     assert config["realtime_input_config"]["automatic_activity_detection"] == {
         "disabled": False,
         "prefix_padding_ms": 100,
@@ -90,7 +120,7 @@ def test_live_config_enforces_safe_gemini_vad_floor(monkeypatch: pytest.MonkeyPa
     assert config["realtime_input_config"]["automatic_activity_detection"] == {
         "disabled": False,
         "prefix_padding_ms": 100,
-        "silence_duration_ms": 250,
+        "silence_duration_ms": 500,
     }
 
 
@@ -221,6 +251,34 @@ async def test_iter_model_output_captures_session_resumption_handle() -> None:
 
     assert items == []
     assert state == {"handle": "resume-1"}
+
+
+@pytest.mark.asyncio
+async def test_send_caller_audio_streams_every_chunk_and_lets_gemini_vad_endpoint() -> None:
+    input_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+    silence = _pcm16_constant(0)
+    speech = _pcm16_constant(1200)
+    for chunk in [silence, speech, speech, silence, None]:
+        await input_queue.put(chunk)
+    session = FakeRealtimeInputSession()
+    latency = bridge.PcmuLatency("64b64b64b64b64b64b64b64b")
+
+    await bridge._send_caller_audio(session, FakeTypes, input_queue, "call-1", latency)
+
+    assert [list(event) for event in session.events] == [
+        ["audio"],
+        ["audio"],
+        ["audio"],
+        ["audio"],
+    ]
+    assert [event["audio"].data for event in session.events] == [
+        silence,
+        speech,
+        speech,
+        silence,
+    ]
+    assert all("audio_stream_end" not in event for event in session.events)
+    assert "first_gemini_audio_send" in latency.marks
 
 
 @pytest.mark.asyncio

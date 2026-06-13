@@ -242,7 +242,7 @@ function builtInPublicAgentPatch(scenario: PublicWebcallScenario) {
     runtimeSettings: {
       welcomeMode: 'ai' as const,
       welcomeKind: 'static' as const,
-      geminiLiveVadSilenceMs: 250,
+      geminiLiveVadSilenceMs: 500,
       geminiKbToolTimeoutMs: 1200,
       geminiMemoryEnabled: true,
       geminiKbCacheEnabled: false,

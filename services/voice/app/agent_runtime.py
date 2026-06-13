@@ -20,6 +20,14 @@ GEMINI_LIVE_MODEL_ALIASES = {
     "gemini-3.1-flash-live": "models/gemini-3.1-flash-live-preview",
     "gemini-3.1-flash-live-preview": "models/gemini-3.1-flash-live-preview",
     "models/gemini-3.1-flash-live-preview": "models/gemini-3.1-flash-live-preview",
+    "gemini-2.5-flash-native-audio-latest": "models/gemini-2.5-flash-native-audio-latest",
+    "models/gemini-2.5-flash-native-audio-latest": "models/gemini-2.5-flash-native-audio-latest",
+    "gemini-2.5-flash-native-audio-preview-09-2025": "models/gemini-2.5-flash-native-audio-preview-09-2025",
+    "models/gemini-2.5-flash-native-audio-preview-09-2025": "models/gemini-2.5-flash-native-audio-preview-09-2025",
+    "gemini-2.5-flash-native-audio-preview-12-2025": "models/gemini-2.5-flash-native-audio-preview-12-2025",
+    "models/gemini-2.5-flash-native-audio-preview-12-2025": "models/gemini-2.5-flash-native-audio-preview-12-2025",
+    "gemini-3.5-live-translate-preview": "models/gemini-3.5-live-translate-preview",
+    "models/gemini-3.5-live-translate-preview": "models/gemini-3.5-live-translate-preview",
     "gemini-2.5-flash-live": "models/gemini-3.1-flash-live-preview",
     "gemini-2.0-flash-live": "models/gemini-3.1-flash-live-preview",
 }
@@ -64,13 +72,7 @@ GROK_VOICE_ALIASES = {
 
 SONIOX_VOICE_ALIASES = {
     "adrian": "Adrian",
-    "ava": "Ava",
-    "olivia": "Olivia",
-    "liam": "Liam",
     "soniox:adrian": "Adrian",
-    "soniox:ava": "Ava",
-    "soniox:olivia": "Olivia",
-    "soniox:liam": "Liam",
 }
 
 PIPELINE_STT_PROVIDERS = {"soniox", "deepgram"}
@@ -111,10 +113,9 @@ def runtime_bool(agent: dict[str, Any], key: str, default: bool) -> bool:
 
 def gemini_live_vad_silence_ms(agent: dict[str, Any]) -> int:
     value = runtime_int(agent, "geminiLiveVadSilenceMs", settings.gemini_live_vad_silence_ms)
-    # Keep Gemini Live as the sole VAD owner, but do not force a long
-    # endpointing delay. The UI/env default is 250ms, so preserve that
-    # low-latency setting instead of silently clamping it to 500ms+.
-    return max(250, min(2000, value))
+    # Gemini Live owns turn detection. Keep endpointing fast but do not allow
+    # ultra-low values that chop Bangla caller turns before Gemini can decide.
+    return max(500, min(2000, value))
 
 
 def gemini_live_vad_prefix_padding_ms(agent: dict[str, Any]) -> int:
@@ -137,9 +138,18 @@ def gemini_memory_enabled(agent: dict[str, Any]) -> bool:
 
 def gemini_live_model(agent: dict[str, Any]) -> str:
     raw = str(agent.get("model") or settings.gemini_live_model).strip()
-    if raw in GEMINI_LIVE_MODEL_ALIASES:
-        return GEMINI_LIVE_MODEL_ALIASES[raw]
-    return raw if raw.startswith("models/") else f"models/{raw}"
+    alias = GEMINI_LIVE_MODEL_ALIASES.get(raw)
+    if alias:
+        return alias
+    normalized = raw.removeprefix("models/")
+    if "live" in normalized or "native-audio" in normalized:
+        return raw if raw.startswith("models/") else f"models/{raw}"
+    return settings.gemini_live_model
+
+
+def gemini_live_language_code(agent: dict[str, Any]) -> str:  # noqa: ARG001
+    # Keep Gemini Live STT/transcription pinned to Bangla for BD phone calls.
+    return "bn-BD"
 
 
 def pipeline_model(agent: dict[str, Any]) -> str:
@@ -150,7 +160,14 @@ def pipeline_model(agent: dict[str, Any]) -> str:
 def gemini_voice(agent: dict[str, Any]) -> str:
     voice = agent.get("voice") if isinstance(agent.get("voice"), dict) else {}
     raw = str(voice.get("voiceId") or voice.get("id") or settings.gemini_live_voice).strip()
-    return GEMINI_VOICE_ALIASES.get(raw.lower(), raw)
+    raw_lower = raw.lower()
+    if raw_lower in GEMINI_VOICE_ALIASES:
+        return GEMINI_VOICE_ALIASES[raw_lower]
+    if raw_lower.startswith(("soniox:", "cartesia:", "xai:")):
+        return GEMINI_VOICE_ALIASES.get(settings.gemini_live_voice.lower(), settings.gemini_live_voice)
+    if raw_lower in {"adrian", "ava", "olivia", "liam", "rohan", "pooja", "anika", "tanvir"}:
+        return GEMINI_VOICE_ALIASES.get(settings.gemini_live_voice.lower(), settings.gemini_live_voice)
+    return GEMINI_VOICE_ALIASES.get(settings.gemini_live_voice.lower(), settings.gemini_live_voice)
 
 
 def grok_voice_model(agent: dict[str, Any]) -> str:
@@ -204,7 +221,14 @@ def soniox_voice(agent: dict[str, Any]) -> str:
         raw_lower = raw.lower()
     if raw_lower in GEMINI_VOICE_ALIASES or raw_lower.startswith("gemini-live:"):
         return settings.soniox_tts_voice
+    if raw_lower in {"ava", "olivia", "liam"}:
+        return settings.soniox_tts_voice
     return SONIOX_VOICE_ALIASES.get(raw_lower, raw or settings.soniox_tts_voice)
+
+
+def stt_language_code(agent: dict[str, Any]) -> str:  # noqa: ARG001
+    # Phone STT is Bangla-only for Bangladesh calls; do not pass mixed/en hints.
+    return "bn"
 
 
 def soniox_language(agent: dict[str, Any]) -> str:
@@ -217,10 +241,7 @@ def soniox_language(agent: dict[str, Any]) -> str:
 
 
 def soniox_language_hint_codes(agent: dict[str, Any]) -> list[str]:
-    raw = str(agent.get("language") or settings.soniox_language).strip()
-    if raw == "bn-en-mixed":
-        return ["bn", "en"]
-    return [soniox_language(agent)]
+    return [stt_language_code(agent)]
 
 
 async def knowledge_context(agent: dict[str, Any], *, query: str = "", limit: int = 4) -> str:

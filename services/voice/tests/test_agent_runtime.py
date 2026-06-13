@@ -9,20 +9,20 @@ from app import agent_runtime
 
 
 def test_gemini_live_vad_silence_default_and_clamp(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(agent_runtime.settings, "gemini_live_vad_silence_ms", 250)
+    monkeypatch.setattr(agent_runtime.settings, "gemini_live_vad_silence_ms", 500)
 
-    assert agent_runtime.gemini_live_vad_silence_ms({}) == 250
+    assert agent_runtime.gemini_live_vad_silence_ms({}) == 500
     assert (
         agent_runtime.gemini_live_vad_silence_ms(
-            {"runtimeSettings": {"geminiLiveVadSilenceMs": 250}}
+            {"runtimeSettings": {"geminiLiveVadSilenceMs": 500}}
         )
-        == 250
+        == 500
     )
     assert (
         agent_runtime.gemini_live_vad_silence_ms(
             {"runtimeSettings": {"geminiLiveVadSilenceMs": 100}}
         )
-        == 250
+        == 500
     )
     assert (
         agent_runtime.gemini_live_vad_silence_ms(
@@ -30,6 +30,35 @@ def test_gemini_live_vad_silence_default_and_clamp(monkeypatch: pytest.MonkeyPat
         )
         == 2000
     )
+
+
+def test_gemini_live_model_ignores_non_live_agent_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        agent_runtime.settings,
+        "gemini_live_model",
+        "models/gemini-3.1-flash-live-preview",
+    )
+
+    assert (
+        agent_runtime.gemini_live_model({"model": "gemini-2.5-flash-lite"})
+        == "models/gemini-3.1-flash-live-preview"
+    )
+    assert (
+        agent_runtime.gemini_live_model({"model": "gemini-2.5-flash-native-audio-latest"})
+        == "models/gemini-2.5-flash-native-audio-latest"
+    )
+
+
+def test_gemini_voice_falls_back_from_non_gemini_provider_voices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(agent_runtime.settings, "gemini_live_voice", "Puck")
+
+    assert agent_runtime.gemini_voice({"voice": {"voiceId": "gemini-live:aoede"}}) == "Aoede"
+    assert agent_runtime.gemini_voice({"voice": {"voiceId": "aoede"}}) == "Aoede"
+    assert agent_runtime.gemini_voice({"voice": {"voiceId": "Adrian"}}) == "Puck"
+    assert agent_runtime.gemini_voice({"voice": {"voiceId": "soniox:adrian"}}) == "Puck"
+    assert agent_runtime.gemini_voice({"voice": {"voiceId": "Ava"}}) == "Puck"
 
 
 def test_pipeline_model_defaults_to_flash_lite_and_preserves_flash_alias(
@@ -65,13 +94,16 @@ def test_soniox_voice_and_language_mapping(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(agent_runtime.settings, "soniox_tts_voice", "Adrian")
     monkeypatch.setattr(agent_runtime.settings, "soniox_language", "bn")
 
-    assert agent_runtime.soniox_voice({"voice": {"voiceId": "soniox:ava"}}) == "Ava"
+    assert agent_runtime.soniox_voice({"voice": {"voiceId": "soniox:adrian"}}) == "Adrian"
+    assert agent_runtime.soniox_voice({"voice": {"voiceId": "Ava"}}) == "Adrian"
     assert agent_runtime.soniox_voice({"voice": {"voiceId": "aoede"}}) == "Adrian"
     assert agent_runtime.soniox_voice({"voice": {"voiceId": "gemini-live:puck"}}) == "Adrian"
     assert agent_runtime.soniox_voice({"voice": {"voiceId": "Custom Voice"}}) == "Custom Voice"
     assert agent_runtime.soniox_language({"language": "bn-en-mixed"}) == "bn"
     assert agent_runtime.soniox_language({"language": "en-US"}) == "en"
-    assert agent_runtime.soniox_language_hint_codes({"language": "bn-en-mixed"}) == ["bn", "en"]
+    assert agent_runtime.stt_language_code({"language": "bn-en-mixed"}) == "bn"
+    assert agent_runtime.stt_language_code({"language": "en-US"}) == "bn"
+    assert agent_runtime.soniox_language_hint_codes({"language": "bn-en-mixed"}) == ["bn"]
 
 
 @pytest.mark.asyncio

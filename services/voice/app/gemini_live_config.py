@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.agent_runtime import (
+    gemini_live_language_code,
     gemini_live_vad_prefix_padding_ms,
     gemini_live_vad_silence_ms,
     gemini_tool_declarations,
@@ -18,14 +19,18 @@ def live_config(
     *,
     session_resumption_handle: str | None = None,
 ) -> dict[str, Any]:
+    language_code = gemini_live_language_code(agent)
     config: dict[str, Any] = {
         "response_modalities": ["AUDIO"],
         "system_instruction": system_prompt,
         "temperature": settings.gemini_live_temperature,
         "max_output_tokens": settings.gemini_live_max_tokens,
         "speech_config": {
-            "voice_config": {"prebuilt_voice_config": {"voice_name": voice}}
+            "language_code": language_code,
+            "voice_config": {"prebuilt_voice_config": {"voice_name": voice}},
         },
+        "input_audio_transcription": {},
+        "output_audio_transcription": {},
         "realtime_input_config": {
             "automatic_activity_detection": {
                 "disabled": False,

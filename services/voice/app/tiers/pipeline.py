@@ -7,17 +7,18 @@ it owns native VAD/turn-taking itself.
 
 from __future__ import annotations
 
-from contextlib import suppress
-from typing import Any
-from urllib.parse import urlsplit, urlunsplit
-
 import asyncio
 import ipaddress
 import socket
 import time
+from contextlib import suppress
+from typing import Any
+from urllib.parse import urlsplit, urlunsplit
+
 import structlog
 from fastapi import WebSocket
 
+from app import playback_files
 from app.agent_runtime import (
     build_system_prompt,
     cartesia_voice_id,
@@ -29,11 +30,11 @@ from app.agent_runtime import (
     soniox_language,
     soniox_language_hint_codes,
     soniox_voice,
+    stt_language_code,
 )
 from app.db import get_db
 from app.esl import EslClient, EslConfig
 from app.persistence import flush_context_transcript
-from app import playback_files
 from app.settings import settings
 from app.tiers._common import close_unavailable, fetch_agent_for_call
 
@@ -80,13 +81,13 @@ class PipelineTier:
                 SileroVADAnalyzer,
                 VADParams,
             )
+            from pipecat.frames.frames import TTSSpeakFrame  # type: ignore[import-not-found]
             from pipecat.pipeline.pipeline import Pipeline  # type: ignore[import-not-found]
             from pipecat.pipeline.runner import PipelineRunner  # type: ignore[import-not-found]
             from pipecat.pipeline.task import (  # type: ignore[import-not-found]
                 PipelineParams,
                 PipelineTask,
             )
-            from pipecat.frames.frames import TTSSpeakFrame  # type: ignore[import-not-found]
             from pipecat.processors.aggregators.llm_context import (  # type: ignore[import-not-found]
                 LLMContext,
             )
@@ -758,7 +759,7 @@ def _build_stt(
         sample_rate=settings.sample_rate_in,
         settings=DeepgramSTTService.Settings(
             model=settings.deepgram_model,
-            language=_language_enum(Language, settings.deepgram_language) or Language.EN,
+            language=_language_enum(Language, stt_language_code(agent)) or Language.BN,
             interim_results=True,
             endpointing=endpointing,
             punctuate=True,
