@@ -17,8 +17,8 @@ from urllib.parse import urlsplit, urlunsplit
 import structlog
 from bson import ObjectId
 
+from app import telephony
 from app.db import get_db
-from app.esl import EslClient, EslConfig
 from app.runtime_overrides import runtime_overrides
 from app.settings import settings
 from app.warm_sessions import warm_sessions
@@ -27,11 +27,6 @@ from app.ws_auth import sign as ws_sign
 
 log = structlog.get_logger()
 
-
-def _esl_config() -> EslConfig:
-    return EslConfig(
-        host=settings.fs_host, port=settings.fs_esl_port, password=settings.fs_esl_password
-    )
 
 
 def _container_bridge_ipv4() -> str:
@@ -251,27 +246,25 @@ async def originate_call(
                 metadata=metadata,
                 agent=agent,
             )
-        client = EslClient(_esl_config())
         try:
-            await client.connect()
-            await client.originate(
-                gateway=gateway,
-                to_e164=to_e164,
-                agent_id=agent_id,
-                tier=tier,
-                from_e164=cli,
-                ws_url=audio_fork_args(ws_url),
-                call_doc_id=call_doc_id,
-                channel_uuid=fs_uuid,
-                disclosure_url=disclosure_url,
-                record_mode=record_mode,
-                consent_prompt_url=consent_prompt_url,
+            await telephony.get_edge().originate(
+                telephony.OriginateParams(
+                    gateway=gateway,
+                    to_e164=to_e164,
+                    agent_id=agent_id,
+                    tier=tier,
+                    from_e164=cli,
+                    ws_url=audio_fork_args(ws_url),
+                    call_doc_id=call_doc_id,
+                    channel_uuid=fs_uuid,
+                    disclosure_url=disclosure_url,
+                    record_mode=record_mode,
+                    consent_prompt_url=consent_prompt_url,
+                )
             )
         except Exception:
             await warm_sessions.cleanup(call_doc_id)
             raise
-        finally:
-            await client.close()
 
     # Notify web (best-effort) so the dashboard can subscribe to call.started.
     await post_voice_event(
@@ -417,10 +410,8 @@ async def control_call(
     org_id = str(doc["orgId"])
     agent_id = str(doc.get("agentId") or "")
     gateway, cli = await resolve_outbound_gateway(org_id, agent_id, None)
-    client = EslClient(_esl_config())
-    try:
-        await client.connect()
-        await client.eavesdrop(
+    await telephony.get_edge().eavesdrop(
+        telephony.SupervisorParams(
             gateway=gateway,
             target_e164=target_e164,
             from_e164=cli,
@@ -428,9 +419,8 @@ async def control_call(
             supervisor_uuid=supervisor_uuid,
             action=action,
         )
-        return {"ok": True, "action": action, "supervisorLegUuid": supervisor_uuid}
-    finally:
-        await client.close()
+    )
+    return {"ok": True, "action": action, "supervisorLegUuid": supervisor_uuid}
 
 
 async def hangup_call(call_or_uuid: str) -> bool:
@@ -444,13 +434,8 @@ async def hangup_call(call_or_uuid: str) -> bool:
     if settings.voice_fake_driver:
         log.info("hangup.fake_driver", uuid=fs_uuid)
         return True
-    client = EslClient(_esl_config())
-    try:
-        await client.connect()
-        await client.hangup(fs_uuid)
-        return True
-    finally:
-        await client.close()
+    await telephony.get_edge().hangup(fs_uuid)
+    return True
 
 
 async def transfer_call(call_or_uuid: str, target: str) -> bool:
@@ -463,13 +448,8 @@ async def transfer_call(call_or_uuid: str, target: str) -> bool:
     if settings.voice_fake_driver:
         log.info("transfer.fake_driver", uuid=fs_uuid, target=target)
         return True
-    client = EslClient(_esl_config())
-    try:
-        await client.connect()
-        await client.transfer(fs_uuid, target)
-        return True
-    finally:
-        await client.close()
+    await telephony.get_edge().transfer(fs_uuid, target)
+    return True
 
 
 async def execute_ivr_action(call_or_uuid: str, action: str) -> bool:
@@ -489,17 +469,13 @@ async def execute_ivr_action(call_or_uuid: str, action: str) -> bool:
     if settings.voice_fake_driver:
         log.info("ivr.fake_driver", uuid=fs_uuid, action=action)
         return True
-    client = EslClient(_esl_config())
-    try:
-        await client.connect()
-        if action.startswith("transfer:"):
-            await client.transfer(fs_uuid, action.split(":", 1)[1])
-        elif action.startswith("prompt:"):
-            await client.playback(fs_uuid, action.split(":", 1)[1])
-        elif action == "hangup":
-            await client.hangup(fs_uuid)
-        else:
-            return False
-        return True
-    finally:
-        await client.close()
+    edge = telephony.get_edge()
+    if action.startswith("transfer:"):
+        await edge.transfer(fs_uuid, action.split(":", 1)[1])
+    elif action.startswith("prompt:"):
+        await edge.playback(fs_uuid, action.split(":", 1)[1])
+    elif action == "hangup":
+        await edge.hangup(fs_uuid)
+    else:
+        return False
+    return True

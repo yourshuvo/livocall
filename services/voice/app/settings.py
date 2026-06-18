@@ -10,12 +10,27 @@ class Settings(BaseSettings):
     mongodb_uri: str = Field(default="mongodb://localhost:27017/livocall")
     redis_url: str = Field(default="redis://localhost:6379/0")
 
+    # Telephony edge. "freeswitch" preserves the existing ESL/mod_audio_fork
+    # path; "pjsip" uses the embedded PJSIP/pjsua2 edge in app.telephony.
+    telephony_edge: str = Field(default="freeswitch")
+
     # FreeSWITCH ESL
     fs_host: str = Field(default="127.0.0.1")
     fs_esl_port: int = Field(default=8021)
     fs_esl_password: str = Field(default="ClueCon")
     fs_default_gateway: str = Field(default="sip_custom")  # sofia/gateway/<this>/<dest>
     fs_dashboard_test_gateway: str = Field(default="sip_j")
+
+    # Embedded PJSIP/pjsua2 single-account edge. These are intentionally
+    # separate from dashboard-created PhoneNumber rows for the first migration
+    # phase; later the edge can hydrate accounts from Mongo.
+    pjsip_sip_server: str = Field(default="")
+    pjsip_sip_port: int = Field(default=5060)
+    pjsip_username: str = Field(default="")
+    pjsip_auth_username: str = Field(default="")
+    pjsip_password: str = Field(default="")
+    pjsip_realm: str = Field(default="*")
+    pjsip_local_sip_port: int = Field(default=5070)
 
     # Web app callback (event ingest + webhook tick)
     web_base_url: str = Field(default="http://localhost:3000")

@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
-from app import event_bridge, freeswitch_controller, originator, playback_files
+from app import event_bridge, freeswitch_controller, originator, playback_files, telephony
 from app.browser_webrtc import (
     aclose as aclose_browser_webrtc,
 )
@@ -61,12 +61,22 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     # loop. Real deployments either set FS_HOST or leave the default and have
     # FreeSWITCH on localhost.
     consumer = None
-    if not settings.voice_fake_driver:
+    edge = None
+    if settings.voice_fake_driver:
+        log.info("startup", mode="fake_driver")
+    elif settings.telephony_edge.strip().lower() == "freeswitch":
         consumer = event_bridge.get_consumer()
         consumer.start()
-        log.info("startup", esl_host=settings.fs_host, esl_port=settings.fs_esl_port)
+        log.info(
+            "startup",
+            telephony_edge=settings.telephony_edge,
+            esl_host=settings.fs_host,
+            esl_port=settings.fs_esl_port,
+        )
     else:
-        log.info("startup", mode="fake_driver")
+        edge = telephony.get_edge()
+        await edge.start()
+        log.info("startup", telephony_edge=settings.telephony_edge)
 
     dialer = None
     if settings.enable_campaign_dialer:
@@ -92,6 +102,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
             await ingestor.stop()
         if consumer is not None:
             await consumer.stop()
+        if edge is not None:
+            await edge.stop()
         await aclose_browser_webrtc()
         await aclose_web_client()
 
@@ -139,6 +151,7 @@ async def health() -> dict[str, object]:
         "ok": True,
         "service": "livocall-engine",
         "version": "0.2.0",
+        "telephony_edge": settings.telephony_edge,
         "fs_host": settings.fs_host,
         "fs_esl_port": settings.fs_esl_port,
         "fs_default_gateway": settings.fs_default_gateway,
