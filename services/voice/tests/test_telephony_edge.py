@@ -250,6 +250,50 @@ def test_pjsip_raw_pcm_websocket_adapts_audio_queues() -> None:
     assert ws.pop_outbound_pcm_nowait() == b"bot"
 
 
+def test_pjsip_raw_pcm_websocket_records_bidirectional_audio(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import wave
+
+    from app.telephony import media_bridge
+    from app.telephony.media_bridge import PjsipPcmWebSocket
+
+    monkeypatch.setattr(media_bridge.settings, "recordings_local_dir", str(tmp_path))
+    ws = PjsipPcmWebSocket(call_id="507f1f77bcf86cd799439011", record_audio=True)
+
+    ws.push_inbound_pcm(b"\x01\x00" * 160)
+    asyncio.run(ws.send_bytes(b"\x02\x00" * 160))
+    asyncio.run(ws.close())
+
+    path = tmp_path / "507f1f77bcf86cd799439011.wav"
+    assert path.exists()
+    with wave.open(str(path), "rb") as wav:
+        assert wav.getnchannels() == 1
+        assert wav.getsampwidth() == 2
+        assert wav.getframerate() == 16000
+        assert wav.getnframes() == 320
+
+
+def test_pjsip_media_bridge_queues_wav_file_playback(tmp_path: Path) -> None:
+    import wave
+
+    from app.telephony.media_bridge import PjsipPcmWebSocket
+
+    wav_path = tmp_path / "prompt.wav"
+    with wave.open(str(wav_path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(b"\x03\x00" * 160)
+
+    ws = PjsipPcmWebSocket(call_id="call-1")
+    queued = ws.queue_wav_file(wav_path)
+
+    assert queued == 320
+    assert ws.pop_outbound_pcm_nowait() == b"\x03\x00" * 160
+
+
 def test_voice_dockerfile_builds_pjsua2_from_pjproject_source() -> None:
     dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
 

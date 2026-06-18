@@ -3,10 +3,14 @@ from __future__ import annotations
 import asyncio
 import importlib
 import re
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
+import httpx
 import structlog
 from bson import ObjectId
 
@@ -28,6 +32,8 @@ class PjsipCallContext:
     tier: str
     answered_at: datetime | None = None
     started_at: datetime | None = None
+    disclosure_url: str = ""
+    record_mode: str = "on"
 
 
 async def create_inbound_call_from_pjsip(
@@ -169,6 +175,8 @@ class PjsipEdge(TelephonyEdge):
             agent_id=params.agent_id,
             tier=params.tier,
             started_at=datetime.now(UTC),
+            disclosure_url=params.disclosure_url,
+            record_mode=params.record_mode,
         )
         call_params = self._pj.CallOpParam(True)
         destination = self._destination_uri(params.to_e164)
@@ -196,10 +204,15 @@ class PjsipEdge(TelephonyEdge):
         return "+OK"
 
     async def playback(self, uuid: str, url: str) -> str:
-        # For PJSIP calls, TTS should normally flow through the media bridge.
-        # File playback support can be added by decoding the URL/WAV into the
-        # bridge outbound queue; fail clearly instead of silently doing nothing.
-        return f"-ERR PJSIP file playback is not implemented for {url} on {uuid}"
+        bridge = self._media_bridges.get(uuid)
+        if bridge is None or bridge.ws is None:
+            return "-ERR call media bridge not ready"
+        try:
+            path = await _playback_url_to_path(url)
+            queued = bridge.ws.queue_wav_file(path)
+        except Exception as exc:  # noqa: BLE001
+            return f"-ERR PJSIP playback failed: {exc}"
+        return f"+OK queued {queued} bytes"
 
     async def eavesdrop(self, params: SupervisorParams) -> str:  # noqa: ARG002
         return "-ERR PJSIP supervisor listen/barge is not implemented"
@@ -268,6 +281,8 @@ class PjsipEdge(TelephonyEdge):
                 agent_id=str(inbound.get("agentId") or ""),
                 tier=str(inbound.get("tier") or "pipeline"),
                 started_at=datetime.now(UTC),
+                disclosure_url=str(inbound.get("disclosureUrl") or ""),
+                record_mode=str(inbound.get("recordMode") or "on"),
             )
             answer_prm.statusCode = 200
             call.answer(answer_prm)
@@ -306,7 +321,10 @@ class PjsipEdge(TelephonyEdge):
             call_id=context.call_doc_id,
             agent_id=context.agent_id,
             tier=context.tier,
+            record_audio=context.record_mode != "off",
         )
+        if context.disclosure_url:
+            await self.playback(uuid, context.disclosure_url)
 
     async def _handle_dtmf_digit(self, call: Any, digit: str) -> None:
         if not digit:
@@ -384,6 +402,24 @@ class PjsipEdge(TelephonyEdge):
                 "pjsua2 is not installed; install/build PJSIP Python bindings before TELEPHONY_EDGE=pjsip"
             )
         return module
+
+
+async def _playback_url_to_path(url: str) -> Path:
+    parsed = urlparse(url)
+    if parsed.scheme == "file":
+        return Path(parsed.path)
+    if parsed.scheme in {"http", "https"}:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(url)
+            res.raise_for_status()
+        with tempfile.NamedTemporaryFile(
+            prefix="livocall-pjsip-playback-", suffix=".wav", delete=False
+        ) as tmp:
+            tmp.write(res.content)
+            return Path(tmp.name)
+    if parsed.scheme:
+        raise ValueError(f"unsupported playback URL scheme: {parsed.scheme}")
+    return Path(url)
 
 
 def _outcome_from_cause(cause: str) -> str:

@@ -2,14 +2,44 @@ from __future__ import annotations
 
 import asyncio
 import queue
+import wave
 from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 import structlog
 
+from app.settings import settings
 from app.tiers import resolve_tier
 
 log = structlog.get_logger()
+
+
+class _RecordingSink:
+    def __init__(self, *, call_id: str, sample_rate: int) -> None:
+        self.call_id = call_id
+        self.sample_rate = sample_rate
+        directory = Path(settings.recordings_local_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        self.path = directory / f"{call_id}.wav"
+        self._wav = wave.open(str(self.path), "wb")  # noqa: SIM115 - kept open for streaming writes
+        self._wav.setnchannels(1)
+        self._wav.setsampwidth(2)
+        self._wav.setframerate(sample_rate)
+        self._closed = False
+
+    def write(self, pcm: bytes) -> None:
+        if self._closed or not pcm:
+            return
+        if len(pcm) % 2:
+            pcm += b"\x00"
+        self._wav.writeframes(pcm)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._wav.close()
 
 
 class PjsipPcmWebSocket:
@@ -21,10 +51,12 @@ class PjsipPcmWebSocket:
     provides thread-safe queues for PJSIP audio ports.
     """
 
-    def __init__(self, *, call_id: str) -> None:
+    def __init__(self, *, call_id: str, record_audio: bool = False, sample_rate: int = 16000) -> None:
         self.call_id = call_id
+        self.sample_rate = sample_rate
         self._inbound: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._outbound: queue.Queue[bytes] = queue.Queue()
+        self._recorder = _RecordingSink(call_id=call_id, sample_rate=sample_rate) if record_audio else None
         self._closed = False
 
     async def accept(self) -> None:
@@ -32,6 +64,8 @@ class PjsipPcmWebSocket:
 
     async def close(self, code: int = 1000) -> None:  # noqa: ARG002
         self._closed = True
+        if self._recorder is not None:
+            self._recorder.close()
         await self._inbound.put({"type": "websocket.disconnect"})
 
     async def receive(self) -> dict[str, Any]:
@@ -39,7 +73,10 @@ class PjsipPcmWebSocket:
 
     async def send_bytes(self, data: bytes) -> None:
         if data:
-            self._outbound.put(bytes(data))
+            pcm = bytes(data)
+            self._outbound.put(pcm)
+            if self._recorder is not None:
+                self._recorder.write(pcm)
 
     async def send_text(self, data: str) -> None:  # noqa: ARG002
         return None
@@ -47,7 +84,34 @@ class PjsipPcmWebSocket:
     def push_inbound_pcm(self, pcm: bytes) -> None:
         if self._closed or not pcm:
             return
-        self._inbound.put_nowait({"type": "websocket.receive", "bytes": bytes(pcm)})
+        data = bytes(pcm)
+        if self._recorder is not None:
+            self._recorder.write(data)
+        self._inbound.put_nowait({"type": "websocket.receive", "bytes": data})
+
+    def queue_pcm_playback(self, pcm: bytes) -> int:
+        if not pcm:
+            return 0
+        data = bytes(pcm)
+        self._outbound.put(data)
+        if self._recorder is not None:
+            self._recorder.write(data)
+        return len(data)
+
+    def queue_wav_file(self, path: str | Path) -> int:
+        with wave.open(str(path), "rb") as wav:
+            channels = wav.getnchannels()
+            width = wav.getsampwidth()
+            frames = wav.readframes(wav.getnframes())
+        # The phone path expects mono signed-16-bit PCM. If the prompt is stereo,
+        # downmix by taking the first channel; uncommon widths fail clearly.
+        if width != 2:
+            raise ValueError(f"unsupported WAV sample width for PJSIP playback: {width}")
+        if channels == 2:
+            frames = b"".join(frames[i : i + width] for i in range(0, len(frames), width * channels))
+        elif channels != 1:
+            raise ValueError(f"unsupported WAV channel count for PJSIP playback: {channels}")
+        return self.queue_pcm_playback(frames)
 
     def pop_outbound_pcm_nowait(self) -> bytes:
         with suppress(queue.Empty):
@@ -129,10 +193,22 @@ class PjsipMediaBridge:
         self.audio_port: PjsipAudioPort | None = None
         self.task: asyncio.Task[None] | None = None
 
-    def start(self, call: Any, *, call_id: str, agent_id: str, tier: str) -> None:
+    def start(
+        self,
+        call: Any,
+        *,
+        call_id: str,
+        agent_id: str,
+        tier: str,
+        record_audio: bool = True,
+    ) -> None:
         if self.task is not None:
             return
-        self.ws = PjsipPcmWebSocket(call_id=call_id)
+        self.ws = PjsipPcmWebSocket(
+            call_id=call_id,
+            record_audio=record_audio,
+            sample_rate=self.sample_rate,
+        )
         self.audio_port = PjsipAudioPort(self.pj, self.ws, sample_rate=self.sample_rate)
         port = self.audio_port.create()
         if port is not None:
