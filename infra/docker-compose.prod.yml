@@ -1,6 +1,6 @@
-# Production reference for one VPS running Coolify-managed app containers plus
-# host-network FreeSWITCH. If Coolify deploys web and voice as separate apps,
-# copy the same environment values into each app.
+# Production reference for one VPS running Coolify-managed app containers.
+# If Coolify deploys web and voice as separate apps, copy the same environment
+# values into each app.
 
 services:
   mongo:
@@ -16,24 +16,6 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
-
-  freeswitch:
-    image: signalwire/freeswitch:1.10.11-release
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - ./freeswitch/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
-      - ./freeswitch/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro
-      - ./freeswitch/acl.conf.xml:/etc/freeswitch/autoload_configs/acl.conf.xml:ro
-      - ./freeswitch/dialplan:/etc/freeswitch/dialplan:ro
-      - ./freeswitch/sip_profiles/external.xml:/etc/freeswitch/sip_profiles/external.xml:ro
-      - ./freeswitch/sip_profiles/external:/etc/freeswitch/sip_profiles/external:ro
-      - ./freeswitch/scripts/inbound_route.py:/usr/local/freeswitch/scripts/inbound_route.py:ro
-      - fs-state:/var/lib/freeswitch
-      - fs-recordings:/var/lib/freeswitch/recordings
-    environment:
-      SOUND_RATES: "8000:16000"
-      SOUND_TYPES: "music:en-us-callie"
 
   voice:
     image: ghcr.io/livocall/voice:latest
@@ -55,12 +37,7 @@ services:
       VOICE_WS_SHARED_SECRET: ${VOICE_WS_SHARED_SECRET}
       VOICE_WS_PUBLIC_URL: ${VOICE_WS_PUBLIC_URL:-wss://voice.yourdomain.com/ws/audio}
 
-      TELEPHONY_EDGE: ${TELEPHONY_EDGE:-freeswitch}
-      FS_HOST: ${FS_HOST:-host.docker.internal}
-      FS_ESL_PORT: ${FS_ESL_PORT:-8021}
-      FS_ESL_PASSWORD: ${FS_ESL_PASSWORD}
-      FS_DEFAULT_GATEWAY: ${FS_DEFAULT_GATEWAY:-sip_custom}
-      FS_DASHBOARD_TEST_GATEWAY: ${FS_DASHBOARD_TEST_GATEWAY:-sip_j}
+      TELEPHONY_EDGE: ${TELEPHONY_EDGE:-pjsip}
       PJSIP_SIP_SERVER: ${PJSIP_SIP_SERVER:-}
       PJSIP_SIP_PORT: ${PJSIP_SIP_PORT:-5060}
       PJSIP_USERNAME: ${PJSIP_USERNAME:-}
@@ -77,7 +54,7 @@ services:
       XAI_API_KEY: ${XAI_API_KEY:-}
       BROWSER_WEBRTC_ENABLED: ${BROWSER_WEBRTC_ENABLED:-true}
 
-      RECORDINGS_LOCAL_DIR: /recordings
+      RECORDINGS_LOCAL_DIR: /tmp/livocall-recordings
       FILE_STORAGE_BUCKET: ${FILE_STORAGE_BUCKET:-}
       FILE_STORAGE_REGION: ${FILE_STORAGE_REGION:-auto}
       FILE_STORAGE_ENDPOINT: ${FILE_STORAGE_ENDPOINT:-}
@@ -96,10 +73,10 @@ services:
       ENABLE_KB_INGESTOR: ${ENABLE_KB_INGESTOR:-true}
       ENABLE_WEBHOOK_SCHEDULER: ${ENABLE_WEBHOOK_SCHEDULER:-true}
       VOICE_FAKE_DRIVER: ${VOICE_FAKE_DRIVER:-false}
-    volumes:
-      - fs-recordings:/recordings:ro
     ports:
       - "8084:8084"
+      - "5070:5070/udp"
+      - "20000-30000:20000-30000/udp"
 
   web:
     image: ghcr.io/livocall/web:latest
@@ -125,8 +102,6 @@ services:
       VOICE_BROWSER_WEBRTC_URL: ${VOICE_BROWSER_WEBRTC_URL:-https://voice.yourdomain.com/webrtc/browser-offer}
       VOICE_BROWSER_WEBRTC_PREWARM_URL: ${VOICE_BROWSER_WEBRTC_PREWARM_URL:-https://voice.yourdomain.com/webrtc/browser-prewarm}
 
-      FREESWITCH_CONFIG_TOKEN: ${FREESWITCH_CONFIG_TOKEN:-}
-
       FILE_STORAGE_BUCKET: ${FILE_STORAGE_BUCKET:-}
       FILE_STORAGE_REGION: ${FILE_STORAGE_REGION:-auto}
       FILE_STORAGE_ENDPOINT: ${FILE_STORAGE_ENDPOINT:-}
@@ -148,5 +123,3 @@ services:
 volumes:
   mongo-data:
   redis-data:
-  fs-state:
-  fs-recordings:

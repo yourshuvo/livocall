@@ -168,3 +168,20 @@ def test_lifespan_starts_pjsip_edge_without_freeswitch_consumer(monkeypatch: pyt
     assert res.status_code == 200
     assert res.json()["telephony_edge"] == "pjsip"
     assert events == ["edge.start", "edge.stop"]
+
+
+def test_prod_compose_defaults_to_pjsip_and_does_not_deploy_freeswitch() -> None:
+    from pathlib import Path
+
+    compose_path = Path(__file__).resolve().parents[3] / "infra" / "docker-compose.prod.yml"
+    compose = compose_path.read_text()
+
+    assert "  freeswitch:" not in compose
+    assert "TELEPHONY_EDGE: ${TELEPHONY_EDGE:-pjsip}" in compose
+    assert "fs-recordings" not in compose
+    assert "FREESWITCH_CONFIG_TOKEN" not in compose
+
+    prod_env = (compose_path.parent / ".env.prod.example").read_text()
+    assert "TELEPHONY_EDGE=pjsip" in prod_env
+    assert "FS_HOST=" not in prod_env
+    assert "FREESWITCH_CONFIG_TOKEN" not in prod_env
