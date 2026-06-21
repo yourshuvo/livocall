@@ -42,6 +42,7 @@ interface CreatedResp {
   platform: string
   name: string
   apiKey: { id: string; prefix: string; plaintext: string; scopes: string[] }
+  wordpressRegistration?: { token: string; expiresAt: string } | null
 }
 
 export function ConnectionsClient({
@@ -175,8 +176,22 @@ export function ConnectionsClient({
                 Close
               </Button>
             </div>
+            {created.wordpressRegistration && (
+              <>
+                <p className="text-[13px] text-fg-muted">
+                  Copy this WordPress connection token now. The plugin exchanges it for a signed
+                  connection, and LivoCall will <strong>not</strong> show it again.
+                </p>
+                <pre className="overflow-x-auto rounded border border-line bg-bg-subtle p-3 font-mono text-[12px]">
+{created.wordpressRegistration.token}
+                </pre>
+                <p className="text-[12px] text-fg-faint">
+                  Expires: {new Date(created.wordpressRegistration.expiresAt).toLocaleString()}
+                </p>
+              </>
+            )}
             <p className="text-[13px] text-fg-muted">
-              Copy this API key now — LivoCall will <strong>not</strong> show it again.
+              Copy this API key now. LivoCall will <strong>not</strong> show it again.
             </p>
             <pre className="overflow-x-auto rounded border border-line bg-bg-subtle p-3 font-mono text-[12px]">
 {created.apiKey.plaintext}
@@ -187,6 +202,7 @@ export function ConnectionsClient({
             <PluginInstructions
               platform={created.platform}
               apiKey={created.apiKey.plaintext}
+              wordpressToken={created.wordpressRegistration?.token}
             />
           </CardBody>
         </Card>
@@ -403,7 +419,7 @@ function WooCommerceOrderFlow() {
         {[
           {
             title: '1. Connect plugin',
-            body: 'Create a WordPress connection, copy the API key, then paste it in WP-Admin → Settings → LivoCall.',
+            body: 'Create a WordPress connection, copy the one-time token, then paste it in WP-Admin -> Settings -> LivoCall.',
           },
           {
             title: '2. Pick trigger',
@@ -461,7 +477,15 @@ function WooCommerceOrderFlow() {
   )
 }
 
-function PluginInstructions({ platform, apiKey }: { platform: string; apiKey: string }) {
+function PluginInstructions({
+  platform,
+  apiKey,
+  wordpressToken,
+}: {
+  platform: string
+  apiKey: string
+  wordpressToken?: string
+}) {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-livocall-host'
   switch (platform) {
     case 'wordpress':
@@ -483,7 +507,8 @@ function PluginInstructions({ platform, apiKey }: { platform: string; apiKey: st
               Go to <strong>Settings → LivoCall</strong> and paste:
               <pre className="mt-1 overflow-x-auto rounded border border-line bg-bg-subtle p-2 font-mono">
 {`API base : ${baseUrl}
-API key  : ${apiKey}`}
+Token    : ${wordpressToken || '(copy the token shown above)'}
+Legacy API key: ${apiKey}`}
               </pre>
             </li>
             <li>

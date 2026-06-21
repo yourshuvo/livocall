@@ -35,11 +35,25 @@ import { defaultLanguageForTier, languageOptionsForTier } from '@/types/agent'
 import type { PipecatClient } from '@pipecat-ai/client-js'
 
 type Tier = 'gemini_live' | 'grok_voice' | 'pipeline' | 'dtmf'
+type DtmfActionType = 'legacy' | 'wordpress' | 'webhook' | 'repeat' | 'transfer' | 'hangup' | 'prompt'
+
+interface DtmfActionConfig {
+  action?: string
+  status?: string
+  noteTemplate?: string
+  messageTemplate?: string
+  url?: string
+  target?: string
+  promptUrl?: string
+  connectionId?: string
+}
 
 interface DtmfMenuItem {
   key: string
   label: string
   action: string
+  actionType?: DtmfActionType
+  actionConfig?: DtmfActionConfig
 }
 
 interface DtmfConfig {
@@ -128,6 +142,21 @@ interface AgentDto {
 interface KbOption {
   id: string
   name: string
+}
+
+interface WordPressFieldToken {
+  token: string
+  path: string
+  label: string
+  source: string
+  sample?: string
+}
+
+interface WordPressFieldConnection {
+  id: string
+  name: string
+  siteUrl: string
+  fields: WordPressFieldToken[]
 }
 
 interface NumberOption {
@@ -545,9 +574,9 @@ const PROVIDERS_BY_TIER: Record<Tier, string[]> = {
 
 const DEFAULT_DTMF: DtmfConfig = {
   menu: [
-    { key: '1', label: 'Sales', action: 'transfer:+8801700000001' },
-    { key: '2', label: 'Support', action: 'transfer:+8801700000002' },
-    { key: '0', label: 'Operator', action: 'transfer:+8801700000003' },
+    { key: '1', label: 'Sales', action: 'transfer:+8801700000001', actionType: 'legacy', actionConfig: {} },
+    { key: '2', label: 'Support', action: 'transfer:+8801700000002', actionType: 'legacy', actionConfig: {} },
+    { key: '0', label: 'Operator', action: 'transfer:+8801700000003', actionType: 'legacy', actionConfig: {} },
   ],
   maxAttempts: 3,
   interDigitTimeoutMs: 2500,
@@ -774,6 +803,7 @@ export function AgentEditor({
   const [outcomeLabels, setOutcomeLabels] = useState<OutcomeLabel[]>(
     normalizedInitialOutcome.labels,
   )
+  const [wordpressConnections, setWordpressConnections] = useState<WordPressFieldConnection[]>([])
 
   const [pending, start] = useTransition()
   const [savedAt, setSavedAt] = useState<Date | null>(null)
@@ -832,6 +862,21 @@ export function AgentEditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tier])
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .get<{ connections: WordPressFieldConnection[] }>('/api/integrations/wordpress/fields')
+      .then((res) => {
+        if (!cancelled) setWordpressConnections(res.connections || [])
+      })
+      .catch(() => {
+        if (!cancelled) setWordpressConnections([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Dirty tracking
   const runtimeSettings = {
@@ -953,6 +998,124 @@ export function AgentEditor({
       const next = labels.filter((_, i) => i !== index)
       return normalizeOutcomeLabels(next.length ? next : DEFAULT_OUTCOME_LABELS)
     })
+  }
+
+  const wordpressFields = useMemo(
+    () => wordpressConnections.flatMap((connection) => connection.fields || []).slice(0, 24),
+    [wordpressConnections],
+  )
+
+  function appendSystemToken(token: string) {
+    setSystemPrompt((value) => `${value}${value && !/\s$/.test(value) ? ' ' : ''}${token}`)
+  }
+
+  function updateDtmfRow(index: number, patch: Partial<DtmfMenuItem>) {
+    setDtmf((current) => ({
+      ...current,
+      menu: current.menu.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+    }))
+  }
+
+  function updateDtmfActionConfig(index: number, patch: DtmfActionConfig) {
+    setDtmf((current) => ({
+      ...current,
+      menu: current.menu.map((item, i) =>
+        i === index
+          ? { ...item, actionConfig: { ...(item.actionConfig || {}), ...patch } }
+          : item,
+      ),
+    }))
+  }
+
+  function setDtmfActionType(index: number, actionType: DtmfActionType) {
+    setDtmf((current) => ({
+      ...current,
+      menu: current.menu.map((item, i) => {
+        if (i !== index) return item
+        const next = { ...item, actionType, actionConfig: item.actionConfig || {} }
+        if (actionType === 'transfer') {
+          next.action = item.action?.startsWith('transfer:') ? item.action : 'transfer:'
+        } else if (actionType === 'hangup') {
+          next.action = 'hangup'
+        } else if (actionType === 'prompt') {
+          next.action = item.action?.startsWith('prompt:') ? item.action : 'prompt:'
+        } else if (actionType === 'wordpress') {
+          next.action = item.action?.startsWith('wordpress:') ? item.action : 'wordpress:add_order_note'
+          next.actionConfig = {
+            action: 'add_order_note',
+            noteTemplate: 'LivoCall: customer pressed {{digit}} on call {{call.id}}.',
+            ...next.actionConfig,
+          }
+        } else if (actionType === 'webhook') {
+          next.action = item.action || 'webhook'
+        }
+        return next
+      }),
+    }))
+  }
+
+  function appendDtmfNoteToken(index: number, token: string) {
+    const current = dtmf.menu[index]?.actionConfig?.noteTemplate || ''
+    updateDtmfActionConfig(index, {
+      noteTemplate: `${current}${current && !/\s$/.test(current) ? ' ' : ''}${token}`,
+    })
+  }
+
+  function applyWordPressOrderTemplate() {
+    setTier('dtmf')
+    setSystemPrompt(
+      [
+        'Call the customer about order {{order.number|the latest order}}.',
+        'Say: Hello {{customer.name}}, your order {{order.number}} contains {{order.items_summary}}.',
+        'Tell the total is {{order.total}} {{order.currency}}.',
+        'Ask them to press 1 to confirm, 2 to cancel, 3 to talk to support, or 9 to repeat.',
+      ].join('\n'),
+    )
+    setDtmf({
+      menu: [
+        {
+          key: '1',
+          label: 'Confirm order',
+          action: 'wordpress:update_order_status',
+          actionType: 'wordpress',
+          actionConfig: {
+            action: 'update_order_status',
+            status: 'processing',
+            noteTemplate: 'Customer confirmed by DTMF on LivoCall call {{call.id}}.',
+          },
+        },
+        {
+          key: '2',
+          label: 'Cancel order',
+          action: 'wordpress:update_order_status',
+          actionType: 'wordpress',
+          actionConfig: {
+            action: 'update_order_status',
+            status: 'cancelled',
+            noteTemplate: 'Customer cancelled by DTMF on LivoCall call {{call.id}}.',
+          },
+        },
+        {
+          key: '3',
+          label: 'Talk to support',
+          action: `transfer:${handoffTarget || '+8801700000000'}`,
+          actionType: 'transfer',
+          actionConfig: { target: handoffTarget || '+8801700000000' },
+        },
+        {
+          key: '9',
+          label: 'Repeat prompt',
+          action: 'repeat',
+          actionType: 'repeat',
+          actionConfig: {},
+        },
+      ],
+      maxAttempts: 2,
+      interDigitTimeoutMs: 3500,
+      terminator: '#',
+      noInputPromptUrl: '',
+    })
+    toast('WordPress DTMF order template applied', 'success')
   }
 
   function save(): Promise<boolean> {
@@ -1493,6 +1656,29 @@ export function AgentEditor({
                 '## Identity\nYou are…\n\n## Style Guardrails\n- Be concise\n\n## Task\n1. …'
               }
             />
+            {wordpressFields.length > 0 && (
+              <div className="border-line bg-bg-subtle/60 border-t px-5 py-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-fg-muted text-[11.5px] font-medium">WordPress variables</p>
+                  <Button type="button" size="sm" variant="ghost" onClick={applyWordPressOrderTemplate}>
+                    Apply order DTMF template
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {wordpressFields.map((field) => (
+                    <button
+                      key={`${field.source}:${field.path}`}
+                      type="button"
+                      onClick={() => appendSystemToken(field.token)}
+                      title={field.sample ? `${field.label}: ${field.sample}` : field.label}
+                      className="border-line bg-bg text-fg hover:bg-bg-muted inline-flex h-7 items-center rounded-[5px] border px-2 font-mono text-[11px] transition"
+                    >
+                      {field.token}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {promptIssues.length > 0 && (
               <div className="border-line bg-status-warn/5 border-t px-5 py-3">
                 <p className="text-status-warn mb-1 text-[11.5px] font-medium">Prompt checks</p>
@@ -2007,59 +2193,134 @@ export function AgentEditor({
               />
               <div className="grid gap-1.5">
                 {dtmf.menu.map((row, i) => (
-                  <div key={i} className="flex items-center gap-1.5">
-                    <Input
-                      value={row.key}
-                      onChange={(e) =>
-                        setDtmf((d) => ({
-                          ...d,
-                          menu: d.menu.map((m, j) =>
-                            j === i ? { ...m, key: e.target.value.slice(0, 4) } : m,
-                          ),
-                        }))
-                      }
-                      placeholder="1"
-                      className="w-12 text-center font-mono"
-                    />
-                    <Input
-                      value={row.label}
-                      onChange={(e) =>
-                        setDtmf((d) => ({
-                          ...d,
-                          menu: d.menu.map((m, j) =>
-                            j === i ? { ...m, label: e.target.value } : m,
-                          ),
-                        }))
-                      }
-                      placeholder="Sales"
-                      className="min-w-0 flex-1"
-                    />
-                    <Input
-                      value={row.action}
-                      onChange={(e) =>
-                        setDtmf((d) => ({
-                          ...d,
-                          menu: d.menu.map((m, j) =>
-                            j === i ? { ...m, action: e.target.value } : m,
-                          ),
-                        }))
-                      }
-                      placeholder="transfer:+880..."
-                      className="min-w-0 flex-[2] font-mono text-[11.5px]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setDtmf((d) => ({
-                          ...d,
-                          menu: d.menu.filter((_, j) => j !== i),
-                        }))
-                      }
-                      className="text-fg-muted hover:bg-status-fail/10 hover:text-status-fail grid size-7 shrink-0 place-items-center rounded transition"
-                      aria-label="Remove key"
-                    >
-                      <Icon name="x" size="xs" />
-                    </button>
+                  <div key={i} className="border-line bg-bg rounded-[5px] border p-2">
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        value={row.key}
+                        onChange={(e) => updateDtmfRow(i, { key: e.target.value.slice(0, 4) })}
+                        placeholder="1"
+                        className="w-12 text-center font-mono"
+                      />
+                      <Input
+                        value={row.label}
+                        onChange={(e) => updateDtmfRow(i, { label: e.target.value })}
+                        placeholder="Confirm order"
+                        className="min-w-0 flex-1"
+                      />
+                      <select
+                        value={row.actionType || 'legacy'}
+                        onChange={(e) => setDtmfActionType(i, e.target.value as DtmfActionType)}
+                        className="border-line bg-bg-subtle h-9 rounded border px-2 text-[12px]"
+                      >
+                        <option value="legacy">Legacy</option>
+                        <option value="wordpress">WordPress</option>
+                        <option value="transfer">Transfer</option>
+                        <option value="repeat">Repeat</option>
+                        <option value="prompt">Prompt</option>
+                        <option value="hangup">Hangup</option>
+                        <option value="webhook">Webhook</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDtmf((d) => ({
+                            ...d,
+                            menu: d.menu.filter((_, j) => j !== i),
+                          }))
+                        }
+                        className="text-fg-muted hover:bg-status-fail/10 hover:text-status-fail grid size-7 shrink-0 place-items-center rounded transition"
+                        aria-label="Remove key"
+                      >
+                        <Icon name="x" size="xs" />
+                      </button>
+                    </div>
+                    <div className="mt-1.5 grid gap-1.5">
+                      {(row.actionType || 'legacy') === 'wordpress' && (
+                        <>
+                          <div className="grid grid-cols-[1fr_120px] gap-1.5">
+                            <select
+                              value={row.actionConfig?.action || 'add_order_note'}
+                              onChange={(e) =>
+                                updateDtmfActionConfig(i, { action: e.target.value })
+                              }
+                              className="border-line bg-bg-subtle h-9 rounded border px-2 text-[12px]"
+                            >
+                              <option value="add_order_note">Add order note</option>
+                              <option value="update_order_status">Update order status</option>
+                              <option value="store_call_result">Store call result</option>
+                              <option value="notify_admin">Notify admin</option>
+                            </select>
+                            <Input
+                              value={row.actionConfig?.status || ''}
+                              onChange={(e) =>
+                                updateDtmfActionConfig(i, { status: e.target.value })
+                              }
+                              placeholder="status"
+                              className="font-mono text-[11.5px]"
+                            />
+                          </div>
+                          <Textarea
+                            rows={2}
+                            value={row.actionConfig?.noteTemplate || ''}
+                            onChange={(e) =>
+                              updateDtmfActionConfig(i, { noteTemplate: e.target.value })
+                            }
+                            placeholder="Order note template"
+                            className="font-mono text-[11.5px]"
+                          />
+                          {wordpressFields.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {wordpressFields.slice(0, 8).map((field) => (
+                                <button
+                                  key={`${i}:${field.path}`}
+                                  type="button"
+                                  onClick={() => appendDtmfNoteToken(i, field.token)}
+                                  className="border-line text-fg-muted hover:text-fg hover:bg-bg-muted rounded border px-1.5 py-0.5 font-mono text-[10.5px]"
+                                >
+                                  {field.token}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {(row.actionType || 'legacy') === 'webhook' && (
+                        <Input
+                          value={row.actionConfig?.url || ''}
+                          onChange={(e) => updateDtmfActionConfig(i, { url: e.target.value })}
+                          placeholder="https://example.com/dtmf-webhook"
+                          className="font-mono text-[11.5px]"
+                        />
+                      )}
+                      {(row.actionType || 'legacy') === 'transfer' && (
+                        <Input
+                          value={row.actionConfig?.target || row.action.replace(/^transfer:/, '')}
+                          onChange={(e) => {
+                            updateDtmfActionConfig(i, { target: e.target.value })
+                            updateDtmfRow(i, { action: `transfer:${e.target.value}` })
+                          }}
+                          placeholder="+880..."
+                          className="font-mono text-[11.5px]"
+                        />
+                      )}
+                      {(row.actionType || 'legacy') === 'prompt' && (
+                        <Input
+                          value={row.actionConfig?.promptUrl || row.action.replace(/^prompt:/, '')}
+                          onChange={(e) => {
+                            updateDtmfActionConfig(i, { promptUrl: e.target.value })
+                            updateDtmfRow(i, { action: `prompt:${e.target.value}` })
+                          }}
+                          placeholder="https://cdn.example.com/prompt.wav"
+                          className="font-mono text-[11.5px]"
+                        />
+                      )}
+                      <Input
+                        value={row.action}
+                        onChange={(e) => updateDtmfRow(i, { action: e.target.value })}
+                        placeholder="transfer:+880..., prompt:<url>, hangup, wordpress:add_order_note"
+                        className="font-mono text-[11.5px]"
+                      />
+                    </div>
                   </div>
                 ))}
                 <button
@@ -2067,7 +2328,7 @@ export function AgentEditor({
                   onClick={() =>
                     setDtmf((d) => ({
                       ...d,
-                      menu: [...d.menu, { key: '', label: '', action: '' }],
+                      menu: [...d.menu, { key: '', label: '', action: '', actionType: 'legacy', actionConfig: {} }],
                     }))
                   }
                   className="border-line bg-bg text-fg hover:bg-bg-muted mt-1 inline-flex w-fit items-center gap-1.5 rounded-[5px] border px-3 py-1.5 text-[12px] transition"

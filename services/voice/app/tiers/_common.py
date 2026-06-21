@@ -81,6 +81,20 @@ async def fetch_agent(agent_id: str) -> dict[str, Any]:
 async def fetch_agent_for_call(agent_id: str, call_id: str) -> dict[str, Any]:
     agent = await fetch_agent(agent_id)
     try:
+        from bson import ObjectId
+
+        from app.db import get_db
+
+        if ObjectId.is_valid(call_id):
+            call = await get_db()["calls"].find_one(
+                {"_id": ObjectId(call_id)}, {"metadata": 1, "dtmfPath": 1}
+            )
+            if call and isinstance(call.get("metadata"), dict):
+                agent["_callMetadata"] = call["metadata"]
+                agent["_callDtmfPath"] = str(call.get("dtmfPath") or "")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("agent.call_metadata_failed", error=str(exc), call_id=call_id)
+    try:
         from app.runtime_overrides import runtime_overrides
 
         overrides = await runtime_overrides.peek(call_id)

@@ -24,6 +24,10 @@ import {
 } from '@/lib/missed-callbacks'
 import { CampaignAttempt } from '@/models/CampaignAttempt'
 import { Campaign } from '@/models/Campaign'
+import {
+  executeWordPressDtmfActions,
+  recordDtmfActionResults,
+} from '@/lib/wordpress-integration'
 
 const SHARED_SECRET = process.env.VOICE_SHARED_SECRET || ''
 
@@ -49,6 +53,23 @@ const TranscriptBody = z.object({
   at: z.string().datetime(),
 })
 
+const DtmfBody = z.object({
+  type: z.literal('call.dtmf'),
+  callId: z.string(),
+  digit: z.string().min(1).max(8),
+  menuItem: z
+    .object({
+      key: z.string().optional(),
+      label: z.string().optional(),
+      action: z.string().optional(),
+      actionType: z.string().optional(),
+      actionConfig: z.record(z.unknown()).optional(),
+    })
+    .optional()
+    .nullable(),
+  at: z.string().datetime().optional(),
+})
+
 const CompletedBody = z.object({
   type: z.literal('call.completed'),
   callId: z.string(),
@@ -71,7 +92,7 @@ const CompletedBody = z.object({
   hangupCause: z.string().max(120).optional(),
 })
 
-const Body = z.discriminatedUnion('type', [StartedBody, TranscriptBody, CompletedBody])
+const Body = z.discriminatedUnion('type', [StartedBody, TranscriptBody, DtmfBody, CompletedBody])
 
 function authOk(req: Request): boolean {
   if (!SHARED_SECRET) return false
@@ -129,6 +150,26 @@ export const POST = withErrors(async (req: Request) => {
     )
     await enforceTranscriptCompliance(data.callId)
     return NextResponse.json({ ok: true })
+  }
+
+  if (data.type === 'call.dtmf') {
+    if (!Types.ObjectId.isValid(data.callId)) return apiError('invalid_input')
+    const call = await Call.findById(data.callId)
+    if (!call) return apiError('not_found')
+    call.ivrEvents.push({
+      type: 'dtmf',
+      digit: data.digit,
+      menuItem: data.menuItem || null,
+      at: data.at || new Date().toISOString(),
+    })
+    await call.save()
+    const results = await executeWordPressDtmfActions({
+      call,
+      digit: data.digit,
+      menuItem: data.menuItem || null,
+    })
+    await recordDtmfActionResults(String(call._id), data.digit, results)
+    return NextResponse.json({ ok: true, results })
   }
 
   // call.completed

@@ -258,6 +258,11 @@ export async function runCampaignTick(limit = 50) {
             campaignId: String(campaign._id),
             attemptId: String(attempt._id),
             contactId: String(contact._id),
+            contactName: contact.name || '',
+            contact_name: contact.name || '',
+            contactPhone: contact.e164,
+            contact_phone: contact.e164,
+            ...contactAttrsForMetadata(contact.attrs),
           },
         })
         attempt.status = 'in_progress'
@@ -295,4 +300,21 @@ export async function runCampaignTick(limit = 50) {
     await campaign.save()
   }
   return result
+}
+
+function contactAttrsForMetadata(attrs: unknown) {
+  const out: Record<string, string> = {}
+  const raw =
+    attrs instanceof Map
+      ? Object.fromEntries(attrs.entries())
+      : attrs && typeof attrs === 'object'
+        ? (attrs as Record<string, unknown>)
+        : {}
+  for (const [key, value] of Object.entries(raw).slice(0, 80)) {
+    if (value == null || typeof value === 'object') continue
+    const safeKey = key.replace(/[^A-Za-z0-9_:-]/g, '_').slice(0, 80)
+    if (!safeKey) continue
+    out[`contact_${safeKey}`] = String(value).slice(0, 300)
+  }
+  return out
 }

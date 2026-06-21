@@ -70,6 +70,11 @@ const Patch = z.object({
             key: z.string().max(8),
             label: z.string().max(120).optional().default(''),
             action: z.string().max(240).optional().default(''),
+            actionType: z
+              .enum(['legacy', 'wordpress', 'webhook', 'repeat', 'transfer', 'hangup', 'prompt'])
+              .optional()
+              .default('legacy'),
+            actionConfig: z.record(z.unknown()).optional().default({}),
           }),
         )
         .max(20)

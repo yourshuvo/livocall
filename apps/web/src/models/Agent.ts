@@ -153,6 +153,12 @@ const agentSchema = new Schema(
             key: { type: String, required: true },
             label: { type: String, default: '' },
             action: { type: String, default: '' },
+            actionType: {
+              type: String,
+              enum: ['legacy', 'wordpress', 'webhook', 'repeat', 'transfer', 'hangup', 'prompt'],
+              default: 'legacy',
+            },
+            actionConfig: { type: Schema.Types.Mixed, default: {} },
           },
         ],
         default: [],

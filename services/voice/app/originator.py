@@ -369,6 +369,13 @@ async def execute_ivr_action(call_or_uuid: str, action: str) -> bool:
         reply = await edge.transfer(edge_uuid, action.split(":", 1)[1])
     elif action.startswith("prompt:"):
         reply = await edge.playback(edge_uuid, action.split(":", 1)[1])
+    elif action == "repeat" and doc:
+        agent = await db["agents"].find_one({"_id": doc.get("agentId")})
+        dtmf = agent.get("dtmf") if isinstance(agent, dict) and isinstance(agent.get("dtmf"), dict) else {}
+        prompt_url = str(dtmf.get("noInputPromptUrl") or "")
+        if not prompt_url:
+            return False
+        reply = await edge.playback(edge_uuid, prompt_url)
     elif action == "hangup":
         reply = await edge.hangup(edge_uuid)
     else:

@@ -110,15 +110,32 @@ async def handle_dtmf_for_call(call_doc_id: str, digit: str) -> None:
         if not agent:
             return
         dtmf = agent.get("dtmf") if isinstance(agent.get("dtmf"), dict) else {}
+        matched_item: dict[str, Any] | None = None
         for item in dtmf.get("menu") or []:
             if not isinstance(item, dict):
                 continue
             if str(item.get("key") or "") != digit:
                 continue
+            matched_item = item
             action = str(item.get("action") or "")
-            if action:
+            if action and (
+                action == "hangup"
+                or action == "repeat"
+                or action.startswith("transfer:")
+                or action.startswith("prompt:")
+            ):
                 await execute_ivr_action(str(doc["_id"]), action)
-            return
+            break
+        await post_voice_event(
+            {
+                "type": "call.dtmf",
+                "callId": call_doc_id,
+                "digit": digit,
+                "menuItem": _dtmf_menu_item_payload(matched_item),
+                "at": datetime.now(UTC).isoformat(),
+            }
+        )
+        return
 
 
 class PjsipEdge(TelephonyEdge):
@@ -722,6 +739,18 @@ async def _playback_url_to_path(url: str) -> Path:
 def _safe_account_key(value: str) -> str:
     key = re.sub(r"[^A-Za-z0-9_-]+", "_", value.strip()).strip("_")[:80]
     return key or settings.pjsip_default_account_slug or "sip_custom"
+
+
+def _dtmf_menu_item_payload(item: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    return {
+        "key": str(item.get("key") or ""),
+        "label": str(item.get("label") or ""),
+        "action": str(item.get("action") or ""),
+        "actionType": str(item.get("actionType") or ""),
+        "actionConfig": item.get("actionConfig") if isinstance(item.get("actionConfig"), dict) else {},
+    }
 
 
 def _codec_names(raw: str) -> list[str]:

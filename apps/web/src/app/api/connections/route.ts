@@ -8,6 +8,7 @@ import { ApiKey } from '@/models/ApiKey'
 import { isResponse, requireDashboardSession } from '@/lib/api-helpers'
 import { apiError, withErrors } from '@/lib/errors'
 import { randomToken } from '@/lib/hmac'
+import { createWordPressRegistration, withWordPressConfig } from '@/lib/wordpress-integration'
 
 const Body = z.object({
   platform: z.enum(CONNECTION_PLATFORMS),
@@ -17,7 +18,7 @@ const Body = z.object({
 })
 
 const SCOPES_BY_PLATFORM: Record<string, string[]> = {
-  wordpress: ['calls:read', 'calls:write', 'agents:read', 'dnc:read', 'dnc:write'],
+  wordpress: ['calls:read', 'calls:write', 'agents:read', 'contacts:read', 'contacts:write', 'dnc:read', 'dnc:write'],
   shopify: ['calls:read', 'calls:write', 'agents:read', 'dnc:read', 'dnc:write'],
   zapier: ['calls:read', 'calls:write', 'agents:read', 'campaigns:write', 'contacts:write', 'dnc:read', 'dnc:write'],
   make: ['calls:read', 'calls:write', 'agents:read', 'campaigns:write', 'contacts:write', 'dnc:read', 'dnc:write'],
@@ -52,6 +53,10 @@ export const POST = withErrors(async (req: Request) => {
   if (s.role !== 'owner' && s.role !== 'admin') return apiError('forbidden')
   const body = Body.parse(await req.json().catch(() => ({})))
   await connectMongo()
+  const wpRegistration = body.platform === 'wordpress' ? createWordPressRegistration() : null
+  const config = wpRegistration
+    ? withWordPressConfig(body.config, wpRegistration.config)
+    : body.config
 
   // Auto-mint a scoped API key for this connection.
   const plaintext = randomToken(`lvo_${body.platform.slice(0, 4)}_`, 24)
@@ -70,7 +75,7 @@ export const POST = withErrors(async (req: Request) => {
     platform: body.platform,
     name: body.name,
     siteUrl: body.siteUrl,
-    config: body.config,
+    config,
     apiKeyId: apiKey._id,
     createdBy: s.userId,
   })
@@ -82,6 +87,12 @@ export const POST = withErrors(async (req: Request) => {
     siteUrl: conn.siteUrl,
     apiKey: { id: String(apiKey._id), prefix: apiKey.prefix, plaintext, scopes: apiKey.scopes },
     config: conn.config,
+    wordpressRegistration: wpRegistration
+      ? {
+          token: wpRegistration.token,
+          expiresAt: wpRegistration.config.registrationTokenExpiresAt,
+        }
+      : null,
     active: conn.active,
     createdAt: conn.createdAt.toISOString(),
   })

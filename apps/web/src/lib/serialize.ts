@@ -38,6 +38,8 @@ export function agentToJson(a: AgentLean) {
             key: m.key,
             label: m.label ?? '',
             action: m.action ?? '',
+            actionType: m.actionType ?? 'legacy',
+            actionConfig: m.actionConfig ?? {},
           })),
           maxAttempts: a.dtmf.maxAttempts ?? 3,
           interDigitTimeoutMs: a.dtmf.interDigitTimeoutMs ?? 2500,

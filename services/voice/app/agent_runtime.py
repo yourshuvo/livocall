@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 from typing import Any
 from urllib.parse import urlparse
 
@@ -83,7 +84,64 @@ def prompt_parts(agent: dict[str, Any], override: str = "") -> tuple[str, str]:
     prompt_doc = agent.get("prompt") if isinstance(agent.get("prompt"), dict) else {}
     system_prompt = override or str(agent.get("systemPrompt") or prompt_doc.get("system") or "")
     first_message = str(prompt_doc.get("firstMessage") or agent.get("firstMessage") or "")
-    return system_prompt, first_message
+    context = template_context(agent)
+    return render_prompt_template(system_prompt, context), render_prompt_template(first_message, context)
+
+
+TOKEN_RE = re.compile(r"\{\{\s*([^}|]+)(?:\|([^}]+))?\s*\}\}")
+
+
+def template_context(agent: dict[str, Any]) -> dict[str, Any]:
+    metadata = agent.get("_callMetadata") if isinstance(agent.get("_callMetadata"), dict) else {}
+    context: dict[str, Any] = dict(metadata)
+    raw_payload = metadata.get("wordpressPayloadJson")
+    if isinstance(raw_payload, str) and raw_payload:
+        try:
+            payload = json.loads(raw_payload)
+            if isinstance(payload, dict):
+                context.update(payload)
+        except json.JSONDecodeError:
+            pass
+    context["metadata"] = metadata
+    context["dtmf"] = {"path": str(agent.get("_callDtmfPath") or "")}
+    return context
+
+
+def render_prompt_template(text: str, context: dict[str, Any]) -> str:
+    if not text or "{{" not in text:
+        return text
+
+    def replace(match: re.Match[str]) -> str:
+        path = match.group(1).strip()
+        fallback = (match.group(2) or "").strip()
+        value = resolve_template_path(context, path)
+        if value is None or value == "":
+            return fallback
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False)
+        return str(value)
+
+    return TOKEN_RE.sub(replace, text)
+
+
+def resolve_template_path(context: dict[str, Any], path: str) -> Any:
+    if path in context:
+        return context[path]
+    underscore = path.replace(".", "_")
+    if underscore in context:
+        return context[underscore]
+    current: Any = context
+    for part in path.split("."):
+        if isinstance(current, list):
+            try:
+                current = current[int(part)]
+            except (ValueError, IndexError):
+                return None
+            continue
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
 
 
 def runtime_settings(agent: dict[str, Any]) -> dict[str, Any]:
@@ -302,7 +360,7 @@ async def build_system_prompt(
     system_prompt, first_message = prompt_parts(agent, override)
     runtime = runtime_settings(agent)
     prompt_doc = agent.get("prompt") if isinstance(agent.get("prompt"), dict) else {}
-    guardrails = str(prompt_doc.get("guardrails") or "")
+    guardrails = render_prompt_template(str(prompt_doc.get("guardrails") or ""), template_context(agent))
     if not system_prompt:
         system_prompt = (
             "You are on a live phone call. Reply immediately after the caller stops. "
