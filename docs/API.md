@@ -70,7 +70,7 @@ Body:
 Response:
 
 ```json
-{ "callId": "65a1…", "fsUuid": "9f3e…", "queued": true }
+{ "callId": "65a1…", "edgeUuid": "9f3e…", "queued": true }
 ```
 
 ### Get a call

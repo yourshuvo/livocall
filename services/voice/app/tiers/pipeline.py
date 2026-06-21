@@ -8,17 +8,12 @@ it owns native VAD/turn-taking itself.
 from __future__ import annotations
 
 import asyncio
-import ipaddress
-import socket
-import time
 from contextlib import suppress
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 import structlog
 from fastapi import WebSocket
 
-from app import playback_files
 from app.agent_runtime import (
     build_system_prompt,
     cartesia_voice_id,
@@ -33,13 +28,11 @@ from app.agent_runtime import (
     stt_language_code,
 )
 from app.db import get_db
-from app.esl import EslClient, EslConfig
 from app.persistence import flush_context_transcript
 from app.settings import settings
 from app.tiers._common import close_unavailable, fetch_agent_for_call
 
 log = structlog.get_logger()
-_PLAYBACK_SUPPRESS_UNTIL: dict[str, float] = {}
 
 
 class PipelineTier:
@@ -68,7 +61,7 @@ class PipelineTier:
             await close_unavailable(ws)
             return
 
-        # The audio-fork websocket connects during pre-answer/ringing. Use that
+        # The PJSIP media bridge connects during pre-answer/ringing. Use that
         # time to load Pipecat/Silero/SmartTurn and construct the pipeline;
         # otherwise those synchronous imports/model loads block the event loop
         # after answer and delay the opening audio by several seconds.
@@ -127,15 +120,14 @@ class PipelineTier:
         output_sample_rate = _phone_pipeline_output_sample_rate()
 
         try:
-            playback_ws = _AudioForkPlaybackWebSocket(ws, call_id=call_id)
             transport = FastAPIWebsocketTransport(
-                websocket=playback_ws,
+                websocket=ws,
                 params=FastAPIWebsocketParams(
                     audio_in_enabled=True,
                     audio_out_enabled=True,
                     audio_in_sample_rate=settings.sample_rate_in,
                     audio_out_sample_rate=output_sample_rate,
-                    serializer=_audio_fork_serializer(call_id),
+                    serializer=_raw_pcm_serializer(),
                 ),
             )
             vad = VADProcessor(
@@ -219,7 +211,6 @@ class PipelineTier:
             try:
                 await runner.run(task)
             finally:
-                await playback_ws.flush_playback()
                 if opening_task is not None and not opening_task.done():
                     opening_task.cancel()
                 if opening_task is not None:
@@ -264,8 +255,8 @@ def _pipeline_transcription_mode(runtime: dict[str, Any]) -> str:
 
 
 def _phone_pipeline_output_sample_rate() -> int:
-    # /ws/audio is driven by mod_audio_fork raw L16 frames. It is configured
-    # with settings.sample_rate_in and expects the same rate in both directions.
+    # The PJSIP media bridge uses raw L16 frames at settings.sample_rate_in in
+    # both directions.
     return settings.sample_rate_in
 
 
@@ -286,108 +277,18 @@ def _pipeline_user_turn_stop_timeout_secs(transcription_mode: str) -> float:
     return 0.3
 
 
-async def _send_audio_to_freeswitch(ws: Any, call_id: str, audio: bytes) -> None:
+async def _send_audio_to_call(ws: Any, call_id: str, audio: bytes) -> None:
     if not audio:
         return
-    ok = await _broadcast_audio_to_freeswitch(call_id, audio)
-    if not ok:
-        log.warning("tier2.fs_broadcast_audio_failed", call_id=call_id, bytes=len(audio))
-
-
-async def _broadcast_audio_to_freeswitch(call_id: str, audio: bytes) -> bool:
-    if not audio:
-        return True
-    fs_uuid = await _fs_uuid_for_call(call_id)
-    if not fs_uuid:
-        log.warning("tier2.fs_uuid_missing_for_playback", call_id=call_id)
-        return False
-    token = playback_files.write_pcm_wav(call_id, audio, sample_rate=settings.sample_rate_in)
-    if not token:
-        return True
-    url = _playback_file_url(token)
-    client = EslClient(_esl_config())
-    try:
-        await client.connect()
-        _mark_playback_suppression(call_id, audio)
-        reply = await client.playback(fs_uuid, url)
-        log.info(
-            "tier2.fs_broadcast_audio",
-            call_id=call_id,
-            fs_uuid=fs_uuid,
-            bytes=len(audio),
-            url=url,
-            reply=reply,
-        )
-        return not str(reply).startswith("-ERR")
-    except Exception as exc:  # noqa: BLE001
-        log.warning("tier2.fs_broadcast_audio_error", call_id=call_id, error=str(exc))
-        return False
-    finally:
-        await client.close()
-
-
-async def _fs_uuid_for_call(call_id: str) -> str:
-    try:
-        from bson import ObjectId
-    except ImportError:
-        return ""
-    if not ObjectId.is_valid(call_id):
-        return ""
-    doc = await get_db()["calls"].find_one({"_id": ObjectId(call_id)}, {"fsUuid": 1})
-    return str((doc or {}).get("fsUuid") or "")
-
-
-def _esl_config() -> EslConfig:
-    return EslConfig(
-        host=settings.fs_host,
-        port=settings.fs_esl_port,
-        password=settings.fs_esl_password,
-    )
-
-
-def _playback_file_url(token: str) -> str:
-    return f"{_playback_base_url()}/internal/playback/{token}.wav"
-
-
-def _playback_base_url() -> str:
-    if settings.voice_playback_public_url.strip():
-        return settings.voice_playback_public_url.strip().rstrip("/")
-    parsed = urlsplit(settings.voice_ws_public_url.rstrip("/"))
-    scheme = "http" if parsed.scheme == "ws" else "https" if parsed.scheme == "wss" else parsed.scheme
-    host = parsed.hostname or "127.0.0.1"
-    port = parsed.port
-    if settings.voice_ws_bridge_autodetect_enabled and host == "voice.livocall.com":
-        bridge_ip = _container_bridge_ipv4()
-        if bridge_ip:
-            host = bridge_ip
-            port = settings.voice_ws_internal_port
-            scheme = "http"
-    netloc = f"{host}:{port}" if port else host
-    path = parsed.path.rstrip("/")
-    for suffix in ("/ws/audio-pcmu", "/ws/audio"):
-        if path.endswith(suffix):
-            path = path[: -len(suffix)]
-            break
-    return urlunsplit((scheme or "http", netloc, path, "", "")).rstrip("/")
-
-
-def _container_bridge_ipv4() -> str:
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.connect(("1.1.1.1", 80))
-            ip = sock.getsockname()[0]
-        if ipaddress.ip_address(ip).is_private:
-            return ip
-    except (OSError, ValueError):
-        return ""
-    return ""
+    for chunk in _pcm_stream_chunks(audio):
+        await ws.send_bytes(chunk)
 
 
 def _pcm_stream_chunks(audio: bytes) -> list[bytes]:
     bytes_per_sample = 2
     bytes_per_frame = max(
         bytes_per_sample,
-        int(settings.sample_rate_in * bytes_per_sample * settings.fs_codec_ms / 1000),
+        int(settings.sample_rate_in * bytes_per_sample * settings.pjsip_frame_ms / 1000),
     )
     # Keep signed-16-bit PCM samples intact.
     if bytes_per_frame % bytes_per_sample:
@@ -395,28 +296,7 @@ def _pcm_stream_chunks(audio: bytes) -> list[bytes]:
     return [audio[i : i + bytes_per_frame] for i in range(0, len(audio), bytes_per_frame)]
 
 
-def _mark_playback_suppression(call_id: str, audio: bytes) -> None:
-    if not call_id or not audio:
-        return
-    bytes_per_second = max(1, settings.sample_rate_in * 2)
-    duration_secs = len(audio) / bytes_per_second
-    tail_secs = max(0.0, settings.playback_input_suppression_tail_ms / 1000)
-    until = time.monotonic() + duration_secs + tail_secs
-    _PLAYBACK_SUPPRESS_UNTIL[call_id] = max(_PLAYBACK_SUPPRESS_UNTIL.get(call_id, 0.0), until)
-
-
-def _playback_input_suppressed(call_id: str) -> bool:
-    if not call_id:
-        return False
-    until = _PLAYBACK_SUPPRESS_UNTIL.get(call_id, 0.0)
-    now = time.monotonic()
-    if until <= now:
-        _PLAYBACK_SUPPRESS_UNTIL.pop(call_id, None)
-        return False
-    return True
-
-
-def _audio_fork_serializer(call_id: str = "") -> Any:
+def _raw_pcm_serializer() -> Any:
     from pipecat.frames.frames import (  # type: ignore[import-not-found]
         Frame,
         InputAudioRawFrame,
@@ -426,7 +306,7 @@ def _audio_fork_serializer(call_id: str = "") -> Any:
         FrameSerializer,
     )
 
-    class AudioForkRawAudioSerializer(FrameSerializer):
+    class RawPcmSerializer(FrameSerializer):
         async def serialize(self, frame: Frame) -> str | bytes | None:
             if isinstance(frame, OutputAudioRawFrame):
                 return bytes(frame.audio)
@@ -434,8 +314,6 @@ def _audio_fork_serializer(call_id: str = "") -> Any:
 
         async def deserialize(self, data: str | bytes) -> Frame | None:
             if isinstance(data, (bytes, bytearray)) and data:
-                if _playback_input_suppressed(call_id):
-                    return None
                 return InputAudioRawFrame(
                     audio=bytes(data),
                     sample_rate=settings.sample_rate_in,
@@ -443,89 +321,7 @@ def _audio_fork_serializer(call_id: str = "") -> Any:
                 )
             return None
 
-    return AudioForkRawAudioSerializer()
-
-
-class _FreeswitchBroadcastSink:
-    def __init__(
-        self,
-        call_id: str,
-        *,
-        debounce_secs: float | None = None,
-        flush_interval_secs: float | None = None,
-    ) -> None:
-        self._call_id = call_id
-        if debounce_secs is None:
-            debounce_secs = max(0.02, settings.playback_broadcast_debounce_ms / 1000)
-        if flush_interval_secs is None:
-            flush_interval_secs = max(0.2, settings.playback_broadcast_chunk_ms / 1000)
-        self._debounce_secs = debounce_secs
-        self._flush_interval_secs = flush_interval_secs
-        self._buffer = bytearray()
-        self._lock = asyncio.Lock()
-        self._debounce_task: asyncio.Task[None] | None = None
-        self._interval_task: asyncio.Task[None] | None = None
-
-    async def write(self, data: bytes) -> None:
-        if not data:
-            return
-        async with self._lock:
-            start_interval_timer = not self._buffer and self._interval_task is None
-            self._buffer.extend(data)
-            current = asyncio.current_task()
-            if self._debounce_task is not None and self._debounce_task is not current:
-                self._debounce_task.cancel()
-            self._debounce_task = asyncio.create_task(self._delayed_flush(self._debounce_secs))
-            if start_interval_timer:
-                self._interval_task = asyncio.create_task(
-                    self._delayed_flush(self._flush_interval_secs)
-                )
-
-    async def _delayed_flush(self, delay_secs: float) -> None:
-        try:
-            await asyncio.sleep(delay_secs)
-            await self.flush()
-        except asyncio.CancelledError:
-            return
-
-    async def flush(self) -> None:
-        current = asyncio.current_task()
-        async with self._lock:
-            if self._debounce_task is not None and self._debounce_task is not current:
-                self._debounce_task.cancel()
-            if self._interval_task is not None and self._interval_task is not current:
-                self._interval_task.cancel()
-            self._debounce_task = None
-            self._interval_task = None
-            audio = bytes(self._buffer)
-            self._buffer.clear()
-        if audio:
-            await _broadcast_audio_to_freeswitch(self._call_id, audio)
-
-
-class _AudioForkPlaybackWebSocket:
-    def __init__(self, ws: WebSocket, *, call_id: str) -> None:
-        self._ws = ws
-        self._broadcast_sink = _FreeswitchBroadcastSink(call_id)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._ws, name)
-
-    async def send_bytes(self, data: bytes) -> None:
-        await self._broadcast_sink.write(data)
-
-    async def send_text(self, data: str) -> None:
-        await self._ws.send_text(data)
-
-    async def receive(self) -> Any:
-        return await self._ws.receive()
-
-    async def flush_playback(self) -> None:
-        await self._broadcast_sink.flush()
-
-    async def close(self, *args: Any, **kwargs: Any) -> None:
-        await self.flush_playback()
-        await self._ws.close(*args, **kwargs)
+    return RawPcmSerializer()
 
 
 def _pipeline_opening_text(agent: dict[str, Any]) -> str:
@@ -598,9 +394,8 @@ async def _speak_opening_direct(
     PipelineTask only processes queued TTSSpeakFrame after StartFrame reaches the
     end of the full STT→LLM→TTS pipeline. On cold calls that meant the first TTS
     arrived after the caller had already hung up. This direct Soniox path creates
-    the opening audio immediately, then plays it to FreeSWITCH with
-    ``uuid_broadcast`` because the BDIX mod_audio_fork build is capture-only for
-    returned websocket audio.
+    the opening audio immediately, then streams it directly to the active PJSIP
+    media bridge before the main pipeline is fully warm.
     """
     if not settings.soniox_api_key or not text.strip():
         return False
@@ -641,9 +436,7 @@ async def _speak_opening_direct(
             max_size=8 * 1024 * 1024,
         ) as tts_ws:
             await tts_ws.send(json.dumps(config))
-            await tts_ws.send(
-                json.dumps({"stream_id": stream_id, "text": text, "text_end": False})
-            )
+            await tts_ws.send(json.dumps({"stream_id": stream_id, "text": text, "text_end": False}))
             await tts_ws.send(json.dumps({"stream_id": stream_id, "text": "", "text_end": True}))
             deadline = time.perf_counter() + 5.0
             while time.perf_counter() < deadline:
@@ -678,7 +471,7 @@ async def _speak_opening_direct(
         return audio_bytes > 0
 
     if audio_bytes > 0:
-        await _send_audio_to_freeswitch(ws, call_id, bytes(audio_buffer))
+        await _send_audio_to_call(ws, call_id, bytes(audio_buffer))
         log.info(
             "tier2.opening_direct_spoken",
             call_id=call_id,

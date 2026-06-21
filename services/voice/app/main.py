@@ -16,10 +16,9 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
-from app import event_bridge, freeswitch_controller, originator, playback_files, telephony
+from app import originator, telephony
 from app.browser_webrtc import (
     aclose as aclose_browser_webrtc,
 )
@@ -56,23 +55,11 @@ log = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
-    # In fake-driver / dev mode we skip the ESL event consumer because there
-    # is no FreeSWITCH listening — the consumer would just spin in a reconnect
-    # loop. Real deployments either set FS_HOST or leave the default and have
-    # FreeSWITCH on localhost.
-    consumer = None
+    # In fake-driver / dev mode we skip the SIP edge entirely. Real deployments
+    # use the embedded PJSIP edge for both signaling and media.
     edge = None
     if settings.voice_fake_driver:
         log.info("startup", mode="fake_driver")
-    elif settings.telephony_edge.strip().lower() == "freeswitch":
-        consumer = event_bridge.get_consumer()
-        consumer.start()
-        log.info(
-            "startup",
-            telephony_edge=settings.telephony_edge,
-            esl_host=settings.fs_host,
-            esl_port=settings.fs_esl_port,
-        )
     else:
         edge = telephony.get_edge()
         await edge.start()
@@ -100,8 +87,6 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
             await dialer.stop()
         if ingestor is not None:
             await ingestor.stop()
-        if consumer is not None:
-            await consumer.stop()
         if edge is not None:
             await edge.stop()
         await aclose_browser_webrtc()
@@ -152,10 +137,14 @@ async def health() -> dict[str, object]:
         "service": "livocall-engine",
         "version": "0.2.0",
         "telephony_edge": settings.telephony_edge,
-        "fs_host": settings.fs_host,
-        "fs_esl_port": settings.fs_esl_port,
-        "fs_default_gateway": settings.fs_default_gateway,
-        "fs_dashboard_test_gateway": settings.fs_dashboard_test_gateway,
+        "pjsip_sip_server": settings.pjsip_sip_server,
+        "pjsip_sip_port": settings.pjsip_sip_port,
+        "pjsip_local_sip_port": settings.pjsip_local_sip_port,
+        "pjsip_default_account_slug": settings.pjsip_default_account_slug,
+        "pjsip_load_accounts_from_db": settings.pjsip_load_accounts_from_db,
+        "pjsip_rtp_port_start": settings.pjsip_rtp_port_start,
+        "pjsip_rtp_port_range": settings.pjsip_rtp_port_range,
+        "pjsip_codecs": settings.pjsip_codecs,
         "fake_driver": settings.voice_fake_driver,
         "web_base_url": settings.web_base_url,
         "gemini_live_model": settings.gemini_live_model,
@@ -166,79 +155,19 @@ async def health() -> dict[str, object]:
         "gemini_preconnect_enabled": settings.gemini_preconnect_enabled,
         "low_latency_pcmu_bridge_enabled": settings.low_latency_pcmu_bridge_enabled,
         "low_latency_pcmu_bridge_strict": settings.low_latency_pcmu_bridge_strict,
-        "fs_preferred_codec": settings.fs_preferred_codec,
-        "fs_codec_ms": settings.fs_codec_ms,
-        "audio_fork_buffer_ms": settings.audio_fork_buffer_ms,
-        "audio_fork_jitter_buffer_ms": settings.audio_fork_jitter_buffer_ms,
+        "pjsip_frame_ms": settings.pjsip_frame_ms,
         "browser_webrtc_enabled": settings.browser_webrtc_enabled,
     }
 
 
-@app.get("/internal/playback/{token}.wav")
-async def internal_playback_file(token: str) -> FileResponse:
-    path = playback_files.lookup(token)
-    if path is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="playback file not found")
-    return FileResponse(path, media_type="audio/wav", filename=path.name)
-
-
-@app.head("/internal/playback/{token}.wav")
-async def internal_playback_file_head(token: str) -> Response:
-    path = playback_files.lookup(token)
-    if path is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="playback file not found")
-    return Response(
-        media_type="audio/wav",
-        headers={"Content-Length": str(path.stat().st_size)},
-    )
-
-
-class FreeswitchProfileRequest(BaseModel):
-    profile: str = Field(default="external", pattern=r"^[A-Za-z0-9_-]{1,80}$")
-
-
-class FreeswitchGatewayActionRequest(FreeswitchProfileRequest):
-    action: str = Field(pattern=r"^(register|unregister|killgw)$")
-
-
-@app.get("/freeswitch/status", dependencies=[Depends(require_voice_token)])
-async def freeswitch_status(profile: str = "external") -> dict[str, Any]:
-    try:
-        return await freeswitch_controller.get_controller().status(profile=profile)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        log.exception("freeswitch.status_error")
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-
-@app.post("/freeswitch/resync", dependencies=[Depends(require_voice_token)])
-async def freeswitch_resync(req: FreeswitchProfileRequest) -> dict[str, Any]:
-    try:
-        return await freeswitch_controller.get_controller().resync(profile=req.profile)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        log.exception("freeswitch.resync_error")
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-
-@app.post("/freeswitch/gateways/{gateway}/action", dependencies=[Depends(require_voice_token)])
-async def freeswitch_gateway_action(
-    gateway: str,
-    req: FreeswitchGatewayActionRequest,
-) -> dict[str, Any]:
-    try:
-        return await freeswitch_controller.get_controller().gateway_action(
-            gateway,
-            req.action,
-            profile=req.profile,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        log.exception("freeswitch.gateway_action_error", gateway=gateway, action=req.action)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+@app.post("/pjsip/reload", dependencies=[Depends(require_voice_token)])
+async def pjsip_reload() -> dict[str, Any]:
+    edge = telephony.get_edge()
+    reload_accounts = getattr(edge, "reload_accounts", None)
+    if not callable(reload_accounts):
+        return {"ok": False, "edge": getattr(edge, "name", "unknown"), "reason": "unsupported"}
+    result = await reload_accounts(ignore_errors=False)
+    return dict(result)
 
 
 @app.get("/webrtc/browser-config")
@@ -296,12 +225,6 @@ class IvrActionRequest(BaseModel):
     action: str = Field(min_length=1, max_length=240)
 
 
-class InboundRouteRequest(BaseModel):
-    destination_number: str = Field(min_length=6)
-    caller_number: str = Field(default="", max_length=32)
-    fs_uuid: str = Field(min_length=8)
-
-
 @app.post("/calls/originate", dependencies=[Depends(require_voice_token)])
 async def originate(req: OriginateRequest) -> dict[str, Any]:
     log.info("originate.requested", **req.model_dump())
@@ -319,9 +242,7 @@ async def originate(req: OriginateRequest) -> dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         log.exception("originate.error")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @app.post("/calls/{call_id}/hangup", dependencies=[Depends(require_voice_token)])
@@ -330,9 +251,7 @@ async def hangup(call_id: str) -> dict[str, bool]:
         ok = await originator.hangup_call(call_id)
     except Exception as exc:  # noqa: BLE001
         log.exception("hangup.error")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return {"ok": ok}
 
 
@@ -342,9 +261,7 @@ async def transfer(call_id: str, req: TransferRequest) -> dict[str, bool]:
         ok = await originator.transfer_call(call_id, req.target)
     except Exception as exc:  # noqa: BLE001
         log.exception("transfer.error")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return {"ok": ok}
 
 
@@ -361,9 +278,7 @@ async def control(call_id: str, req: ControlRequest) -> dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         log.exception("control.error", call_id=call_id, action=req.action)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @app.post("/calls/{call_id}/ivr-action", dependencies=[Depends(require_voice_token)])
@@ -372,24 +287,8 @@ async def ivr_action(call_id: str, req: IvrActionRequest) -> dict[str, bool]:
         ok = await originator.execute_ivr_action(call_id, req.action)
     except Exception as exc:  # noqa: BLE001
         log.exception("ivr_action.error")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return {"ok": ok}
-
-
-@app.post("/calls/inbound-route", dependencies=[Depends(require_voice_token)])
-async def inbound_route(req: InboundRouteRequest) -> dict[str, Any]:
-    try:
-        return await originator.create_inbound_call(
-            did_e164=_normalize_e164(req.destination_number),
-            caller_e164=_normalize_e164(req.caller_number) if req.caller_number else "",
-            fs_uuid=req.fs_uuid,
-            metadata={"source": "inbound-did"},
-        )
-    except Exception as exc:  # noqa: BLE001
-        log.warning("inbound_route.error", error=str(exc), did=req.destination_number)
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 def _normalize_e164(value: str) -> str:
@@ -421,9 +320,9 @@ def _normalize_e164(value: str) -> str:
 @app.websocket("/ws/audio")
 async def ws_audio(ws: WebSocket) -> None:
     """
-    mod_audio_fork connects here with raw L16/16k frames in both directions.
+    Direct media adapters connect here with raw L16/16k frames in both directions.
     Query params:
-      - call_id: FreeSWITCH UUID
+      - call_id: call document id or edge call id
       - agent_id: Mongo ObjectId
       - tier:    'gemini_live' | 'grok_voice' | 'pipeline' | 'dtmf'
     """
@@ -441,7 +340,7 @@ async def ws_audio(ws: WebSocket) -> None:
 
     await ws.accept()
     trace = LatencyTrace(call_id)
-    trace.mark("audio_fork_connected")
+    trace.mark("media_bridge_connected")
     # Metadata flattened as repeated query params: ?meta=k:v&meta=k2:v2
     metadata: dict[str, str] = {}
     for kv in qp.getlist("meta") if hasattr(qp, "getlist") else []:
@@ -457,7 +356,10 @@ async def ws_audio(ws: WebSocket) -> None:
             call_id=call_id,
             agent_id=agent_id,
             prompt=prompt,
-            metadata={**metadata, "_audio_fork_connected_ms": str(trace.marks["audio_fork_connected"])},
+            metadata={
+                **metadata,
+                "_media_bridge_connected_ms": str(trace.marks["media_bridge_connected"]),
+            },
         )
     except WebSocketDisconnect:
         log.info("ws.disconnected", call_id=call_id)
@@ -504,7 +406,10 @@ async def ws_audio_pcmu(ws: WebSocket) -> None:
             call_id=call_id,
             agent_id=agent_id,
             prompt=prompt,
-            metadata={**metadata, "_pcmu_bridge_connected_ms": str(trace.marks["pcmu_bridge_connected"])},
+            metadata={
+                **metadata,
+                "_pcmu_bridge_connected_ms": str(trace.marks["pcmu_bridge_connected"]),
+            },
         )
     except WebSocketDisconnect:
         log.info("ws_pcmu.disconnected", call_id=call_id)

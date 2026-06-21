@@ -60,7 +60,7 @@ Files in `apps/web/public/`
 ### `logoStrip.providers` — "plays nicely with the providers you already trust"
 - **Where**: `apps/web/src/components/marketing/logo-strip.tsx`
 - **Current**: hand-rolled inline SVG wordmarks for Gemini, Deepgram, Cartesia,
-  FreeSWITCH, Pipecat, MongoDB, bKash, Nagad
+  PJSIP, Pipecat, MongoDB, bKash, Nagad
 - **Replace with**: real brand SVGs once you have written permission to use
   them. Drop them in `apps/web/public/logos/<slug>.svg` (monochrome, single
   path, 120×40 viewBox), and replace the inline `<svg>` elements with

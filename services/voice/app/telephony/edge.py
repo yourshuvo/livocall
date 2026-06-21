@@ -11,7 +11,6 @@ class OriginateParams:
     agent_id: str
     tier: str
     from_e164: str
-    ws_url: str
     call_doc_id: str
     channel_uuid: str
     disclosure_url: str = ""
@@ -32,9 +31,8 @@ class SupervisorParams:
 class TelephonyEdge(ABC):
     """Backend-facing phone-call edge.
 
-    Implementations hide whether calls are driven by FreeSWITCH ESL or an
-    embedded SIP stack such as PJSIP. The rest of the voice service should deal
-    in LivoCall call IDs and media URLs, not PBX-specific command strings.
+    The rest of the voice service deals in LivoCall call IDs and media URLs,
+    while the edge owns SIP signaling and media attachment.
     """
 
     name: str

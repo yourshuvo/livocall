@@ -44,7 +44,7 @@ RUN curl -fsSL "https://github.com/pjsip/pjproject/archive/refs/tags/${PJSIP_VER
 COPY pyproject.toml ./
 COPY app ./app
 
-RUN pip install -e '.[voice]'
+RUN pip install -e '.[voice,storage]'
 
 EXPOSE 8084
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8084"]

@@ -21,7 +21,13 @@ class GeminiLiveTier:
         metadata: dict[str, str] | None = None,
     ) -> None:
         log.info("tier1.start", call_id=call_id, agent_id=agent_id)
-        await GeminiPcmBridge.for_browser_test().run(
+        source = (metadata or {}).get("source", "")
+        bridge = (
+            GeminiPcmBridge.for_pjsip_phone()
+            if source == "pjsip-media"
+            else GeminiPcmBridge.for_browser_test()
+        )
+        await bridge.run(
             ws,
             call_id=call_id,
             agent_id=agent_id,

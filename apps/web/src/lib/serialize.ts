@@ -129,7 +129,7 @@ export function callToJson(c: CallLean) {
     })),
     ivrEvents: c.ivrEvents ?? [],
     supervisorEvents: c.supervisorEvents ?? [],
-    fsUuid: c.fsUuid ?? null,
+    edgeUuid: c.edgeUuid ?? null,
     hangupCause: c.hangupCause ?? null,
     metadata: c.metadata ?? {},
     latency: c.latency ?? {},

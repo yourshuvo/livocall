@@ -15,7 +15,7 @@ import { recordAudit } from '@/lib/audit'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
 import { normalizeAutoCallbackConfig } from '@/lib/auto-callback'
-import { triggerFreeswitchSync } from '@/lib/freeswitch-sync'
+import { triggerTelephonySync } from '@/lib/telephony-sync'
 
 const Patch = z.object({
   agentId: z.string().nullable().optional(),
@@ -110,7 +110,7 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
     resource: { type: 'PhoneNumber', id: String(updated._id) },
     meta: auditMeta,
   })
-  await triggerFreeswitchSync('number.update', String(updated._id))
+  await triggerTelephonySync('number.update', String(updated._id))
   return NextResponse.json(phoneNumberToJson(updated))
 })
 
@@ -129,6 +129,6 @@ export const DELETE = withErrors(async (_req: Request, ctx: { params: Promise<{ 
     action: 'number.delete',
     resource: { type: 'PhoneNumber', id: String(oid) },
   })
-  await triggerFreeswitchSync('number.delete', String(oid))
+  await triggerTelephonySync('number.delete', String(oid))
   return NextResponse.json({ ok: true })
 })

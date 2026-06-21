@@ -172,7 +172,7 @@ def _recordings_secret_access_key() -> str:
 
 
 async def upload_recording(call_id: str) -> str | None:
-    """Upload the local FreeSWITCH recording to S3 and update ``audioUrl``.
+    """Upload the local call recording to S3 and update ``audioUrl``.
 
     Returns the resolved URL (or ``file://`` path if S3 isn't configured),
     or ``None`` if the file doesn't exist. Never raises.

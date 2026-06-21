@@ -125,9 +125,9 @@ export function CartesiaMark({ className }: MarkProps) {
   )
 }
 
-export function FreeSwitchMark({ className }: MarkProps) {
+export function PjsipMark({ className }: MarkProps) {
   return (
-    <svg viewBox="0 0 124 20" height="20" role="img" aria-label="FreeSWITCH" className={className}>
+    <svg viewBox="0 0 92 20" height="20" role="img" aria-label="PJSIP" className={className}>
       <g fill="currentColor">
         <rect x="3" y="4" width="14" height="3.2" rx="1" />
         <rect x="3" y="8.4" width="10" height="3.2" rx="1" />
@@ -142,7 +142,7 @@ export function FreeSwitchMark({ className }: MarkProps) {
         fontSize="12"
         letterSpacing="0"
       >
-        FreeSWITCH
+        PJSIP
       </text>
     </svg>
   )

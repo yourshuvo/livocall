@@ -9,7 +9,7 @@ interface OriginateInput {
 
 interface OriginateResult {
   callId: string
-  fsUuid?: string
+  edgeUuid?: string
   queued?: boolean
 }
 
@@ -18,6 +18,7 @@ interface ControlResult {
   action?: 'listen' | 'barge'
   streamUrl?: string
   supervisorLegUuid?: string
+  error?: string
 }
 
 function voiceBaseUrl() {

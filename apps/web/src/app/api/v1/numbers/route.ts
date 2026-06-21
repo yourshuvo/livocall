@@ -10,7 +10,7 @@ import { normalizeBdPhoneToE164, isE164 } from '@/lib/phone-number'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
 import { AutoCallbackConfigSchema } from '@/lib/auto-callback'
-import { triggerFreeswitchSync } from '@/lib/freeswitch-sync'
+import { triggerTelephonySync } from '@/lib/telephony-sync'
 
 const Body = z.object({
   e164: z.string().trim().min(1).max(32).optional(),
@@ -77,6 +77,6 @@ export const POST = withErrors(async (req: Request) => {
     agentId: body.agentId || null,
     autoCallback: body.autoCallback,
   })
-  await triggerFreeswitchSync('number.create', String(created._id))
+  await triggerTelephonySync('number.create', String(created._id))
   return NextResponse.json(phoneNumberToJson(created.toObject()), { status: 201 })
 })

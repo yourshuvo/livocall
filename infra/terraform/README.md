@@ -11,8 +11,8 @@ It is **not** complete — production operators should fork and customise.
 | Redis (Upstash or ElastiCache) | Leader-lock + rate-limit + short-lived job metadata  |
 | S3 bucket (recordings)    | WAV audio store for call recordings                        |
 | Vercel project (web)      | Next.js deployment target                                  |
-| Fly.io app (voice)        | FastAPI + Pipecat container, BD-region preferred           |
-| FreeSWITCH VM             | Dedicated SIP box on a BD IP range                         |
+| Fly.io app (voice)        | FastAPI + Pipecat + PJSIP container, BD-region preferred   |
+| Voice SIP/RTP node        | Host/network placement for carrier UDP ports               |
 
 ## Example stub
 

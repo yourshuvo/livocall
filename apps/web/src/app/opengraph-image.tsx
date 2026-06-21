@@ -107,7 +107,7 @@ export default function OgImage() {
           {[
             'Gemini Live',
             'Deepgram + Cartesia',
-            'FreeSWITCH',
+            'PJSIP',
             'BTRC-aware',
             '~80 ms RTT',
           ].map((tag) => (

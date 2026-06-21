@@ -15,7 +15,7 @@ const campaignAttemptSchema = new Schema(
     campaignId: { type: Schema.Types.ObjectId, ref: 'Campaign', required: true, index: true },
     contactId: { type: Schema.Types.ObjectId, ref: 'Contact', required: true, index: true },
     callId: { type: Schema.Types.ObjectId, ref: 'Call' },
-    fsUuid: { type: String, default: '' },
+    edgeUuid: { type: String, default: '' },
     status: {
       type: String,
       enum: ['queued', 'in_progress', 'completed', 'failed', 'failed_terminal'],

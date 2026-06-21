@@ -35,7 +35,7 @@ const phoneNumberSchema = new Schema(
     orgId: { type: Schema.Types.ObjectId, ref: 'Org', required: true, index: true },
     e164: { type: String, required: true, unique: true, index: true },
     label: { type: String, default: '' },
-    providerSlug: { type: String, default: 'freeswitch' },
+    providerSlug: { type: String, default: 'sip_custom' },
     providerName: { type: String, default: '' },
     didRange: { type: String, default: '' },
     inboundEnabled: { type: Boolean, default: true },

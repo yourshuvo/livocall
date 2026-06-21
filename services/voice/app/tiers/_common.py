@@ -1,13 +1,11 @@
 """Shared helpers for tier runners.
 
-`mod_audio_fork` connects to /ws/audio with raw L16/16k PCM frames in both
-directions. The FreeSWITCH side must start the bug with bidirectional streaming
-enabled (`... null true true 16000`) so app-to-FreeSWITCH bytes reach the live
-write-replace playout buffer:
+The embedded PJSIP media bridge feeds /ws/audio with raw L16/16k PCM frames in
+both directions:
 
-  * inbound  bytes  → caller's audio (PCM s16le, 16 kHz, mono)
-  * outbound bytes  → AI/TTS audio (PCM s16le, 16 kHz, mono)
-  * inbound  text   → control messages (keepalive, DTMF events, hangup hints)
+  * inbound  bytes  -> caller audio (PCM s16le, 16 kHz, mono)
+  * outbound bytes  -> AI/TTS audio (PCM s16le, 16 kHz, mono)
+  * inbound  text   -> control messages (keepalive, DTMF events, hangup hints)
 
 The legacy fake-driver echo helper is kept for isolated local experiments only;
 production tier setup failures close the websocket instead of echoing caller audio.

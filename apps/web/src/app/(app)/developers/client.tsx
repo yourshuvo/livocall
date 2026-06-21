@@ -79,14 +79,14 @@ const ENDPOINTS: Array<{
     method: 'POST',
     path: '/api/v1/calls',
     scope: 'calls:write',
-    desc: 'Originate an outbound call. Returns the new call id and FreeSWITCH UUID.',
+    desc: 'Originate an outbound call. Returns the new call id and edge UUID.',
     body: `{
   "agent_id": "65a1...",
   "to_e164": "+8801711000000",
   "from_e164": "+8809610000000",
   "metadata": { "campaign": "may_promo" }
 }`,
-    reply: `{ "callId": "65a1...", "fsUuid": "9f3e...", "queued": true }`,
+    reply: `{ "callId": "65a1...", "edgeUuid": "9f3e...", "queued": true }`,
   },
   {
     method: 'GET',

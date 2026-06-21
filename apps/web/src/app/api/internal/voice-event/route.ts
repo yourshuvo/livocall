@@ -32,7 +32,7 @@ const StartedBody = z.object({
   callId: z.string().optional(),
   agentId: z.string(),
   orgId: z.string(),
-  fsUuid: z.string(),
+  edgeUuid: z.string(),
   direction: z.enum(['inbound', 'outbound']),
   fromE164: z.string(),
   toE164: z.string(),
@@ -109,7 +109,7 @@ export const POST = withErrors(async (req: Request) => {
           metadata: data.metadata || {},
           latency: { callCreatedAt: data.startedAt },
         },
-        $set: { fsUuid: data.fsUuid, outcome: 'in_progress' },
+        $set: { edgeUuid: data.edgeUuid, outcome: 'in_progress' },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true },
     )

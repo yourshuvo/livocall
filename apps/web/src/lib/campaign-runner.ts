@@ -264,7 +264,7 @@ export async function runCampaignTick(limit = 50) {
         attempt.attempts += 1
         if (Types.ObjectId.isValid(response.callId))
           attempt.callId = new Types.ObjectId(response.callId)
-        attempt.fsUuid = response.fsUuid || ''
+        attempt.edgeUuid = response.edgeUuid || ''
         attempt.attemptLog.push({
           at: new Date(),
           outcome: 'originated',

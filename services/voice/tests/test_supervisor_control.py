@@ -17,7 +17,7 @@ class FakeCalls:
         self.doc = doc
 
     async def find_one(self, flt: dict[str, Any]) -> dict[str, Any] | None:
-        if flt.get("_id") == CALL_ID or flt.get("fsUuid") == self.doc["fsUuid"]:
+        if flt.get("_id") == CALL_ID or flt.get("edgeUuid") == self.doc["edgeUuid"]:
             return self.doc
         return None
 
@@ -34,7 +34,7 @@ async def test_control_call_fake_driver_returns_supervisor_leg_uuid(
         "_id": CALL_ID,
         "orgId": ORG_ID,
         "agentId": AGENT_ID,
-        "fsUuid": "66666666-7777-8888-9999-000000000000",
+        "edgeUuid": "66666666-7777-8888-9999-000000000000",
     }
     monkeypatch.setattr(originator, "get_db", lambda: _fake_db(doc))
     monkeypatch.setattr(originator.settings, "voice_fake_driver", True)

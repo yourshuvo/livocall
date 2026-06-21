@@ -34,6 +34,41 @@ def pcm16_24k_to_pcmu(audio: bytes) -> bytes:
     return bytes(out)
 
 
+def resample_pcm16_mono(audio: bytes, src_rate: int, dst_rate: int) -> bytes:
+    if not audio or src_rate <= 0 or dst_rate <= 0 or src_rate == dst_rate:
+        return audio
+    if len(audio) % 2:
+        audio += b"\x00"
+    try:
+        import audioop
+
+        converted, _state = audioop.ratecv(audio, 2, 1, src_rate, dst_rate, None)
+        return converted
+    except Exception:  # pragma: no cover - audioop exists on Python 3.11
+        return _resample_pcm16_linear(audio, src_rate, dst_rate)
+
+
+def _resample_pcm16_linear(audio: bytes, src_rate: int, dst_rate: int) -> bytes:
+    samples = [
+        int.from_bytes(audio[i : i + 2], "little", signed=True) for i in range(0, len(audio) - 1, 2)
+    ]
+    if not samples:
+        return b""
+    out_len = max(1, int(len(samples) * dst_rate / src_rate))
+    if out_len == 1:
+        return int(samples[0]).to_bytes(2, "little", signed=True)
+    out = bytearray()
+    scale = (len(samples) - 1) / (out_len - 1)
+    for i in range(out_len):
+        pos = i * scale
+        left = int(pos)
+        right = min(left + 1, len(samples) - 1)
+        frac = pos - left
+        sample = round(samples[left] * (1 - frac) + samples[right] * frac)
+        out.extend(int(sample).to_bytes(2, "little", signed=True))
+    return bytes(out)
+
+
 def _split_frames(audio: bytes, frame_size: int) -> list[bytes]:
     return [frame for i in range(0, len(audio), frame_size) if (frame := audio[i : i + frame_size])]
 

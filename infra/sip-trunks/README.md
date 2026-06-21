@@ -1,36 +1,23 @@
-# SIP trunk templates
+# SIP Trunks
 
-Users add their own provider from the dashboard by entering:
+Users add provider credentials from the dashboard by entering:
 
-- E.164 number / DID
-- provider name
-- username
-- password
-- SIP server IP or domain
-- optional proxy, realm, transport, registration flag, and codecs
+- E.164 number or DID
+- provider name and slug
+- SIP username and password
+- SIP server, optional proxy, realm, transport, registration flag, and codecs
 
-The dashboard stores the provider on the `PhoneNumber` row and renders gateway XML
-for FreeSWITCH via `/api/numbers/freeswitch`.
+The web app stores those values on `PhoneNumber` rows. The voice service loads
+active rows directly into the embedded PJSIP edge when `PJSIP_LOAD_ACCOUNTS_FROM_DB=true`.
+Dashboard/API number changes call the voice service `POST /pjsip/reload` endpoint.
 
-## Render
+## DID Format
 
-```bash
-python infra/freeswitch/scripts/render_trunks.py \
-  --template infra/sip-trunks/_template.xml.j2 \
-  --url https://app.example.com/api/numbers/freeswitch \
-  --token "$FREESWITCH_CONFIG_TOKEN" \
-  --org-id "$LIVOCALL_ORG_ID" \
-  --out infra/freeswitch/sip_profiles/external
-```
+All BD DIDs normalize to E.164. Mobile examples look like `+8801XXXXXXXXX`;
+IPT/096 examples look like `+8809XXXXXXXXX`. The dashboard and voice service
+also accept local BD input such as `01XXXXXXXXX` or `096XXXXXXXX`.
 
-The legacy YAML example files remain as local development samples only.
+## Codec Strategy
 
-## DID format
-
-All BD DIDs normalise to E.164. Mobile examples look like `+8801XXXXXXXXX`; IPT/096 examples look like `+8809XXXXXXXXX`.
-The dashboard and voice service also accept local BD input such as `01XXXXXXXXX` or `096XXXXXXXX` and convert it before storage/lookup.
-
-## Codec strategy
-
-Default to `PCMU@20i` for low latency. Gemini Live still requires PCM at the API
-boundary, so keep PCMU on SIP/RTP and do exactly one local PCMU↔PCM conversion.
+Default to `PCMU/8000,PCMA/8000` for carrier interoperability. The PJSIP media
+adapter converts to the internal PCM sample rate used by the AI tiers.

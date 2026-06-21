@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     'Gemini Live',
     'Deepgram',
     'Cartesia',
-    'FreeSWITCH',
+    'PJSIP',
   ],
   authors: [{ name: 'LivoCall' }],
   openGraph: {

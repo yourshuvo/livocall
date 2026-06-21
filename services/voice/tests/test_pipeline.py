@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from app.tiers import pipeline
@@ -14,7 +12,7 @@ def test_pipeline_defaults_to_speed_mode_for_low_latency() -> None:
     assert pipeline._pipeline_transcription_mode({"transcriptionMode": "bogus"}) == "speed"
 
 
-def test_phone_pipeline_output_sample_rate_matches_audio_fork_contract(
+def test_phone_pipeline_output_sample_rate_matches_pjsip_media_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
@@ -109,11 +107,11 @@ def test_unsent_opening_is_not_seeded_into_llm_context() -> None:
     assert messages == [{"role": "system", "content": "system rules"}]
 
 
-def test_pcm_stream_chunks_match_freeswitch_codec_frame_size(
+def test_pcm_stream_chunks_match_pjsip_frame_size(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
-    monkeypatch.setattr(pipeline.settings, "fs_codec_ms", 20)
+    monkeypatch.setattr(pipeline.settings, "pjsip_frame_ms", 20)
 
     chunks = pipeline._pcm_stream_chunks(bytes(range(256)) * 5)  # 1280 bytes total
 
@@ -121,10 +119,10 @@ def test_pcm_stream_chunks_match_freeswitch_codec_frame_size(
 
 
 @pytest.mark.asyncio
-async def test_audio_fork_output_uses_uuid_broadcast_instead_of_returning_websocket_bytes(
+async def test_send_audio_to_call_streams_pcm_chunks_to_websocket(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FakeAudioForkWebSocket:
+    class FakeWebSocket:
         def __init__(self) -> None:
             self.texts: list[str] = []
             self.bytes_payloads: list[bytes] = []
@@ -135,71 +133,24 @@ async def test_audio_fork_output_uses_uuid_broadcast_instead_of_returning_websoc
         async def send_bytes(self, data: bytes) -> None:
             self.bytes_payloads.append(data)
 
-    broadcasts: list[tuple[str, bytes]] = []
-
-    async def fake_broadcast(call_id: str, audio: bytes) -> bool:
-        broadcasts.append((call_id, audio))
-        return True
-
     monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
-    monkeypatch.setattr(pipeline, "_broadcast_audio_to_freeswitch", fake_broadcast)
-    ws = FakeAudioForkWebSocket()
+    monkeypatch.setattr(pipeline.settings, "pjsip_frame_ms", 20)
+    ws = FakeWebSocket()
 
-    await pipeline._send_audio_to_freeswitch(ws, "call-1", b"\x01\x02")
+    await pipeline._send_audio_to_call(ws, "call-1", b"\x01\x02")
 
-    assert broadcasts == [("call-1", b"\x01\x02")]
-    assert ws.bytes_payloads == []
+    assert ws.bytes_payloads == [b"\x01\x02"]
     assert ws.texts == []
 
 
 @pytest.mark.asyncio
-async def test_broadcast_sink_flushes_during_continuous_tts_without_waiting_for_silence(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    broadcasts: list[bytes] = []
-
-    async def fake_broadcast(_call_id: str, audio: bytes) -> bool:
-        broadcasts.append(audio)
-        return True
-
-    monkeypatch.setattr(pipeline, "_broadcast_audio_to_freeswitch", fake_broadcast)
-    sink = pipeline._FreeswitchBroadcastSink(
-        "call-1",
-        debounce_secs=10.0,
-        flush_interval_secs=0.03,
-    )
-
-    await sink.write(b"first-")
-    await asyncio.sleep(0.015)
-    await sink.write(b"second")
-    await asyncio.sleep(0.04)
-
-    assert broadcasts == [b"first-second"]
-
-
-@pytest.mark.asyncio
-async def test_audio_fork_serializer_suppresses_inbound_audio_while_bot_playback_is_active(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
-    pipeline._PLAYBACK_SUPPRESS_UNTIL.clear()
-    pipeline._PLAYBACK_SUPPRESS_UNTIL["call-1"] = pipeline.time.monotonic() + 10
-
-    serializer = pipeline._audio_fork_serializer("call-1")
-
-    assert await serializer.deserialize(b"bot playback echo") is None
-
-    pipeline._PLAYBACK_SUPPRESS_UNTIL.clear()
-
-
-@pytest.mark.asyncio
-async def test_audio_fork_serializer_decodes_and_encodes_raw_pcm(
+async def test_raw_pcm_serializer_decodes_and_encodes_raw_pcm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from pipecat.frames.frames import InputAudioRawFrame, OutputAudioRawFrame
 
     monkeypatch.setattr(pipeline.settings, "sample_rate_in", 16000)
-    serializer = pipeline._audio_fork_serializer()
+    serializer = pipeline._raw_pcm_serializer()
 
     inbound = await serializer.deserialize(b"\x01\x02")
     assert isinstance(inbound, InputAudioRawFrame)

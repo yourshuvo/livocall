@@ -43,7 +43,7 @@ This doc accompanies the **cumulative** patch (`backend-frontend.patch`) and tar
 
 ### Voice service (`services/voice`)
 
-Async ESL client, originate/hangup/transfer endpoints, `EslEventConsumer` background task, billing computation (minute-rounded per ARCHITECTURE.md §7), `VOICE_FAKE_DRIVER=true` for end-to-end without FreeSWITCH. Bearer-auth on all `/calls/*` and `/ws` endpoints.
+Embedded PJSIP edge, originate/hangup/transfer endpoints, billing computation (minute-rounded per ARCHITECTURE.md §7), and `VOICE_FAKE_DRIVER=true` for end-to-end local testing without SIP. Bearer-auth on all `/calls/*` control endpoints.
 
 ### Plugin packages (`plugins/`)
 
@@ -91,7 +91,7 @@ VOICE_FAKE_DRIVER=true .venv/bin/pytest -q   # 23/23 passing
    WEB_BASE_URL=http://web:3000
    WEB_SHARED_SECRET=<shared>
    VOICE_SERVICE_TOKEN=<shared>
-   VOICE_FAKE_DRIVER=true       # for dev without FreeSWITCH
+   VOICE_FAKE_DRIVER=true       # for dev without SIP
    ```
 3. Schedule `POST /api/internal/webhook-tick` every 30s with the shared secret as the bearer token.
 
@@ -100,7 +100,7 @@ VOICE_FAKE_DRIVER=true .venv/bin/pytest -q   # 23/23 passing
 | Item | What ships |
 |------|-----------|
 | **Real Pipecat tier pipelines** | `services/voice/app/tiers/{gemini_live,pipeline,dtmf}.py` build full Pipecat graphs when env keys are present. **Tier 1** (Gemini Live multimodal) needs `GEMINI_API_KEY`. **Tier 2** (Deepgram → Gemini Flash → Cartesia) needs `DEEPGRAM_API_KEY` + `GEMINI_API_KEY` + `CARTESIA_API_KEY`. **Tier 3** (DTMF / IVR) does a 5-second capture → Deepgram one-shot → Gemini Flash classifier and replies with `{"intent": "yes\|no\|repeat\|agent\|unknown"}`. All three fall back to a clean echo loop when keys / extras aren't set, so dev/CI keeps working. |
-| **ESL audio fork + DTMF** | Dialplan `livocall_park` (outbound) and `livocall_inbound` (inbound) now run `audio_fork ${livocall_ws_url} mono 16000`. The originator builds the ws URL with `call_id`, `agent_id`, `tier`, and `meta=k:v` query params; FastAPI's `/ws/audio` endpoint parses them and hands the connection to the right tier. |
+| **PJSIP media bridge + DTMF** | The embedded PJSIP edge owns outbound/inbound SIP, DTMF events, and RTP media. The media bridge hands raw PCM frames to the selected tier and streams AI audio back to the same call. |
 | **Outbound campaign dialer** | `services/voice/app/workers/campaign_dialer.py`. Background asyncio task started by `lifespan` when `ENABLE_CAMPAIGN_DIALER=true`. Polls `campaigns{status:'running'}`, respects `concurrency`, schedule windows in `Campaign.schedule.timezone`, retry policy, max attempts, and the per-org DNC list. Tracks attempts in a new `campaign_attempts` collection. |
 | **KB embedding ingestion worker** | `services/voice/app/workers/kb_ingestion.py`. Background asyncio task started when `ENABLE_KB_INGESTOR=true`. For each `KnowledgeBase.sources[]` entry that has no `kb_chunks` yet, it fetches (URL via `httpx`; PDF via `pypdf`; inline text), splits into 1k-char chunks with 100-char overlap, embeds via Gemini `text-embedding-004`, and writes one `kb_chunks` doc per chunk. Falls back to deterministic hash embeddings when `GEMINI_API_KEY` is empty. |
 | **PayStation live provider** | `apps/web/src/lib/paystation.ts` initiates hosted checkout at `https://api.paystation.com.bd/initiate-payment`. `/api/billing/topup` creates a pending PayStation ledger row and returns the hosted `redirectUrl`. `/api/billing/topup/paystation/callback` verifies the invoice through `/transaction-status` before crediting the ledger atomically. This is the live PayStation environment, so credentials should only be used when real transactions are expected. |

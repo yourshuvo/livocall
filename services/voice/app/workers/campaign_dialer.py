@@ -237,7 +237,7 @@ class CampaignDialer:
                 "$set": {
                     "status": "in_progress",
                     "callId": res.get("callId"),
-                    "fsUuid": res.get("fsUuid"),
+                    "edgeUuid": res.get("edgeUuid"),
                     "updatedAt": _now(),
                 },
                 "$inc": {"attempts": 1},

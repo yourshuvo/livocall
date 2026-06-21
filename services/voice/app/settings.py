@@ -10,20 +10,11 @@ class Settings(BaseSettings):
     mongodb_uri: str = Field(default="mongodb://localhost:27017/livocall")
     redis_url: str = Field(default="redis://localhost:6379/0")
 
-    # Telephony edge. "freeswitch" preserves the existing ESL/mod_audio_fork
-    # path; "pjsip" uses the embedded PJSIP/pjsua2 edge in app.telephony.
-    telephony_edge: str = Field(default="freeswitch")
+    # Embedded PJSIP/pjsua2 is the only phone-call edge.
+    telephony_edge: str = Field(default="pjsip")
 
-    # FreeSWITCH ESL
-    fs_host: str = Field(default="127.0.0.1")
-    fs_esl_port: int = Field(default=8021)
-    fs_esl_password: str = Field(default="ClueCon")
-    fs_default_gateway: str = Field(default="sip_custom")  # sofia/gateway/<this>/<dest>
-    fs_dashboard_test_gateway: str = Field(default="sip_j")
-
-    # Embedded PJSIP/pjsua2 single-account edge. These are intentionally
-    # separate from dashboard-created PhoneNumber rows for the first migration
-    # phase; later the edge can hydrate accounts from Mongo.
+    # Embedded PJSIP/pjsua2 account defaults. Production normally hydrates
+    # dashboard-created PhoneNumber rows from Mongo.
     pjsip_sip_server: str = Field(default="")
     pjsip_sip_port: int = Field(default=5060)
     pjsip_username: str = Field(default="")
@@ -31,6 +22,14 @@ class Settings(BaseSettings):
     pjsip_password: str = Field(default="")
     pjsip_realm: str = Field(default="*")
     pjsip_local_sip_port: int = Field(default=5070)
+    pjsip_default_account_slug: str = Field(default="sip_custom")
+    pjsip_load_accounts_from_db: bool = Field(default=False)
+    pjsip_rtp_port_start: int = Field(default=20000)
+    pjsip_rtp_port_range: int = Field(default=10000)
+    pjsip_public_address: str = Field(default="")
+    pjsip_bound_address: str = Field(default="")
+    pjsip_transport: str = Field(default="udp")
+    pjsip_codecs: str = Field(default="PCMU/8000,PCMA/8000")
 
     # Web app callback (event ingest + webhook tick)
     web_base_url: str = Field(default="http://localhost:3000")
@@ -38,7 +37,6 @@ class Settings(BaseSettings):
 
     # Service-to-service auth: callers (the web app) must present this token
     voice_service_token: str = Field(default="")
-    inbound_route_token: str = Field(default="")
 
     # AI providers (left blank for scaffold)
     gemini_api_key: str = Field(default="")
@@ -49,14 +47,12 @@ class Settings(BaseSettings):
 
     # Telephony
     default_outbound_caller_id: str = Field(default="+8809610000000")
+    sip_credential_secret: str = Field(default="")
 
     # Audio
     sample_rate_in: int = Field(default=16000)
     sample_rate_out: int = Field(default=24000)
-    fs_preferred_codec: str = Field(default="PCMU")
-    fs_codec_ms: int = Field(default=20)
-    audio_fork_buffer_ms: int = Field(default=20)
-    audio_fork_jitter_buffer_ms: int = Field(default=20)
+    pjsip_frame_ms: int = Field(default=20)
     first_turn_prompt_enabled: bool = Field(default=True)
     gemini_preconnect_enabled: bool = Field(default=True)
     gemini_preconnect_ttl_seconds: float = Field(default=75.0)
@@ -107,33 +103,11 @@ class Settings(BaseSettings):
     pipecat_vad_audio_idle_timeout_secs: float = Field(default=0.35)
     pipecat_vad_min_volume: float = Field(default=0.6)
 
-    # Public ws URL FreeSWITCH should fork audio to. e.g. ws://voice.internal:8084/ws/audio
-    voice_ws_public_url: str = Field(default="ws://127.0.0.1:8084/ws/audio")
-    # When FreeSWITCH and the voice container are on the same VPS, avoid the
-    # public HTTPS/Coolify path for mod_audio_fork; it adds several seconds to
-    # WebSocket setup. Auto-detect the container bridge IP and hand FreeSWITCH
-    # ws://<bridge-ip>:<port>/ws/audio instead.
-    voice_ws_bridge_autodetect_enabled: bool = Field(default=True)
-    voice_ws_internal_port: int = Field(default=8084)
-    # Internal HTTP base URL FreeSWITCH can fetch generated TTS WAVs from. If
-    # blank, the voice service derives it from VOICE_WS_PUBLIC_URL and the
-    # Docker bridge autodetect settings.
-    voice_playback_public_url: str = Field(default="")
-    playback_cache_dir: str = Field(default="/tmp/livocall-playback")
-    playback_ttl_seconds: int = Field(default=300)
-    playback_broadcast_debounce_ms: int = Field(default=120)
-    playback_broadcast_chunk_ms: int = Field(default=700)
-    playback_input_suppression_tail_ms: int = Field(default=350)
-
-    # Shared secret used to HMAC the `auth` query-string on /ws/audio. When set,
-    # originator signs each call's WS URL and ws_audio rejects connections with
-    # missing/mismatched signatures. Leave blank to disable (only safe on a
-    # closed network or during local dev).
+    # Shared secret used to HMAC direct /ws/audio browser-test sessions.
     voice_ws_shared_secret: str = Field(default="")
     voice_ws_auth_ttl_seconds: int = Field(default=3600)
 
-    # Browser-only WebRTC transport. This is intentionally separate from
-    # FreeSWITCH/mod_audio_fork so phone-call latency tuning stays isolated.
+    # Browser-only WebRTC transport.
     browser_webrtc_enabled: bool = Field(default=False)
     webrtc_ice_servers: str = Field(default="stun:stun.l.google.com:19302")
     webrtc_turn_url: str = Field(default="")
@@ -147,7 +121,7 @@ class Settings(BaseSettings):
     rate_paisa_per_min_dtmf: int = Field(default=200)
 
     # If True, /calls/originate will fall back to a fake-driver path (no real
-    # ESL or AI calls). Useful for local dev and CI.
+    # SIP or AI calls). Useful for local dev and CI.
     voice_fake_driver: bool = Field(default=False)
 
     # Background workers

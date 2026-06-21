@@ -338,7 +338,7 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
                 <KV label="Ended" value={call.endedAt ? fmtDate(call.endedAt) : '—'} />
                 <KV label="Duration" value={fmtDuration(call.durationSec || 0)} />
                 <KV label="Agent" value={agent ? agent.name : '—'} />
-                <KV label="FS UUID" value={call.fsUuid || '—'} mono />
+                <KV label="Edge UUID" value={call.edgeUuid || '—'} mono />
                 <KV label="Hangup cause" value={call.hangupCause || '—'} />
                 <KV label="Call ID" value={String(call._id)} mono />
               </CardBody>

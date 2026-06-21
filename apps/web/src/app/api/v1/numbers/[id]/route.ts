@@ -9,7 +9,7 @@ import { apiError, withErrors } from '@/lib/errors'
 import { phoneNumberToJson } from '@/lib/serialize'
 import { encryptSipPassword, slugifySipProvider } from '@/lib/sip'
 import { normalizeAutoCallbackConfig } from '@/lib/auto-callback'
-import { triggerFreeswitchSync } from '@/lib/freeswitch-sync'
+import { triggerTelephonySync } from '@/lib/telephony-sync'
 
 const Patch = z.object({
   agentId: z.string().nullable().optional(),
@@ -90,6 +90,6 @@ export const PATCH = withErrors(async (req: Request, ctx: { params: Promise<{ id
     { new: true },
   ).lean()
   if (!updated) return apiError('not_found', 'number not found')
-  await triggerFreeswitchSync('number.update', String(updated._id))
+  await triggerTelephonySync('number.update', String(updated._id))
   return NextResponse.json(phoneNumberToJson(updated))
 })

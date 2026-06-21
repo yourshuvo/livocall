@@ -8,14 +8,23 @@ from types import SimpleNamespace
 import pytest
 
 
-def test_telephony_edge_factory_defaults_to_freeswitch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_telephony_edge_factory_defaults_to_pjsip(monkeypatch: pytest.MonkeyPatch) -> None:
     from app import telephony
 
-    monkeypatch.setattr(telephony.settings, "telephony_edge", "freeswitch", raising=False)
+    monkeypatch.setattr(telephony.settings, "telephony_edge", "pjsip", raising=False)
 
     edge = telephony.get_edge(reset=True)
 
-    assert edge.name == "freeswitch"
+    assert edge.name == "pjsip"
+
+
+def test_telephony_edge_factory_rejects_unsupported_edge(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app import telephony
+
+    monkeypatch.setattr(telephony.settings, "telephony_edge", "legacy", raising=False)
+
+    with pytest.raises(ValueError, match="TELEPHONY_EDGE=pjsip"):
+        telephony.get_edge(reset=True)
 
 
 def test_telephony_edge_factory_selects_pjsip(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -322,7 +331,7 @@ async def test_originator_hangup_uses_selected_telephony_edge(monkeypatch: pytes
     assert calls == [("11111111-2222-3333-4444-555555555555", "NORMAL_CLEARING")]
 
 
-def test_lifespan_starts_pjsip_edge_without_freeswitch_consumer(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lifespan_starts_pjsip_edge(monkeypatch: pytest.MonkeyPatch) -> None:
     from fastapi.testclient import TestClient
 
     from app import main
@@ -336,12 +345,8 @@ def test_lifespan_starts_pjsip_edge_without_freeswitch_consumer(monkeypatch: pyt
         async def stop(self) -> None:
             events.append("edge.stop")
 
-    def fail_consumer() -> object:
-        raise AssertionError("FreeSWITCH consumer should not start for TELEPHONY_EDGE=pjsip")
-
     monkeypatch.setattr(main.settings, "voice_fake_driver", False)
     monkeypatch.setattr(main.settings, "telephony_edge", "pjsip", raising=False)
-    monkeypatch.setattr(main.event_bridge, "get_consumer", fail_consumer)
     monkeypatch.setattr(main.telephony, "get_edge", lambda: FakePjsipEdge())
 
     with TestClient(main.app) as client:
@@ -352,18 +357,16 @@ def test_lifespan_starts_pjsip_edge_without_freeswitch_consumer(monkeypatch: pyt
     assert events == ["edge.start", "edge.stop"]
 
 
-def test_prod_compose_defaults_to_pjsip_and_does_not_deploy_freeswitch() -> None:
+def test_prod_compose_defaults_to_pjsip_and_does_not_deploy_legacy_edge() -> None:
     from pathlib import Path
 
     compose_path = Path(__file__).resolve().parents[3] / "infra" / "docker-compose.prod.yml"
     compose = compose_path.read_text()
 
-    assert "  freeswitch:" not in compose
     assert "TELEPHONY_EDGE: ${TELEPHONY_EDGE:-pjsip}" in compose
-    assert "fs-recordings" not in compose
-    assert "FREESWITCH_CONFIG_TOKEN" not in compose
+    assert "PJSIP_LOCAL_SIP_PORT" in compose
+    assert "5070:5070/udp" in compose
 
     prod_env = (compose_path.parent / ".env.prod.example").read_text()
     assert "TELEPHONY_EDGE=pjsip" in prod_env
-    assert "FS_HOST=" not in prod_env
-    assert "FREESWITCH_CONFIG_TOKEN" not in prod_env
+    assert "PJSIP_LOCAL_SIP_PORT=5070" in prod_env

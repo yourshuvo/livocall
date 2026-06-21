@@ -87,7 +87,7 @@ const callSchema = new Schema(
     toolCalls: { type: [toolCallSchema], default: [] },
     ivrEvents: { type: [Schema.Types.Mixed], default: [] },
     supervisorEvents: { type: [supervisorEventSchema], default: [] },
-    fsUuid: { type: String },
+    edgeUuid: { type: String },
     hangupCause: { type: String },
     metadata: { type: Schema.Types.Mixed, default: {} },
     latency: { type: Schema.Types.Mixed, default: {} },
@@ -97,7 +97,7 @@ const callSchema = new Schema(
 
 callSchema.index({ orgId: 1, startedAt: -1 })
 callSchema.index({ orgId: 1, outcome: 1, startedAt: -1 })
-callSchema.index({ fsUuid: 1 })
+callSchema.index({ edgeUuid: 1 })
 callSchema.index({ 'metadata.source': 1, startedAt: -1 })
 callSchema.index({ 'metadata.publicSessionHash': 1, startedAt: -1 })
 callSchema.index({ 'metadata.publicIpHash': 1, startedAt: -1 })

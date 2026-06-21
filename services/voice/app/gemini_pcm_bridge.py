@@ -21,6 +21,7 @@ from app.agent_runtime import (
 from app.audio_codec import (
     pcm16_24k_to_pcmu,
     pcmu_to_pcm16_16k,
+    resample_pcm16_mono,
     split_pcm16_16k_20ms,
     split_pcm16_24k_20ms,
     split_pcmu_20ms,
@@ -63,14 +64,12 @@ class PcmuLatency:
             "callerAudioToGeminiFirstSendMs": self.delta(
                 "first_caller_audio", "first_gemini_audio_send"
             ),
-            "callerAudioToModelFirstAudioMs": self.delta(
-                "first_caller_audio", "first_model_audio"
+            "callerAudioToModelFirstAudioMs": self.delta("first_caller_audio", "first_model_audio"),
+            "modelAudioToEdgeFirstSendMs": self.delta(
+                "first_model_audio", "first_edge_audio_send"
             ),
-            "modelAudioToFsFirstSendMs": self.delta(
-                "first_model_audio", "first_fs_audio_send"
-            ),
-            "bridgeConnectedToFsFirstSendMs": self.delta(
-                "bridge_connected", "first_fs_audio_send"
+            "bridgeConnectedToEdgeFirstSendMs": self.delta(
+                "bridge_connected", "first_edge_audio_send"
             ),
         }
         try:
@@ -100,12 +99,14 @@ class GeminiPcmBridge:
         wire_format: str = "pcmu",
         input_queue_frames: int = 2,
         bridge_mode: str = "phone",
+        pcm16_output_rate: int = 24000,
     ) -> None:
         if wire_format not in {"pcmu", "pcm16"}:
             raise ValueError(f"unknown wire_format: {wire_format}")
         self.wire_format = wire_format
         self.input_queue_frames = max(1, input_queue_frames)
         self.bridge_mode = bridge_mode
+        self.pcm16_output_rate = max(8000, pcm16_output_rate)
 
     @classmethod
     def for_phone_call(cls) -> GeminiPcmBridge:
@@ -121,6 +122,16 @@ class GeminiPcmBridge:
             wire_format="pcm16",
             input_queue_frames=8,
             bridge_mode="browser",
+            pcm16_output_rate=24000,
+        )
+
+    @classmethod
+    def for_pjsip_phone(cls, sample_rate: int | None = None) -> GeminiPcmBridge:
+        return cls(
+            wire_format="pcm16",
+            input_queue_frames=150,
+            bridge_mode="pjsip_phone",
+            pcm16_output_rate=sample_rate or settings.sample_rate_in,
         )
 
     async def run(
@@ -223,6 +234,7 @@ class GeminiPcmBridge:
                                 latency,
                                 transcript,
                                 wire_format=self.wire_format,
+                                pcm16_output_rate=self.pcm16_output_rate,
                                 session_state=session_state,
                             )
                         )
@@ -311,7 +323,11 @@ async def _connected_live_session(
     warm_session: Any | None,
     reconnect_attempt: int,
 ) -> AsyncIterator[tuple[Any, bool]]:
-    if reconnect_attempt == 0 and warm_session is not None and warm_session.live_session is not None:
+    if (
+        reconnect_attempt == 0
+        and warm_session is not None
+        and warm_session.live_session is not None
+    ):
         try:
             yield warm_session.live_session, True
         finally:
@@ -386,6 +402,7 @@ async def _receive_model_audio(
     transcript: TranscriptBuffer,
     *,
     wire_format: str,
+    pcm16_output_rate: int = 24000,
     session_state: dict[str, str] | None = None,
 ) -> bool:
     publish_tasks: set[asyncio.Task[None]] = set()
@@ -417,8 +434,9 @@ async def _receive_model_audio(
                 if wire_format == "pcmu":
                     await ws.send_bytes(pcm16_24k_to_pcmu(pcm24_chunk))
                 else:
-                    await ws.send_bytes(pcm24_chunk)
-                latency.mark("first_fs_audio_send")
+                    output = resample_pcm16_mono(pcm24_chunk, 24000, pcm16_output_rate)
+                    await ws.send_bytes(output)
+                latency.mark("first_edge_audio_send")
     finally:
         if publish_tasks:
             await asyncio.gather(*publish_tasks, return_exceptions=True)
@@ -435,6 +453,7 @@ async def _receive_model_audio_loop(
     transcript: TranscriptBuffer,
     *,
     wire_format: str,
+    pcm16_output_rate: int = 24000,
     session_state: dict[str, str] | None = None,
 ) -> None:
     while True:
@@ -446,6 +465,7 @@ async def _receive_model_audio_loop(
             latency,
             transcript,
             wire_format=wire_format,
+            pcm16_output_rate=pcm16_output_rate,
             session_state=session_state,
         )
         if not saw_item:
@@ -488,7 +508,11 @@ async def _iter_model_output(
         _capture_session_resumption(call_id, response, session_state)
         go_away = getattr(response, "go_away", None)
         if go_away is not None:
-            log.info("gemini_pcm.go_away", call_id=call_id, time_left=str(getattr(go_away, "time_left", "")))
+            log.info(
+                "gemini_pcm.go_away",
+                call_id=call_id,
+                time_left=str(getattr(go_away, "time_left", "")),
+            )
         tool_call = getattr(response, "tool_call", None)
         calls = getattr(tool_call, "function_calls", None) or []
         for call in calls:
@@ -496,7 +520,9 @@ async def _iter_model_output(
             args = getattr(call, "args", None) or {}
             call_id_part = str(getattr(call, "id", "") or name)
             started = _now_ms()
-            result = await execute_agent_tool(agent, call_id=call_id, name=name, arguments=dict(args))
+            result = await execute_agent_tool(
+                agent, call_id=call_id, name=name, arguments=dict(args)
+            )
             log.info(
                 "gemini_pcm.tool_result",
                 call_id=call_id,

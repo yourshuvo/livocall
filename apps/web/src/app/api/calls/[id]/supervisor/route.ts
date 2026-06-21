@@ -26,7 +26,7 @@ export const POST = withErrors(async (req: Request, ctx: { params: Promise<{ id:
   if (call.outcome !== 'in_progress') return apiError('conflict', 'call is not live')
   try {
     const result = await voiceClient.control(
-      call.fsUuid || String(call._id),
+      call.edgeUuid || String(call._id),
       body.action,
       s.userId,
       body.targetE164,
